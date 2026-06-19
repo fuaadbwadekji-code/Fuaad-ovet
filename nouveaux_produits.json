@@ -1,0 +1,50 @@
+[
+  {
+    "id": "m1",
+    "nom": "Notre-Dame de Paris (Moyen)",
+    "reference": "MR03",
+    "prix": 2.90,
+    "categorie": "Monuments",
+    "image": "https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=500"
+  },
+  {
+    "id": "m2",
+    "nom": "Notre-Dame de Paris (Grand)",
+    "reference": "MR04",
+    "prix": 3.30,
+    "categorie": "Monuments",
+    "image": "https://images.unsplash.com/photo-1543349689-9a4d426bee8e?w=500"
+  },
+  {
+    "id": "m3",
+    "nom": "Tour Eiffel Résine Doré/Argent",
+    "reference": "MRT01",
+    "prix": 1.00,
+    "categorie": "Monuments",
+    "image": "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=500"
+  },
+  {
+    "id": "m4",
+    "nom": "Boule de Neige Paris Rouge",
+    "reference": "BN45R",
+    "prix": 1.10,
+    "categorie": "Boules de Neige",
+    "image": "https://images.unsplash.com/photo-1520965175246-415f99330ab4?w=500"
+  },
+  {
+    "id": "m5",
+    "nom": "Boule de Neige Paris Noir",
+    "reference": "BN45N",
+    "prix": 1.10,
+    "categorie": "Boules de Neige",
+    "image": "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=500"
+  },
+  {
+    "id": "m6",
+    "nom": "Boule de Neige Paris Bleu",
+    "reference": "BN45M",
+    "prix": 1.10,
+    "categorie": "Boules de Neige",
+    "image": "https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=500"
+  }
+]
