@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Souvenirs de Paris — Catalogue</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1B2A45">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,600&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#1B2A45;
+  --navy-deep:#10192C;
+  --navy-soft:#243652;
+  --cream:#F2E9D8;
+  --cream-dim:#E6DAC2;
+  --mustard:#D89A2C;
+  --mustard-deep:#B97D1A;
+  --brick:#B23B2E;
+  --brick-deep:#8C2C22;
+  --ink:#1A1814;
+  --brass:#8C7048;
+  --sage:#5E7A5E;
+  --shadow:0 10px 26px rgba(10,15,26,0.35);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:'Jost',sans-serif;
+  background:var(--navy);
+  color:var(--cream);
+  min-height:100vh;
+}
+.display{font-family:'Fraunces',serif;}
+button{font-family:inherit;cursor:pointer;}
+::selection{background:var(--mustard);color:var(--navy-deep);}
+
+.bg-texture{
+  position:fixed;inset:0;z-index:-1;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(216,154,44,0.10), transparent 38%),
+    radial-gradient(circle at 95% 90%, rgba(178,59,46,0.10), transparent 42%),
+    var(--navy);
+}
+
+/* ---------- Top bar ---------- */
+.topbar{
+  position:sticky;top:0;z-index:40;
+  background:var(--navy-deep);
+  padding:16px 16px 14px;
+  box-shadow:0 6px 18px rgba(0,0,0,0.3);
+  border-bottom:1px solid rgba(216,154,44,0.25);
+}
+.topbar-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand .mark{
+  font-size:22px;width:38px;height:38px;border-radius:50%;
+  background:var(--mustard);color:var(--navy-deep);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.brand h1{
+  font-size:19px;font-weight:700;letter-spacing:0.3px;margin:0;color:var(--cream);
+}
+.brand .sub{
+  font-size:9.5px;letter-spacing:2.5px;text-transform:uppercase;color:var(--mustard);
+}
+.topbar-actions{display:flex;gap:8px;align-items:center;}
+.icon-btn{
+  position:relative;
+  background:var(--navy-soft);
+  border:1px solid rgba(216,154,44,0.3);
+  color:var(--cream);
+  width:40px;height:40px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;
+}
+.icon-btn:active{background:var(--navy);}
+.cart-badge{
+  position:absolute;top:-4px;right:-4px;
+  background:var(--brick);color:#fff;
+  font-size:10px;font-weight:700;
+  width:18px;height:18px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  border:2px solid var(--navy-deep);
+}
+
+.search-wrap{margin-top:12px;position:relative;}
+.search-wrap input{
+  width:100%;
+  background:var(--cream);
+  border:none;
+  border-radius:4px;
+  padding:11px 18px 11px 38px;
+  font-size:14.5px;
+  font-family:'Jost';
+  color:var(--ink);
+  outline:none;
+}
+.search-wrap input::placeholder{color:#8a7f6a;}
+.search-wrap .s-icon{
+  position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  font-size:14px;color:var(--brass);
+}
+.search-clear{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:var(--brass);font-size:16px;padding:4px;
+  display:none;
+}
+
+/* ---------- Category strip ---------- */
+.cat-strip{
+  display:flex;gap:8px;overflow-x:auto;padding:14px 16px 4px;
+  scrollbar-width:none;
+}
+.cat-strip::-webkit-scrollbar{display:none;}
+.cat-chip{
+  flex:0 0 auto;
+  background:var(--navy-soft);
+  border:1px solid rgba(216,154,44,0.25);
+  color:var(--cream);
+  padding:8px 16px;
+  border-radius:16px;
+  font-size:13px;
+  font-weight:500;
+  white-space:nowrap;
+}
+.cat-chip.active{
+  background:var(--mustard);
+  color:var(--navy-deep);
+  border-color:var(--mustard);
+  font-weight:600;
+}
+.cat-chip .count{opacity:0.7;font-size:11px;margin-left:3px;}
+
+/* ---------- Loading ---------- */
+.loading-state{
+  text-align:center;padding:70px 20px;color:var(--cream);opacity:0.75;
+}
+.spinner{
+  width:30px;height:30px;border-radius:50%;
+  border:3px solid rgba(216,154,44,0.25);
+  border-top-color:var(--mustard);
+  margin:0 auto 14px;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ---------- Catalogue / grid ---------- */
+.catalogue{padding:16px;padding-bottom:110px;max-width:880px;margin:0 auto;}
+.section-title{
+  font-family:'Fraunces',serif;font-weight:700;
+  font-size:15px;color:var(--mustard);margin:20px 4px 12px;
+  display:flex;align-items:center;gap:10px;letter-spacing:0.3px;
+}
+.section-title::after{content:'';flex:1;height:1px;background:rgba(216,154,44,0.25);}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+@media(min-width:700px){.grid{grid-template-columns:repeat(3,1fr);}}
+
+/* ---------- Ticket Card (signature element) ---------- */
+.ticket{
+  position:relative;
+  background:var(--cream);
+  border-radius:8px;
+  box-shadow:var(--shadow);
+  display:flex;flex-direction:column;
+  overflow:visible;
+}
+.ticket-main{padding:10px 10px 0;}
+.ticket-img-wrap{
+  position:relative;
+  aspect-ratio:1/1;
+  background:#fff;
+  border-radius:5px;
+  overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+}
+.ticket-img-wrap img{width:100%;height:100%;object-fit:contain;padding:8px;display:block;}
+.stamp{
+  position:absolute;top:6px;right:6px;
+  width:44px;height:44px;
+  border:2px dashed var(--brick);
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  transform:rotate(-10deg);
+  color:var(--brick);
+  font-size:8px;font-weight:700;text-align:center;line-height:1.15;
+  letter-spacing:0.2px;
+  background:rgba(255,255,255,0.88);
+}
+.ticket-body{padding:9px 11px 4px;}
+.t-name{
+  font-family:'Fraunces',serif;font-weight:700;font-size:13.5px;
+  color:var(--ink);line-height:1.28;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  margin-bottom:2px;min-height:35px;
+}
+.t-ref{font-size:10px;color:var(--brass);letter-spacing:0.8px;text-transform:uppercase;font-weight:600;}
+.t-unit{font-size:10px;color:var(--sage);font-weight:600;margin-top:1px;}
+
+.perf-seam{
+  position:relative;height:10px;margin-top:6px;
+  background:
+    radial-gradient(circle 5px at 0 5px, var(--navy) 99%, transparent 100%),
+    radial-gradient(circle 5px at 100% 5px, var(--navy) 99%, transparent 100%);
+  background-repeat:no-repeat;
+}
+.perf-seam::before{
+  content:'';position:absolute;left:10px;right:10px;top:4px;
+  border-top:1.5px dashed rgba(26,24,20,0.22);
+}
+
+.ticket-stub{
+  background:var(--mustard);
+  border-radius:0 0 8px 8px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 12px 9px 14px;
+}
+.ticket-stub .price{
+  font-family:'Fraunces',serif;font-weight:800;font-size:18px;color:var(--navy-deep);line-height:1;
+}
+.ticket-stub .price .cents{font-size:11px;font-weight:700;}
+.qty-control{display:flex;align-items:center;gap:0;background:rgba(27,42,69,0.12);border-radius:14px;overflow:hidden;}
+.qty-control button{
+  background:none;border:none;width:26px;height:26px;font-size:14px;font-weight:700;
+  color:var(--navy-deep);display:flex;align-items:center;justify-content:center;
+}
+.qty-control span{width:26px;text-align:center;font-size:12.5px;font-weight:700;color:var(--navy-deep);}
+.add-btn{
+  background:var(--navy);color:var(--cream);border:none;
+  width:32px;height:32px;border-radius:50%;font-size:16px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(0,0,0,0.25);
+}
+.add-btn:active{transform:scale(0.92);}
+.add-btn.added{background:var(--sage);}
+
+.empty-state{text-align:center;padding:60px 20px;color:var(--cream);opacity:0.85;}
+.empty-state .glyph{font-size:38px;margin-bottom:10px;display:block;}
+.empty-state h3{margin:0 0 6px;font-size:17px;font-family:'Fraunces';}
+.empty-state p{margin:0;font-size:13px;opacity:0.8;}
+
+/* ---------- Floating cart bar ---------- */
+.cart-fab{
+  position:fixed;bottom:18px;left:16px;right:16px;max-width:848px;margin:0 auto;
+  background:var(--brick);color:#fff;border-radius:30px;padding:13px 20px;
+  display:flex;align-items:center;justify-content:space-between;
+  box-shadow:0 12px 30px rgba(178,59,46,0.45);z-index:35;
+  transform:translateY(120%);transition:transform .3s cubic-bezier(.34,1.4,.64,1);
+}
+.cart-fab.show{transform:translateY(0);}
+.cart-fab-info{display:flex;flex-direction:column;}
+.cart-fab-info .n{font-size:11px;color:var(--cream-dim);letter-spacing:0.5px;}
+.cart-fab-info .t{font-family:'Fraunces';font-size:17px;font-weight:700;}
+.cart-fab-btn{
+  background:var(--mustard);color:var(--navy-deep);border:none;
+  padding:10px 20px;border-radius:20px;font-weight:700;font-size:13.5px;letter-spacing:0.3px;
+}
+
+.fab-admin{
+  position:fixed;bottom:18px;left:16px;width:46px;height:46px;border-radius:50%;
+  background:var(--navy-soft);border:1px solid rgba(216,154,44,0.3);
+  box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;
+  font-size:18px;z-index:34;color:var(--mustard);
+}
+.cart-fab.show ~ .fab-admin{display:none;}
+
+/* ---------- Overlay & drawers ---------- */
+.overlay{
+  position:fixed;inset:0;background:rgba(10,15,26,0.6);z-index:60;
+  opacity:0;visibility:hidden;transition:opacity .25s;
+}
+.overlay.show{opacity:1;visibility:visible;}
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;width:min(440px,92vw);
+  background:var(--navy);z-index:61;
+  transform:translateX(100%);transition:transform .3s cubic-bezier(.3,.9,.4,1);
+  display:flex;flex-direction:column;box-shadow:-10px 0 30px rgba(0,0,0,0.3);
+}
+.drawer.show{transform:translateX(0);}
+.drawer-header{
+  background:var(--navy-deep);color:var(--cream);padding:18px 18px 16px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid rgba(216,154,44,0.25);
+}
+.drawer-header h2{margin:0;font-size:18px;font-weight:700;font-family:'Fraunces';}
+.drawer-close{
+  background:var(--navy-soft);border:none;color:var(--cream);
+  width:32px;height:32px;border-radius:50%;font-size:16px;
+}
+.drawer-body{flex:1;overflow-y:auto;padding:16px;}
+.drawer-footer{padding:16px;border-top:1px solid rgba(216,154,44,0.25);background:var(--navy-deep);}
+
+.cart-line{
+  display:flex;gap:10px;background:var(--cream);border-radius:8px;padding:10px;margin-bottom:10px;
+}
+.cart-line img{width:58px;height:58px;object-fit:contain;background:#fff;border-radius:5px;flex-shrink:0;}
+.cart-line-info{flex:1;min-width:0;}
+.cart-line-info .nm{font-size:13px;font-weight:600;line-height:1.25;margin-bottom:2px;color:var(--ink);font-family:'Fraunces';}
+.cart-line-info .rf{font-size:10px;color:var(--brass);}
+.cart-line-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
+.cart-line-price{font-family:'Fraunces';font-weight:700;font-size:13.5px;color:var(--brick);}
+
+.summary-row{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px;color:var(--cream-dim);}
+.summary-row.total{
+  font-size:19px;font-weight:700;color:var(--cream);font-family:'Fraunces';
+  margin-top:8px;padding-top:10px;border-top:1px dashed rgba(216,154,44,0.3);
+}
+
+.btn-primary{
+  width:100%;background:var(--mustard);color:var(--navy-deep);border:none;
+  padding:14px;border-radius:24px;font-size:15px;font-weight:700;letter-spacing:0.3px;margin-bottom:10px;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-primary:active{background:var(--mustard-deep);}
+.btn-secondary{
+  width:100%;background:transparent;color:var(--cream);border:1.5px solid rgba(216,154,44,0.4);
+  padding:13px;border-radius:24px;font-size:14.5px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-danger-outline{
+  width:100%;background:transparent;color:var(--brick);border:1.5px solid var(--brick);
+  padding:13px;border-radius:24px;font-size:14.5px;font-weight:600;
+}
+
+.choice-modal-body p{font-size:13.5px;color:var(--cream-dim);margin:0 0 16px;line-height:1.5;}
+.choice-btn{
+  width:100%;display:flex;align-items:center;gap:14px;background:var(--cream);border:none;
+  border-radius:10px;padding:14px;margin-bottom:12px;text-align:left;
+}
+.choice-btn .ic{
+  width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:20px;flex-shrink:0;
+}
+.choice-btn.local .ic{background:#e7f0e7;color:var(--sage);}
+.choice-btn .tx strong{display:block;font-size:14.5px;color:var(--ink);margin-bottom:1px;font-family:'Fraunces';}
+.choice-btn .tx span{font-size:12px;color:var(--brass);}
+
+.form-group{margin-bottom:14px;}
+.form-group label{
+  display:block;font-size:12px;font-weight:600;color:var(--mustard);margin-bottom:6px;letter-spacing:0.3px;
+}
+.form-group input,.form-group select,.form-group textarea{
+  width:100%;padding:11px 13px;border:1.5px solid rgba(216,154,44,0.3);
+  border-radius:6px;font-size:14px;font-family:'Jost';background:var(--cream);outline:none;color:var(--ink);
+}
+.form-group input:focus,.form-group select:focus{border-color:var(--mustard);}
+.form-hint{font-size:11px;color:var(--cream-dim);margin-top:5px;opacity:0.8;}
+
+.unit-toggle{display:flex;gap:8px;margin-bottom:10px;}
+.unit-toggle button{
+  flex:1;padding:10px;border-radius:6px;border:1.5px solid rgba(216,154,44,0.3);
+  background:var(--navy-soft);color:var(--cream);font-size:13px;font-weight:600;
+}
+.unit-toggle button.active{background:var(--mustard);color:var(--navy-deep);border-color:var(--mustard);}
+
+.image-drop{
+  border:1.5px dashed rgba(216,154,44,0.4);border-radius:8px;padding:16px;text-align:center;
+  background:var(--cream);cursor:pointer;position:relative;overflow:hidden;color:var(--ink);
+}
+.image-drop img{max-width:100%;max-height:140px;object-fit:contain;margin-bottom:8px;}
+.image-drop .ph{font-size:24px;color:#bbb;margin-bottom:6px;}
+.image-drop .lb{font-size:12.5px;color:var(--brass);}
+.image-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;}
+
+.bg-remove-toggle{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--navy-soft);border-radius:8px;padding:11px 13px;margin-top:10px;margin-bottom:4px;
+}
+.bg-remove-toggle .lb{font-size:12.5px;color:var(--cream);}
+.bg-remove-toggle .lb small{display:block;color:var(--cream-dim);font-size:10.5px;margin-top:1px;}
+.switch{position:relative;width:42px;height:24px;flex-shrink:0;}
+.switch input{opacity:0;width:0;height:0;}
+.switch .track{
+  position:absolute;inset:0;background:rgba(216,154,44,0.25);border-radius:14px;transition:.2s;
+}
+.switch .track::before{
+  content:'';position:absolute;width:18px;height:18px;left:3px;top:3px;background:var(--cream);
+  border-radius:50%;transition:.2s;
+}
+.switch input:checked + .track{background:var(--mustard);}
+.switch input:checked + .track::before{transform:translateX(18px);}
+.bg-status{font-size:11px;margin-top:6px;color:var(--mustard);min-height:14px;}
+
+.admin-section-label{
+  font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mustard);
+  margin:18px 4px 10px;font-weight:600;
+}
+.admin-product-row{
+  display:flex;gap:10px;align-items:center;background:var(--cream);border-radius:8px;padding:9px;margin-bottom:8px;
+}
+.admin-product-row img{width:44px;height:44px;object-fit:contain;background:#fff;border-radius:5px;flex-shrink:0;}
+.admin-product-row .info{flex:1;min-width:0;}
+.admin-product-row .info .nm{font-size:12.5px;font-weight:600;line-height:1.2;color:var(--ink);font-family:'Fraunces';}
+.admin-product-row .info .meta{font-size:10.5px;color:var(--brass);}
+.admin-row-actions{display:flex;gap:6px;}
+.admin-icon-btn{
+  background:var(--cream-dim);border:none;width:29px;height:29px;border-radius:7px;
+  font-size:12.5px;display:flex;align-items:center;justify-content:center;color:var(--ink);
+}
+.admin-icon-btn.danger{color:var(--brick);}
+
+.cat-manage-row{
+  display:flex;align-items:center;gap:10px;background:var(--cream);border-radius:8px;padding:10px 12px;margin-bottom:8px;
+}
+.cat-manage-row input{flex:1;border:none;background:transparent;font-size:14px;font-weight:600;color:var(--ink);outline:none;}
+.add-cat-row{display:flex;gap:8px;margin-top:10px;}
+.add-cat-row input{flex:1;}
+.add-cat-row button{background:var(--mustard);color:var(--navy-deep);border:none;border-radius:6px;padding:0 16px;font-size:13px;font-weight:700;}
+
+.tab-row{display:flex;gap:5px;margin-bottom:16px;background:var(--navy-deep);border-radius:10px;padding:4px;overflow-x:auto;}
+.tab-btn{flex:1;background:none;border:none;padding:9px 6px;border-radius:8px;font-size:12px;font-weight:600;color:var(--cream-dim);white-space:nowrap;}
+.tab-btn.active{background:var(--mustard);color:var(--navy-deep);}
+
+.order-card{background:var(--cream);border-radius:8px;padding:13px;margin-bottom:10px;color:var(--ink);}
+.order-card .oc-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
+.order-card .oc-num{font-family:'Fraunces';font-weight:700;font-size:14.5px;color:var(--brick);}
+.order-card .oc-date{font-size:10.5px;color:var(--brass);}
+.order-card .oc-client{font-size:13px;font-weight:600;margin-bottom:6px;}
+.order-card .oc-items{font-size:12px;color:#3a3530;line-height:1.5;margin-bottom:6px;}
+.order-card .oc-bottom{display:flex;justify-content:space-between;align-items:center;border-top:1px dashed rgba(140,112,72,0.3);padding-top:8px;}
+.order-card .oc-total{font-family:'Fraunces';font-weight:700;font-size:15px;}
+.status-pill{
+  font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:12px;text-transform:uppercase;letter-spacing:0.3px;
+}
+.status-pill.nouvelle{background:#fde8c8;color:var(--mustard-deep);}
+.status-pill.en_cours{background:#dce8f5;color:#2b5f8f;}
+.status-pill.terminee{background:#dcebd9;color:var(--sage);}
+.status-select{
+  font-size:11px;border:1px solid rgba(140,112,72,0.3);border-radius:6px;padding:4px 6px;background:#fff;color:var(--ink);
+}
+
+.admin-lock{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:30px;text-align:center;}
+.admin-lock .glyph{font-size:40px;margin-bottom:14px;}
+.admin-lock h3{margin:0 0 6px;font-size:18px;font-family:'Fraunces';}
+.admin-lock p{font-size:13px;color:var(--cream-dim);margin:0 0 20px;}
+.pin-input{display:flex;gap:10px;margin-bottom:18px;}
+.pin-input input{
+  width:46px;height:56px;text-align:center;font-size:22px;
+  border:1.5px solid rgba(216,154,44,0.4);border-radius:8px;
+  font-family:'Fraunces';font-weight:700;color:var(--ink);outline:none;background:var(--cream);
+}
+.pin-input input:focus{border-color:var(--mustard);}
+.pin-error{color:var(--brick);font-size:12.5px;margin-top:-8px;margin-bottom:14px;min-height:16px;}
+
+.logout-link{text-align:center;font-size:12px;color:var(--cream-dim);text-decoration:underline;padding:14px 0 4px;background:none;border:none;width:100%;}
+
+.toast{
+  position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--cream);color:var(--ink);padding:11px 22px;border-radius:20px;
+  font-size:13.5px;z-index:100;opacity:0;transition:all .3s;pointer-events:none;
+  box-shadow:0 6px 20px rgba(0,0,0,0.3);white-space:nowrap;font-weight:600;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+.sync-dot{
+  display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--sage);margin-right:5px;
+}
+.sync-dot.off{background:var(--brick);}
+.sync-row{font-size:10.5px;color:var(--cream-dim);display:flex;align-items:center;margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="bg-texture"></div>
+
+<!-- ================= TOP BAR ================= -->
+<div class="topbar">
+  <div class="topbar-row">
+    <div class="brand">
+      <span class="mark">🗼</span>
+      <div>
+        <h1 id="shopNameDisplay">Souvenirs de Paris</h1>
+        <div class="sub">Catalogue Boutique</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="cartIconBtn" aria-label="Panier">
+        🧺
+        <span class="cart-badge" id="cartBadge" style="display:none;">0</span>
+      </button>
+    </div>
+  </div>
+  <div class="search-wrap">
+    <span class="s-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Rechercher un produit ou une référence…" autocomplete="off">
+    <button class="search-clear" id="searchClear">✕</button>
+  </div>
+</div>
+
+<div class="cat-strip" id="catStrip"></div>
+
+<!-- ================= CATALOGUE ================= -->
+<div class="catalogue">
+  <div class="loading-state" id="loadingState">
+    <div class="spinner"></div>
+    <div>Chargement du catalogue…</div>
+  </div>
+  <div id="gridContainer"></div>
+  <div class="empty-state" id="emptyState" style="display:none;">
+    <span class="glyph">🔎</span>
+    <h3>Aucun produit trouvé</h3>
+    <p>Essayez une autre recherche ou catégorie.</p>
+  </div>
+</div>
+
+<!-- ================= CART FAB ================= -->
+<div class="cart-fab" id="cartFab">
+  <div class="cart-fab-info">
+    <span class="n" id="cartFabCount">0 article</span>
+    <span class="t" id="cartFabTotal">0,00 €</span>
+  </div>
+  <button class="cart-fab-btn" id="cartFabBtn">Voir le panier →</button>
+</div>
+
+<button class="fab-admin" id="adminFabBtn" aria-label="Administration">⚙️</button>
+
+<div class="overlay" id="overlay"></div>
+
+<!-- ================= CART DRAWER ================= -->
+<div class="drawer" id="cartDrawer">
+  <div class="drawer-header">
+    <h2>Votre panier</h2>
+    <button class="drawer-close" data-close="cartDrawer">✕</button>
+  </div>
+  <div class="drawer-body" id="cartBody"></div>
+  <div class="drawer-footer" id="cartFooter" style="display:none;">
+    <div class="summary-row"><span>Articles</span><span id="sumCount">0</span></div>
+    <div class="summary-row total"><span>Total</span><span id="sumTotal">0,00 €</span></div>
+    <div style="height:14px;"></div>
+    <button class="btn-primary" id="checkoutBtn">✓ Confirmer la commande</button>
+    <button class="btn-secondary" id="clearCartBtn">Vider le panier</button>
+  </div>
+</div>
+
+<!-- ================= CHECKOUT NAME DRAWER ================= -->
+<div class="drawer" id="checkoutDrawer">
+  <div class="drawer-header">
+    <h2>Confirmer la commande</h2>
+    <button class="drawer-close" data-close="checkoutDrawer">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="choice-modal-body">
+      <p>Indiquez votre nom pour que la boutique retrouve facilement votre commande.</p>
+      <div class="form-group">
+        <label>Votre nom</label>
+        <input type="text" id="clientNameInput" placeholder="Ex. Tarek Ahmad">
+      </div>
+      <button class="choice-btn local" id="confirmOrderBtn">
+        <span class="ic">✓</span>
+        <span class="tx"><strong>Envoyer la commande</strong><span>Elle apparaîtra dans l'espace administrateur</span></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ORDER SUCCESS DRAWER ================= -->
+<div class="drawer" id="orderSuccessDrawer">
+  <div class="drawer-header">
+    <h2>Commande envoyée</h2>
+    <button class="drawer-close" data-close="orderSuccessDrawer">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="empty-state">
+      <span class="glyph">🎫</span>
+      <h3 id="successOrderNum">Commande n°—</h3>
+      <p>Merci ! La boutique a bien reçu votre commande et la prépare.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ADMIN DRAWER ================= -->
+<div class="drawer" id="adminDrawer">
+  <div class="drawer-header">
+    <h2>Administration</h2>
+    <button class="drawer-close" data-close="adminDrawer">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div id="adminLockScreen" class="admin-lock">
+      <span class="glyph">🔐</span>
+      <h3>Espace administrateur</h3>
+      <p>Entrez votre code à 4 chiffres</p>
+      <div class="pin-input">
+        <input type="tel" maxlength="1" inputmode="numeric">
+        <input type="tel" maxlength="1" inputmode="numeric">
+        <input type="tel" maxlength="1" inputmode="numeric">
+        <input type="tel" maxlength="1" inputmode="numeric">
+      </div>
+      <div class="pin-error" id="pinError"></div>
+      <button class="btn-primary" id="pinSubmit" style="max-width:220px;">Déverrouiller</button>
+    </div>
+
+    <div id="adminPanel" style="display:none;">
+      <div class="tab-row">
+        <button class="tab-btn active" data-tab="orders">Commandes</button>
+        <button class="tab-btn" data-tab="products">Produits</button>
+        <button class="tab-btn" data-tab="categories">Catégories</button>
+        <button class="tab-btn" data-tab="settings">Réglages</button>
+      </div>
+
+      <div id="tabOrders">
+        <div class="admin-section-label">Commandes reçues</div>
+        <div id="adminOrderList"></div>
+      </div>
+
+      <div id="tabProducts" style="display:none;">
+        <button class="btn-primary" id="newProductBtn">+ Ajouter un produit</button>
+        <div class="admin-section-label">Produits existants</div>
+        <div id="adminProductList"></div>
+      </div>
+
+      <div id="tabCategories" style="display:none;">
+        <div class="admin-section-label">Catégories</div>
+        <div id="adminCatList"></div>
+        <div class="add-cat-row">
+          <input type="text" id="newCatInput" placeholder="Nouvelle catégorie…">
+          <button id="addCatBtn">Ajouter</button>
+        </div>
+      </div>
+
+      <div id="tabSettings" style="display:none;">
+        <div class="admin-section-label">Coordonnées</div>
+        <div class="form-group">
+          <label>Nom de la boutique</label>
+          <input type="text" id="settingShopName" placeholder="Souvenirs de Paris">
+        </div>
+        <div class="form-group">
+          <label>Numéro WhatsApp (optionnel)</label>
+          <input type="text" id="settingWhatsapp" placeholder="+33777033977">
+        </div>
+        <div class="form-group">
+          <label>Adresse e-mail (optionnel)</label>
+          <input type="email" id="settingEmail" placeholder="contact@boutique.com">
+        </div>
+        <button class="btn-primary" id="saveSettingsBtn">Enregistrer les réglages</button>
+        <div class="admin-section-label">Sécurité</div>
+        <div class="form-group">
+          <label>Changer le code admin (4 chiffres)</label>
+          <input type="tel" maxlength="4" id="newPinInput" placeholder="••••" inputmode="numeric">
+        </div>
+        <button class="btn-secondary" id="savePinBtn">Mettre à jour le code</button>
+      </div>
+
+      <button class="logout-link" id="adminLogoutBtn">Verrouiller l'administration</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= PRODUCT FORM DRAWER ================= -->
+<div class="drawer" id="productFormDrawer">
+  <div class="drawer-header">
+    <h2 id="productFormTitle">Nouveau produit</h2>
+    <button class="drawer-close" data-close="productFormDrawer">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="form-group">
+      <label>Photo du produit</label>
+      <div class="image-drop" id="imageDropZone">
+        <img id="imagePreview" style="display:none;">
+        <div id="imagePlaceholder">
+          <div class="ph">📷</div>
+          <div class="lb">Touchez pour ajouter une photo</div>
+        </div>
+        <input type="file" accept="image/*" id="imageFileInput">
+      </div>
+      <div class="bg-remove-toggle">
+        <div class="lb">Détourer automatiquement
+          <small>Retire le fond de la photo (traitement local)</small>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="bgRemoveToggle" checked>
+          <span class="track"></span>
+        </label>
+      </div>
+      <div class="bg-status" id="bgStatus"></div>
+    </div>
+    <div class="form-group">
+      <label>Nom du produit</label>
+      <input type="text" id="formName" placeholder="Ex. Magnet panier garni">
+    </div>
+    <div class="form-group">
+      <label>Référence</label>
+      <input type="text" id="formRef" placeholder="Ex. MAT242">
+    </div>
+    <div class="form-group">
+      <label>Prix (€)</label>
+      <input type="number" step="0.01" id="formPrice" placeholder="1.00">
+    </div>
+    <div class="form-group">
+      <label>Catégorie</label>
+      <select id="formCategory"></select>
+    </div>
+    <div class="form-group">
+      <label>Vente</label>
+      <div class="unit-toggle">
+        <button type="button" id="unitToggleUnit" class="active">À l'unité</button>
+        <button type="button" id="unitToggleBulk">Par lot</button>
+      </div>
+      <div id="bulkSizeWrap" style="display:none;">
+        <input type="number" id="formUnitStep" placeholder="Ex. 12" min="2">
+        <div class="form-hint">Chaque ajout au panier comptera ce nombre d'unités (ex. 12 = un paquet de 12).</div>
+      </div>
+    </div>
+    <button class="btn-primary" id="saveProductBtn">Enregistrer le produit</button>
+    <button class="btn-danger-outline" id="deleteProductBtn" style="display:none;">Supprimer ce produit</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

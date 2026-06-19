@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Migration des photos — une seule fois</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>📷 Migration unique des photos produits</h1>
+<p>Cette page envoie les 7 photos du catalogue de départ vers votre base de données Supabase. À utiliser une seule fois, après avoir exécuté le script SQL.</p>
+<button id="runBtn">Lancer la migration</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="images_data.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+  for (const ref of Object.keys(IMAGES)) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<img src="${IMAGES[ref]}"><div><div>${ref}</div><div class="status">Envoi…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('products').update({ image: IMAGES[ref] }).eq('id', ref);
+      if (error) throw error;
+      statusEl.textContent = '✓ Envoyé avec succès';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + e.message;
+      statusEl.className = 'status err';
+    }
+  }
+});
+</script>
+</body>
+</html>
