@@ -23,7 +23,10 @@ button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-rad
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="berets_images.js"></script>
+<script src="berets_enfant_brode.js"></script>
+<script src="berets_enfant_uni.js"></script>
+<script src="berets_adulte_brode.js"></script>
+<script src="berets_adulte_uni.js"></script>
 <script src="extra_casquettes_images.js"></script>
 <script>
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -64,10 +67,13 @@ document.getElementById('runBtn').addEventListener('click', async () => {
   const results = document.getElementById('results');
   results.innerHTML = '';
 
-  if (typeof BERETS_IMAGES === 'undefined' || typeof EXTRA_CASQUETTES_IMAGES === 'undefined') {
+  if (typeof BERETS_ENFANT_BRODE_IMAGES === 'undefined' || typeof BERETS_ENFANT_UNI_IMAGES === 'undefined' ||
+      typeof BERETS_ADULTE_BRODE_IMAGES === 'undefined' || typeof BERETS_ADULTE_UNI_IMAGES === 'undefined' ||
+      typeof EXTRA_CASQUETTES_IMAGES === 'undefined') {
     results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : fichiers images non chargés.</div></div>';
     return;
   }
+  const BERETS_IMAGES = Object.assign({}, BERETS_ENFANT_BRODE_IMAGES, BERETS_ENFANT_UNI_IMAGES, BERETS_ADULTE_BRODE_IMAGES, BERETS_ADULTE_UNI_IMAGES);
 
   const catHeader = document.createElement('h2');
   catHeader.textContent = 'Catégories';
