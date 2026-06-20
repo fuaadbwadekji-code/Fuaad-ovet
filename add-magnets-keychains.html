@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — Porte-clés &amp; Magnets illustrés</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>🔑 Ajout "Portes-Clés" &amp; "Magnets" (illustrés)</h1>
+<p>Cette page ajoute 2 catégories : Portes-Clés (12 modèles, 1,00€) et Magnets illustrés (15 modèles, 1,00€). À utiliser une seule fois.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="magnets_keychains_images.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORIES = [
+  { id: 'cat-portes-cles', name: 'Portes-Clés', sort_order: 27 },
+  { id: 'cat-magnets-illustres', name: 'Magnets', sort_order: 28 }
+];
+
+const PCG_NAMES = {
+  PCG01: 'Porte-clés décapsuleur Paris', PCG02: "Porte-clés Arc de Triomphe", PCG03: 'Porte-clés Arc + Tour Eiffel',
+  PCG04: 'Porte-clés Avenue des Champs-Élysées', PCG05: 'Porte-clés Sacré-Cœur + Tour Eiffel', PCG06: 'Porte-clés cœur + Tour Eiffel',
+  PCG07: 'Porte-clés chien + Tour Eiffel', PCG08: 'Porte-clés Notre-Dame + Tour Eiffel', PCG09: 'Porte-clés baguette + Tour Eiffel',
+  PCG10: 'Porte-clés chat + Tour Eiffel', PCG11: 'Porte-clés chef cuisinier + Tour Eiffel', PCG12: 'Porte-clés macarons + Tour Eiffel'
+};
+const MAG_NAMES = {
+  MAG01: 'Magnet panneaux directionnels + chien', MAG02: 'Magnet baguette parisien', MAG03: "Magnet Arc de Triomphe",
+  MAG04: 'Magnet canne à sucre Noël', MAG05: 'Magnet chaussette de Noël', MAG06: 'Magnet Père Noël Paris',
+  MAG07: 'Magnet sapin de Noël Sacré-Cœur', MAG08: 'Magnet bonhomme de neige Paris', MAG09: 'Magnet Père Noël cadeaux',
+  MAG10: 'Magnet Noël monuments Paris', MAG11: 'Magnet Merry Christmas Tour Eiffel', MAG12: 'Magnet macaron chat Paris',
+  MAG13: 'Magnet macaron chat bleu', MAG15: 'Magnet boulangerie Paris', MAG16: 'Magnet chien Paris'
+};
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof MAGNETS_KEYCHAINS_IMAGES === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : fichier images non chargé.</div></div>';
+    return;
+  }
+
+  const catHeader = document.createElement('h2');
+  catHeader.textContent = 'Catégories';
+  results.appendChild(catHeader);
+  for (const cat of NEW_CATEGORIES) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<div><div>${cat.name}</div><div class="status">Création…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('categories').upsert({ id: cat.id, name: cat.name, sort_order: cat.sort_order });
+      if (error) throw error;
+      statusEl.textContent = '✓ Créée';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + e.message;
+      statusEl.className = 'status err';
+    }
+  }
+
+  async function addGroup(title, refs, names, categoryId) {
+    const header = document.createElement('h2');
+    header.textContent = title + ' (' + refs.length + ')';
+    results.appendChild(header);
+    for (const ref of refs) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const img = MAGNETS_KEYCHAINS_IMAGES[ref] || '';
+      const name = names[ref] || ref;
+      row.innerHTML = `<img src="${img}"><div><div>${name}</div><div class="status">Envoi…</div></div>`;
+      results.appendChild(row);
+      const statusEl = row.querySelector('.status');
+      try {
+        const { error } = await supabaseClient.from('products').upsert({
+          id: ref, ref: ref, name: name, price: 1.00,
+          category_id: categoryId, image: img,
+          unit_step: 1, unit_label: '', sort_order: 100
+        });
+        if (error) throw error;
+        statusEl.textContent = '✓ Ajouté';
+        statusEl.className = 'status ok';
+      } catch (e) {
+        statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+        statusEl.className = 'status err';
+      }
+    }
+  }
+
+  await addGroup('Portes-Clés', Object.keys(PCG_NAMES), PCG_NAMES, 'cat-portes-cles');
+  await addGroup('Magnets', Object.keys(MAG_NAMES), MAG_NAMES, 'cat-magnets-illustres');
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>
