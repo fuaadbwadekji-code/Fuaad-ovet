@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — Tote Bag</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>👜 Ajout du catalogue "Tote Bag"</h1>
+<p>Cette page ajoute la catégorie "Tote Bag" et ses 36 modèles (réf. TB2101 à TB2146, 2,00€ chacun). À utiliser une seule fois.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="totebag_part1.js"></script>
+<script src="totebag_part2.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORY = { id: 'cat-tote-bag-2', name: 'Tote Bag', sort_order: 29 };
+
+const REFS = ['TB2101','TB2102','TB2103','TB2104','TB2105','TB2106','TB2107','TB2109','TB2110',
+  'TB2111','TB2112','TB2113','TB2114','TB2115','TB2116','TB2117','TB2118','TB2119',
+  'TB2120','TB2121','TB2122','TB2123','TB2125','TB2126','TB2127','TB2128','TB2129','TB2130','TB2131',
+  'TB2132','TB2134','TB2137','TB2138','TB2142','TB2144','TB2146'];
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof TOTEBAG_PART1_IMAGES === 'undefined' || typeof TOTEBAG_PART2_IMAGES === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : fichiers images non chargés.</div></div>';
+    return;
+  }
+  const TOTEBAG_IMAGES = Object.assign({}, TOTEBAG_PART1_IMAGES, TOTEBAG_PART2_IMAGES);
+
+  const catRow = document.createElement('div');
+  catRow.className = 'row';
+  catRow.innerHTML = `<div><div>Catégorie : ${NEW_CATEGORY.name}</div><div class="status">Création…</div></div>`;
+  results.appendChild(catRow);
+  const catStatus = catRow.querySelector('.status');
+  try {
+    const { error } = await supabaseClient.from('categories').upsert(NEW_CATEGORY);
+    if (error) throw error;
+    catStatus.textContent = '✓ Catégorie créée';
+    catStatus.className = 'status ok';
+  } catch (e) {
+    catStatus.textContent = '✗ Erreur catégorie : ' + e.message;
+    catStatus.className = 'status err';
+    return;
+  }
+
+  for (const ref of REFS) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const img = TOTEBAG_IMAGES[ref] || '';
+    const name = `Tote bag Paris — modèle ${ref.replace('TB','')}`;
+    row.innerHTML = `<img src="${img}"><div><div>${name}</div><div class="status">Envoi…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: ref, ref: ref, name: name, price: 2.00,
+        category_id: NEW_CATEGORY.id, image: img,
+        unit_step: 1, unit_label: '', sort_order: 100
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓ Ajouté avec succès';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+    }
+  }
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>
