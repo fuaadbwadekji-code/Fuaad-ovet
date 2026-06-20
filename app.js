@@ -2,7 +2,9 @@
    Souvenirs de Paris — Catalogue App (v2, Supabase)
    ========================================================= */
 
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  global: { headers: { 'Cache-Control': 'no-cache' } }
+});
 
 /* ---------- État ---------- */
 let categories = [];
