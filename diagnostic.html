@@ -13,36 +13,43 @@ button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-rad
 </head>
 <body>
 <h1>🔍 Diagnostic — image réelle dans Supabase</h1>
-<button id="checkBtn">Vérifier MR01, MR03, BN45N</button>
+<button id="checkBtn">Vérifier les 12 produits</button>
 <div id="results"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script>
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const REFS = ['MR01','MR03','MR04','MRTO1','MRTO2','BN45R','BN45N','BN45M','BN45AF','BN45BG','BN45RS','BN45BL'];
 document.getElementById('checkBtn').addEventListener('click', async () => {
   const results = document.getElementById('results');
   results.innerHTML = 'Chargement…';
-  const { data, error } = await supabaseClient.from('products').select('id, ref, name, image').in('id', ['MR01','MR03','BN45N']);
+  const { data, error } = await supabaseClient.from('products').select('id, ref, name, image, category_id').in('id', REFS);
   if (error) {
     results.innerHTML = '<div class="row">Erreur : ' + error.message + '</div>';
     return;
   }
   results.innerHTML = '';
   if (!data || data.length === 0) {
-    results.innerHTML = '<div class="row">⚠️ Aucun produit trouvé avec ces IDs (MR01, MR03, BN45N) !</div>';
+    results.innerHTML = '<div class="row">⚠️ Aucun produit trouvé !</div>';
     return;
   }
-  data.forEach(p => {
+  // Afficher dans l'ordre de REFS, et signaler les manquants
+  REFS.forEach(ref => {
+    const p = data.find(x => x.id === ref);
     const div = document.createElement('div');
     div.className = 'row';
-    const imgLen = p.image ? p.image.length : 0;
-    div.innerHTML = `
-      <strong>${p.id}</strong> — ${p.name}<br>
-      Longueur image stockée : ${imgLen} caractères<br>
-      <img src="${p.image || ''}">
-      <pre>${(p.image || '').slice(0,120)}...</pre>
-    `;
+    if (!p) {
+      div.innerHTML = `<strong>${ref}</strong> — ⚠️ INTROUVABLE dans la base`;
+      div.style.color = '#ff8080';
+    } else {
+      const imgLen = p.image ? p.image.length : 0;
+      div.innerHTML = `
+        <strong>${p.id}</strong> (catégorie: ${p.category_id})<br>
+        Longueur image : ${imgLen} caractères<br>
+        <img src="${p.image || ''}">
+      `;
+    }
     results.appendChild(div);
   });
 });
