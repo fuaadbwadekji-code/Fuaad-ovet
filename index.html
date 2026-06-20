@@ -462,8 +462,9 @@ button{font-family:inherit;cursor:pointer;}
   font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mustard);
   margin:18px 4px 10px;font-weight:600;
 }
+.admin-product-row-wrap{margin-bottom:8px;}
 .admin-product-row{
-  display:flex;gap:10px;align-items:center;background:var(--cream);border-radius:8px;padding:9px;margin-bottom:8px;
+  display:flex;gap:10px;align-items:center;background:var(--cream);border-radius:8px;padding:9px;
 }
 .admin-product-row img{width:44px;height:44px;object-fit:contain;background:#fff;border-radius:5px;flex-shrink:0;}
 .admin-product-row .info{flex:1;min-width:0;}
@@ -475,6 +476,20 @@ button{font-family:inherit;cursor:pointer;}
   font-size:12.5px;display:flex;align-items:center;justify-content:center;color:var(--ink);
 }
 .admin-icon-btn.danger{color:var(--brick);}
+
+.lot-quickpicker{
+  display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+  background:var(--cream-dim);border-radius:0 0 8px 8px;
+  padding:9px 10px;margin-top:-4px;
+}
+.lqp-label{font-size:11px;color:var(--brass);font-weight:600;flex-basis:100%;margin-bottom:2px;}
+.lqp-btn{
+  background:#fff;border:1.5px solid rgba(140,112,72,0.3);color:var(--ink);
+  padding:6px 12px;border-radius:14px;font-size:12.5px;font-weight:700;
+}
+.lqp-btn.active{background:var(--sage);color:#fff;border-color:var(--sage);}
+.lqp-btn.unit{font-size:11px;font-weight:600;}
+.lqp-btn.unit.active{background:var(--navy);border-color:var(--navy);}
 
 .cat-manage-row{
   display:flex;align-items:center;gap:10px;background:var(--cream);border-radius:8px;padding:10px 12px;margin-bottom:8px;

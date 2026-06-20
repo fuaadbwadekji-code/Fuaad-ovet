@@ -846,30 +846,63 @@ function renderAdminProductList() {
     const unitInfo = p.unitStep > 1 ? ` · lot de ${p.unitStep}` : '';
     const badges = `${p.outOfStock ? ' <span style="color:var(--brick);font-weight:700;">· Rupture</span>' : ''}${p.featured ? ' <span style="color:var(--mustard);font-weight:700;">· ⭐</span>' : ''}`;
     html += `
-    <div class="admin-product-row">
-      <img src="${p.image || ''}" alt="">
-      <div class="info">
-        <div class="nm">${escapeHtml(p.name)}</div>
-        <div class="meta">Réf. ${escapeHtml(p.ref)} · ${fmtPrice(p.price)} · ${cat ? escapeHtml(cat.name) : '—'}${unitInfo}${badges}</div>
+    <div class="admin-product-row-wrap">
+      <div class="admin-product-row">
+        <img src="${p.image || ''}" alt="">
+        <div class="info">
+          <div class="nm">${escapeHtml(p.name)}</div>
+          <div class="meta">Réf. ${escapeHtml(p.ref)} · ${fmtPrice(p.price)} · ${cat ? escapeHtml(cat.name) : '—'}${unitInfo}${badges}</div>
+        </div>
+        <div class="admin-row-actions">
+          <button class="admin-icon-btn" data-lotmenu="${p.id}" title="Définir un lot">📦</button>
+          <button class="admin-icon-btn" data-edit="${p.id}">✎</button>
+          <button class="admin-icon-btn danger" data-del="${p.id}">🗑</button>
+        </div>
       </div>
-      <div class="admin-row-actions">
-        <button class="admin-icon-btn" data-lot="${p.id}" title="Définir un lot">📦</button>
-        <button class="admin-icon-btn" data-edit="${p.id}">✎</button>
-        <button class="admin-icon-btn danger" data-del="${p.id}">🗑</button>
+      <div class="lot-quickpicker" id="lotpicker-${p.id}" style="display:none;">
+        <span class="lqp-label">Vente par lot de :</span>
+        <button class="lqp-btn ${p.unitStep === 6 ? 'active' : ''}" data-quicklot="${p.id}" data-qty="6">6</button>
+        <button class="lqp-btn ${p.unitStep === 10 ? 'active' : ''}" data-quicklot="${p.id}" data-qty="10">10</button>
+        <button class="lqp-btn ${p.unitStep === 12 ? 'active' : ''}" data-quicklot="${p.id}" data-qty="12">12</button>
+        <button class="lqp-btn unit ${p.unitStep === 1 ? 'active' : ''}" data-quicklot="${p.id}" data-qty="1">À l'unité</button>
       </div>
     </div>`;
   });
   list.innerHTML = html;
   list.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openProductForm(b.dataset.edit)));
-  list.querySelectorAll('[data-lot]').forEach(b => b.addEventListener('click', () => {
-    openProductForm(b.dataset.lot);
-    setTimeout(() => {
-      document.getElementById('unitToggleBulk').scrollIntoView({ behavior: 'smooth', block: 'center' });
-      document.getElementById('unitToggleBulk').click();
-      document.getElementById('formUnitStep').focus();
-    }, 350);
+  list.querySelectorAll('[data-lotmenu]').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.lotmenu;
+    const picker = document.getElementById('lotpicker-' + id);
+    const isOpen = picker.style.display !== 'none';
+    list.querySelectorAll('.lot-quickpicker').forEach(p => p.style.display = 'none');
+    picker.style.display = isOpen ? 'none' : 'flex';
+  }));
+  list.querySelectorAll('[data-quicklot]').forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.quicklot;
+    const qty = parseInt(b.dataset.qty, 10);
+    await quickSetUnitStep(id, qty);
   }));
   list.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => deleteProduct(b.dataset.del)));
+}
+
+async function quickSetUnitStep(productId, qty) {
+  const p = products.find(x => x.id === productId);
+  if (!p) return;
+  const unitStep = qty;
+  const unitLabel = qty > 1 ? `Lot de ${qty}` : '';
+  try {
+    const { error } = await supabaseClient.from('products').update({
+      unit_step: unitStep, unit_label: unitLabel
+    }).eq('id', productId);
+    if (error) throw error;
+    p.unitStep = unitStep;
+    p.unitLabel = unitLabel;
+    showToast(qty > 1 ? `✓ ${p.ref} vendu par lot de ${qty}` : `✓ ${p.ref} vendu à l'unité`);
+    renderAdminProductList();
+    renderGrid();
+  } catch (e) {
+    showToast('⚠️ Erreur lors de la mise à jour');
+  }
 }
 
 async function deleteProduct(id) {
