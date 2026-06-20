@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Diagnostic Casquettes</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;}
+img{max-width:150px;display:block;margin-top:8px;background:#fff;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:20px;}
+</style>
+</head>
+<body>
+<h1>🔍 Diagnostic — Casquettes</h1>
+<button id="checkBtn">Vérifier les 11 casquettes dans Supabase</button>
+<div id="results"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const REFS = ['CAS171K','CAS171N','CAS171R','CAS171B','CAS171BG','CAS171M','CAS3382K','CAS3382N','CAS3382B','CAS3382BG','CAS3382M'];
+
+document.getElementById('checkBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = 'Chargement…';
+
+  // On cherche par ref, pas par id, pour être sûr de trouver les produits
+  // peu importe comment leur id a été généré.
+  const { data, error } = await supabaseClient.from('products').select('id, ref, name, image, category_id').in('ref', REFS);
+
+  if (error) {
+    results.innerHTML = '<div class="row">Erreur : ' + error.message + '</div>';
+    return;
+  }
+  results.innerHTML = '';
+  if (!data || data.length === 0) {
+    results.innerHTML = '<div class="row">⚠️ Aucun produit trouvé avec ces références !</div>';
+    return;
+  }
+
+  REFS.forEach(ref => {
+    const p = data.find(x => x.ref === ref);
+    const div = document.createElement('div');
+    div.className = 'row';
+    if (!p) {
+      div.innerHTML = `<strong>${ref}</strong> — ⚠️ INTROUVABLE (aucun produit avec cette référence)`;
+    } else {
+      const imgLen = p.image ? p.image.length : 0;
+      div.innerHTML = `
+        <strong>Réf: ${p.ref}</strong> — id réel dans la base: <code>${p.id}</code><br>
+        Longueur image : ${imgLen} caractères<br>
+        <img src="${p.image || ''}">
+      `;
+    }
+    results.appendChild(div);
+  });
+});
+</script>
+</body>
+</html>
