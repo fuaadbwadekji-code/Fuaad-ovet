@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Forcer la mise à jour</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;text-align:center;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;text-align:left;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:16px 28px;border-radius:20px;font-size:16px;font-weight:700;cursor:pointer;margin-top:20px;}
+a.linkbtn{display:inline-block;background:#7C8F6E;color:#10192C;padding:14px 26px;border-radius:20px;font-weight:700;text-decoration:none;margin-top:20px;}
+</style>
+</head>
+<body>
+<h1>🔄 Réinitialisation complète</h1>
+<p>Cette page supprime toute version "hors-ligne" enregistrée sur cet appareil pour ce site, afin de forcer le chargement de la dernière version.</p>
+<button id="resetBtn">Lancer la réinitialisation</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script>
+document.getElementById('resetBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  function log(msg, ok) {
+    const div = document.createElement('div');
+    div.className = 'row ' + (ok ? 'ok' : '');
+    div.textContent = msg;
+    results.appendChild(div);
+  }
+
+  // 1. Désinscrire tous les Service Workers
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      if (regs.length === 0) {
+        log('✓ Aucun service worker trouvé', true);
+      } else {
+        for (const reg of regs) {
+          await reg.unregister();
+        }
+        log(`✓ ${regs.length} service worker(s) supprimé(s)`, true);
+      }
+    } else {
+      log('✓ Service workers non supportés (rien à faire)', true);
+    }
+  } catch (e) {
+    log('✗ Erreur service worker : ' + e.message, false);
+  }
+
+  // 2. Vider tous les caches du navigateur pour ce site
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      for (const key of keys) {
+        await caches.delete(key);
+      }
+      log(`✓ ${keys.length} cache(s) supprimé(s)`, true);
+    } else {
+      log('✓ Cache API non supportée (rien à faire)', true);
+    }
+  } catch (e) {
+    log('✗ Erreur cache : ' + e.message, false);
+  }
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé — Retournez au catalogue et actualisez —';
+  results.appendChild(doneMsg);
+
+  const link = document.createElement('a');
+  link.className = 'linkbtn';
+  link.href = './index.html';
+  link.textContent = '→ Retour au catalogue';
+  results.appendChild(link);
+});
+</script>
+</body>
+</html>
