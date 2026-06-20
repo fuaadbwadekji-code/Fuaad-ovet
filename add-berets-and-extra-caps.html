@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — Bérets &amp; Casquettes supplémentaires</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>🎩 Ajout des Bérets (4 catégories) + Casquettes supplémentaires</h1>
+<p>Cette page ajoute : Bérets Enfant Brodé (9), Bérets Enfant Uni (10), Bérets Adulte Brodé (21), Bérets Adulte Uni (28), et 4 casquettes baseball supplémentaires. Total : 72 produits. À utiliser une seule fois.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="berets_images.js"></script>
+<script src="extra_casquettes_images.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORIES = [
+  { id: 'cat-beret-enfant-brode', name: 'Bérets Enfant Brodé', sort_order: 22, price: 2.30 },
+  { id: 'cat-beret-enfant-uni', name: 'Bérets Enfant Uni', sort_order: 23, price: 2.20 },
+  { id: 'cat-beret-adulte-brode', name: 'Bérets Adulte Brodé', sort_order: 24, price: 2.30 },
+  { id: 'cat-beret-adulte-uni', name: 'Bérets Adulte Uni', sort_order: 25, price: 2.20 },
+  { id: 'cat-casquettes', name: 'Casquettes Baseball', sort_order: 21, price: 2.90 }
+];
+
+const COLOR_NAMES = {
+  BEBN:'Noir', BEBM:'Marine', BEBRY:'Bleu Roy', BEBB:'Blanc', BEBR:'Rouge', BEBFS:'Fushia', BEBRS:'Rose Clair', BEBMV:'Mauve', BEBVL:'Violet',
+  BEUN:'Noir', BEUM:'Marine', BEURY:'Bleu Roy', BEURS:'Rose Clair', BEUR:'Rouge', BEUBX:'Bordeaux', BEUFS:'Fushia', BEUMV:'Mauve', BEUVL:'Violet', BEUB:'Blanc',
+  BABRS:'Rose', BABVL:'Violet', BABMV:'Mauve', BABGC:'Gris Clair', BABGF:'Gris Foncé', BABN:'Noir', BABM:'Marine', BABTQ:'Turquoise', BABRY:'Bleu Roy',
+  BABMG:'Marron Glacé', BABMC:'Marron Clair', BABMB:'Brun', BABBG:'Beige', BABB:'Blanc', BABVF:'Vert Fluo', BABVB:'Vert Bouteille', BABV:'Vert', BABK:'Kaki', BABBX:'Bordeaux', BABR:'Rouge', BABFS:'Fushia',
+  BAUFR:'Framboise', BAUFS:'Fushia', BAURS:'Rose', BAUG:'Gris', BAUGC:'Gris Clair', BAUGE:'Gris Éléphant', BAUGF:'Gris Foncé', BAUBC:'Bleu Canard', BAUCL:'Bleu Ciel',
+  BAUM:'Marine', BAUTQ:'Turquoise', BAURY:'Bleu Roy', BAUVL:'Violet', BAUMV:'Mauve', BAUN:'Noir',
+  BAUMT:'Moutarde', BAUMG:'Marron Glacé', BAUMC:'Marron Clair', BAUMB:'Brun', BAUBG:'Beige', BAUBLC:'Blanc Cassé', BAUB:'Blanc', BAUVB:'Vert Bouteille', BAUV:'Vert', BAUK:'Kaki', BAUVF:'Vert Fluo', BAUBX:'Bordeaux', BAUR:'Rouge'
+};
+
+const BERET_CATS = {
+  enfantBrode: ['BEBN','BEBM','BEBRY','BEBB','BEBR','BEBFS','BEBRS','BEBMV','BEBVL'],
+  enfantUni: ['BEUN','BEUM','BEURY','BEURS','BEUR','BEUBX','BEUFS','BEUMV','BEUVL','BEUB'],
+  adulteBrode: ['BABRS','BABVL','BABMV','BABGC','BABGF','BABN','BABM','BABTQ','BABRY','BABMG','BABMC','BABMB','BABBG','BABB','BABVF','BABVB','BABV','BABK','BABBX','BABR','BABFS'],
+  adulteUni: ['BAUFR','BAUFS','BAURS','BAUG','BAUGC','BAUGE','BAUGF','BAUBC','BAUCL','BAUM','BAUTQ','BAURY','BAUVL','BAUMV','BAUN','BAUMT','BAUMG','BAUMC','BAUMB','BAUBG','BAUBLC','BAUB','BAUVB','BAUV','BAUK','BAUVF','BAUBX','BAUR']
+};
+
+const EXTRA_CAPS = [
+  { id: 'CAS178TO', ref: 'CAS178TO', name: 'Casquette baseball Paris — grise visière daim' },
+  { id: 'CAS178PA', ref: 'CAS178PA', name: 'Casquette baseball Paris script — grise visière daim' },
+  { id: 'CAS170BL', ref: 'CAS170BL', name: 'Casquette baseball Paris — fleurs bleu marine' },
+  { id: 'CAS170RS', ref: 'CAS170RS', name: 'Casquette baseball Paris — fleurs roses' }
+];
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof BERETS_IMAGES === 'undefined' || typeof EXTRA_CASQUETTES_IMAGES === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : fichiers images non chargés.</div></div>';
+    return;
+  }
+
+  const catHeader = document.createElement('h2');
+  catHeader.textContent = 'Catégories';
+  results.appendChild(catHeader);
+
+  for (const cat of NEW_CATEGORIES) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<div><div>${cat.name}</div><div class="status">Création…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('categories').upsert({ id: cat.id, name: cat.name, sort_order: cat.sort_order });
+      if (error) throw error;
+      statusEl.textContent = '✓ Créée';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + e.message;
+      statusEl.className = 'status err';
+    }
+  }
+
+  async function addBeretGroup(title, refs, categoryId, price) {
+    const header = document.createElement('h2');
+    header.textContent = title + ' (' + refs.length + ')';
+    results.appendChild(header);
+    for (const ref of refs) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const img = BERETS_IMAGES[ref] || '';
+      const colorName = COLOR_NAMES[ref] || ref;
+      const name = `Béret ${title.includes('Enfant') ? 'enfant' : 'adulte'} Paris — ${colorName}${title.includes('Brodé') ? ' brodé' : ''}`;
+      row.innerHTML = `<img src="${img}"><div><div>${name}</div><div class="status">Envoi…</div></div>`;
+      results.appendChild(row);
+      const statusEl = row.querySelector('.status');
+      try {
+        const { error } = await supabaseClient.from('products').upsert({
+          id: ref, ref: ref, name: name, price: price,
+          category_id: categoryId, image: img,
+          unit_step: 1, unit_label: '', sort_order: 100
+        });
+        if (error) throw error;
+        statusEl.textContent = '✓ Ajouté';
+        statusEl.className = 'status ok';
+      } catch (e) {
+        statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+        statusEl.className = 'status err';
+      }
+    }
+  }
+
+  await addBeretGroup('Bérets Enfant Brodé', BERET_CATS.enfantBrode, 'cat-beret-enfant-brode', 2.30);
+  await addBeretGroup('Bérets Enfant Uni', BERET_CATS.enfantUni, 'cat-beret-enfant-uni', 2.20);
+  await addBeretGroup('Bérets Adulte Brodé', BERET_CATS.adulteBrode, 'cat-beret-adulte-brode', 2.30);
+  await addBeretGroup('Bérets Adulte Uni', BERET_CATS.adulteUni, 'cat-beret-adulte-uni', 2.20);
+
+  const capsHeader = document.createElement('h2');
+  capsHeader.textContent = 'Casquettes supplémentaires (4)';
+  results.appendChild(capsHeader);
+  for (const p of EXTRA_CAPS) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const img = EXTRA_CASQUETTES_IMAGES[p.ref] || '';
+    row.innerHTML = `<img src="${img}"><div><div>${p.name}</div><div class="status">Envoi…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: p.id, ref: p.ref, name: p.name, price: 2.90,
+        category_id: 'cat-casquettes', image: img,
+        unit_step: 1, unit_label: '', sort_order: 100
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓ Ajouté';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+    }
+  }
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>
