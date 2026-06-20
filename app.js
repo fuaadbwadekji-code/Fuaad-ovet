@@ -6,6 +6,10 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, 
   global: { headers: { 'Cache-Control': 'no-cache' } }
 });
 
+if (typeof emailjs !== 'undefined' && EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.startsWith('REMPLACER')) {
+  emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+}
+
 /* ---------- Constantes ---------- */
 const TVA_RATE = 0.20; // 20% — appliqué uniquement au moment de la confirmation de commande
 
@@ -90,6 +94,8 @@ async function loadAllData() {
     document.getElementById('loadingState').style.display = 'none';
     renderCategoryStrip();
     renderGrid();
+    renderHomeTiles();
+    startOrderPolling();
   } catch (e) {
     console.error('Erreur de chargement', e);
     document.getElementById('loadingState').innerHTML =
@@ -119,6 +125,150 @@ function renderCategoryStrip() {
       renderCategoryStrip();
       renderGrid();
     });
+  });
+}
+
+/* =========================================================
+   Notifications — nouvelle commande (son + alerte interne)
+   ========================================================= */
+let knownOrderIds = new Set();
+let orderPollingStarted = false;
+
+function playNotificationSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const playTone = (freq, startTime, duration) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.3, startTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+    const now = ctx.currentTime;
+    playTone(880, now, 0.18);
+    playTone(1175, now + 0.16, 0.22);
+  } catch (e) {
+    console.warn('Son indisponible', e);
+  }
+}
+
+function showNewOrderBanner(order) {
+  const banner = document.createElement('div');
+  banner.className = 'new-order-banner';
+  banner.innerHTML = `
+    <div class="nob-icon">🎫</div>
+    <div class="nob-text">
+      <strong>Nouvelle commande n°${escapeHtml(order.order_number)}</strong>
+      <span>${escapeHtml(order.client_name || 'Client')}${order.shop_name ? ' — ' + escapeHtml(order.shop_name) : ''}</span>
+    </div>
+    <button class="nob-close">✕</button>
+  `;
+  document.body.appendChild(banner);
+  banner.querySelector('.nob-close').addEventListener('click', () => banner.remove());
+  setTimeout(() => banner.classList.add('show'), 50);
+  setTimeout(() => {
+    banner.classList.remove('show');
+    setTimeout(() => banner.remove(), 400);
+  }, 8000);
+}
+
+async function checkForNewOrders() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('id, order_number, client_name, shop_name, created_at')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error || !data) return;
+
+    if (knownOrderIds.size === 0) {
+      // premier chargement : juste mémoriser, ne pas notifier rétroactivement
+      data.forEach(o => knownOrderIds.add(o.id));
+      return;
+    }
+
+    const newOnes = data.filter(o => !knownOrderIds.has(o.id));
+    newOnes.forEach(o => knownOrderIds.add(o.id));
+
+    if (newOnes.length > 0) {
+      playNotificationSound();
+      newOnes.forEach(o => showNewOrderBanner(o));
+      if (adminUnlocked) renderAdminOrderList();
+    }
+  } catch (e) {
+    console.warn('Vérification des commandes échouée', e);
+  }
+}
+
+function startOrderPolling() {
+  if (orderPollingStarted) return;
+  orderPollingStarted = true;
+  checkForNewOrders(); // initialise knownOrderIds sans notifier
+  setInterval(checkForNewOrders, 30000);
+}
+
+/* =========================================================
+   VUES — Accueil (mosaïque de catégories) / Boutique
+   ========================================================= */
+function renderHomeTiles() {
+  const container = document.getElementById('homeTilesContainer');
+  let html = '';
+  const featuredCount = products.filter(p => p.featured).length;
+  if (featuredCount > 0) {
+    const sample = products.find(p => p.featured);
+    html += `
+    <div class="home-tile featured-tile" data-cat="featured">
+      <img src="${sample.image || ''}" alt="">
+      <div class="tile-label">⭐ Meilleures ventes<span class="tile-count">${featuredCount} article${featuredCount > 1 ? 's' : ''}</span></div>
+    </div>`;
+  }
+  categories.forEach(cat => {
+    const items = products.filter(p => p.categoryId === cat.id);
+    if (items.length === 0) return;
+    const sample = items[0];
+    html += `
+    <div class="home-tile" data-cat="${cat.id}">
+      <img src="${sample.image || ''}" alt="">
+      <div class="tile-label">${escapeHtml(cat.name)}<span class="tile-count">${items.length} article${items.length > 1 ? 's' : ''}</span></div>
+    </div>`;
+  });
+  container.innerHTML = html;
+  container.querySelectorAll('.home-tile').forEach(tile => {
+    tile.addEventListener('click', () => {
+      activeCategory = tile.dataset.cat;
+      renderCategoryStrip();
+      renderGrid();
+      showShopView();
+    });
+  });
+}
+
+function showHomeView() {
+  document.getElementById('homeView').style.display = 'block';
+  document.getElementById('shopView').style.display = 'none';
+  document.getElementById('searchWrap').style.display = 'none';
+}
+function showShopView() {
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('shopView').style.display = 'block';
+  document.getElementById('searchWrap').style.display = 'block';
+}
+
+function setupHomeNav() {
+  document.getElementById('goToAllProductsBtn').addEventListener('click', () => {
+    activeCategory = 'all';
+    renderCategoryStrip();
+    renderGrid();
+    showShopView();
+  });
+  document.getElementById('backToHomeBtn').addEventListener('click', () => {
+    showHomeView();
   });
 }
 
@@ -498,6 +648,24 @@ function renderInvoiceSummary() {
   `;
 }
 
+function sendOrderNotificationEmail(orderNumber, clientName, shopName, items, totalWithTva) {
+  if (typeof emailjs === 'undefined') return;
+  if (!EMAILJS_SERVICE_ID || EMAILJS_SERVICE_ID.startsWith('REMPLACER')) return;
+
+  const itemsText = items.map(it => `${it.ref} x${it.qty} — ${it.name}`).join('\n');
+  const params = {
+    to_email: EMAILJS_NOTIFY_EMAIL,
+    order_number: orderNumber,
+    client_name: clientName,
+    shop_name: shopName || '—',
+    items_list: itemsText,
+    total: fmtPrice(totalWithTva)
+  };
+  emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, params).catch(e => {
+    console.warn('Envoi e-mail échoué', e);
+  });
+}
+
 async function submitOrder(clientName, shopName) {
   const { total, count, bulkEligible } = cartTotal();
   const tva = total * TVA_RATE;
@@ -534,6 +702,8 @@ async function submitOrder(clientName, shopName) {
       .eq('id', 1);
     if (updateError) throw updateError;
     settings.next_order_number = (settings.next_order_number || 1) + 1;
+
+    sendOrderNotificationEmail(orderNumber, clientName, shopName, items, totalWithTva);
 
     document.getElementById('successOrderNum').textContent = `Commande n°${orderNumber}`;
     cart = {};
@@ -619,7 +789,7 @@ async function renderAdminOrderList() {
     data.forEach(o => {
       const date = new Date(o.created_at);
       const dateStr = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' + date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const itemsLines = (o.items || []).map(it => `${escapeHtml(it.name)} (${escapeHtml(it.ref)}) x${it.qty}`).join('<br>');
+      const itemsLines = (o.items || []).map(it => `<strong>${escapeHtml(it.ref)}</strong> x${it.qty} — ${escapeHtml(it.name)}`).join('<br>');
       const clientLine = o.shop_name
         ? `${escapeHtml(o.client_name || 'Client')} <span style="opacity:0.6;font-weight:500;">— ${escapeHtml(o.shop_name)}</span>`
         : escapeHtml(o.client_name || 'Client');
@@ -644,6 +814,7 @@ async function renderAdminOrderList() {
             <option value="terminee" ${o.status === 'terminee' ? 'selected' : ''}>Terminée</option>
           </select>
         </div>
+        <button class="delete-order-btn" data-delorder="${o.id}">🗑 Supprimer cette commande</button>
       </div>`;
     });
     list.innerHTML = html;
@@ -654,6 +825,15 @@ async function renderAdminOrderList() {
         else showToast('Statut mis à jour');
       });
     });
+    list.querySelectorAll('[data-delorder]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Supprimer définitivement cette commande ?')) return;
+        const { error } = await supabaseClient.from('orders').delete().eq('id', btn.dataset.delorder);
+        if (error) { showToast('⚠️ Erreur lors de la suppression'); return; }
+        showToast('Commande supprimée');
+        renderAdminOrderList();
+      });
+    });
   } catch (e) {
     list.innerHTML = `<div class="empty-state"><span class="glyph">⚠️</span><h3>Erreur</h3><p>${escapeHtml(e.message || '')}</p></div>`;
   }
@@ -662,14 +842,21 @@ async function renderAdminOrderList() {
 /* =========================================================
    ADMIN — Produits
    ========================================================= */
+let adminProductSearchTerm = '';
+
 function renderAdminProductList() {
   const list = document.getElementById('adminProductList');
-  if (products.length === 0) {
-    list.innerHTML = `<div class="empty-state"><span class="glyph">📦</span><h3>Aucun produit</h3><p>Ajoutez votre premier produit.</p></div>`;
+  let displayProducts = products;
+  if (adminProductSearchTerm.trim()) {
+    const q = adminProductSearchTerm.trim().toLowerCase();
+    displayProducts = products.filter(p => p.ref.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
+  }
+  if (displayProducts.length === 0) {
+    list.innerHTML = `<div class="empty-state"><span class="glyph">📦</span><h3>${adminProductSearchTerm ? 'Aucun résultat' : 'Aucun produit'}</h3><p>${adminProductSearchTerm ? 'Essayez une autre référence.' : 'Ajoutez votre premier produit.'}</p></div>`;
     return;
   }
   let html = '';
-  products.forEach(p => {
+  displayProducts.forEach(p => {
     const cat = categories.find(c => c.id === p.categoryId);
     const unitInfo = p.unitStep > 1 ? ` · lot de ${p.unitStep}` : '';
     const badges = `${p.outOfStock ? ' <span style="color:var(--brick);font-weight:700;">· Rupture</span>' : ''}${p.featured ? ' <span style="color:var(--mustard);font-weight:700;">· ⭐</span>' : ''}`;
@@ -1319,6 +1506,11 @@ function setupGeneralUI() {
   document.querySelector('[data-tab="orders"]').addEventListener('click', () => {
     if (adminUnlocked) renderAdminOrderList();
   });
+
+  document.getElementById('adminProductSearch').addEventListener('input', (e) => {
+    adminProductSearchTerm = e.target.value;
+    renderAdminProductList();
+  });
 }
 
 /* ---------- Init ---------- */
@@ -1334,6 +1526,7 @@ function init() {
   setupUnitToggle();
   setupCheckout();
   setupGeneralUI();
+  setupHomeNav();
   loadAllData();
 }
 

@@ -166,6 +166,55 @@ button{font-family:inherit;cursor:pointer;}
 }
 @keyframes spin{to{transform:rotate(360deg);}}
 
+/* ---------- Home view ---------- */
+.home-hero{
+  padding:28px 20px 8px;text-align:center;
+}
+.home-hero h2{
+  font-family:'Fraunces';font-size:24px;font-weight:700;color:var(--cream);margin:0 0 6px;
+}
+.home-hero p{
+  font-size:13.5px;color:var(--cream-dim);margin:0;
+}
+.all-products-btn{
+  display:block;margin:14px auto 6px;
+  background:var(--mustard);color:var(--navy-deep);
+  border:none;padding:13px 26px;border-radius:24px;
+  font-size:14.5px;font-weight:700;letter-spacing:0.2px;
+}
+.home-tiles{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:14px;
+  padding:18px;max-width:880px;margin:0 auto;padding-bottom:100px;
+}
+@media(min-width:700px){.home-tiles{grid-template-columns:repeat(3,1fr);}}
+.home-tile{
+  position:relative;background:var(--cream);border-radius:12px;overflow:hidden;
+  box-shadow:var(--shadow);aspect-ratio:1/1;
+  display:flex;align-items:flex-end;
+}
+.home-tile img{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:14px;
+}
+.home-tile .tile-label{
+  position:relative;width:100%;
+  background:linear-gradient(to top, rgba(16,25,44,0.92), transparent);
+  color:#fff;padding:24px 12px 10px;
+  font-family:'Fraunda','Fraunces',serif;font-weight:700;font-size:13.5px;
+  line-height:1.25;
+}
+.home-tile .tile-count{
+  font-size:10.5px;font-weight:500;color:var(--mustard);display:block;margin-top:2px;
+}
+.home-tile.featured-tile{
+  background:linear-gradient(135deg, var(--mustard), var(--brick));
+}
+.back-to-home-btn{
+  display:block;margin:14px 16px 0;
+  background:var(--navy-soft);color:var(--cream);
+  border:1px solid rgba(216,154,44,0.3);
+  padding:9px 16px;border-radius:18px;font-size:13px;font-weight:600;
+}
+
 /* ---------- Catalogue / grid ---------- */
 .catalogue{padding:16px;padding-bottom:110px;max-width:880px;margin:0 auto;}
 .section-title{
@@ -459,6 +508,26 @@ button{font-family:inherit;cursor:pointer;}
 .order-card .oc-date{font-size:10.5px;color:var(--brass);}
 .order-card .oc-client{font-size:13px;font-weight:600;margin-bottom:6px;}
 .order-card .oc-items{font-size:12px;color:#3a3530;line-height:1.5;margin-bottom:6px;}
+.delete-order-btn{
+  width:100%;background:none;border:none;color:var(--brick);
+  font-size:11.5px;font-weight:600;text-decoration:underline;
+  padding:8px 0 0;margin-top:6px;
+}
+
+.new-order-banner{
+  position:fixed;top:16px;left:16px;right:16px;max-width:480px;margin:0 auto;
+  background:var(--sage);color:#fff;border-radius:14px;
+  padding:14px 16px;display:flex;align-items:center;gap:12px;
+  box-shadow:0 12px 30px rgba(0,0,0,0.35);
+  z-index:200;
+  transform:translateY(-120%);transition:transform .35s cubic-bezier(.34,1.4,.64,1);
+}
+.new-order-banner.show{transform:translateY(0);}
+.new-order-banner .nob-icon{font-size:24px;flex-shrink:0;}
+.new-order-banner .nob-text{flex:1;display:flex;flex-direction:column;}
+.new-order-banner .nob-text strong{font-size:14px;font-family:'Fraunces';}
+.new-order-banner .nob-text span{font-size:12px;opacity:0.9;}
+.new-order-banner .nob-close{background:rgba(255,255,255,0.2);border:none;color:#fff;width:26px;height:26px;border-radius:50%;font-size:13px;flex-shrink:0;}
 .order-card .oc-bottom{display:flex;justify-content:space-between;align-items:center;border-top:1px dashed rgba(140,112,72,0.3);padding-top:8px;}
 .order-card .oc-total{font-family:'Fraunces';font-weight:700;font-size:15px;}
 .status-pill{
@@ -585,26 +654,41 @@ button{font-family:inherit;cursor:pointer;}
       </button>
     </div>
   </div>
-  <div class="search-wrap">
+  <div class="search-wrap" id="searchWrap" style="display:none;">
     <span class="s-icon">🔍</span>
     <input type="text" id="searchInput" placeholder="Rechercher un produit ou une référence…" autocomplete="off">
     <button class="search-clear" id="searchClear">✕</button>
   </div>
 </div>
 
-<div class="cat-strip" id="catStrip"></div>
-
-<!-- ================= CATALOGUE ================= -->
-<div class="catalogue">
-  <div class="loading-state" id="loadingState">
-    <div class="spinner"></div>
-    <div>Chargement du catalogue…</div>
+<!-- ================= HOME VIEW (category tiles) ================= -->
+<div id="homeView">
+  <div class="home-hero">
+    <h2>Bienvenue !</h2>
+    <p>Choisissez une catégorie pour découvrir nos souvenirs parisiens.</p>
   </div>
-  <div id="gridContainer"></div>
-  <div class="empty-state" id="emptyState" style="display:none;">
-    <span class="glyph">🔎</span>
-    <h3>Aucun produit trouvé</h3>
-    <p>Essayez une autre recherche ou catégorie.</p>
+  <button class="all-products-btn" id="goToAllProductsBtn">
+    🗂️ Voir tous les produits
+  </button>
+  <div id="homeTilesContainer" class="home-tiles"></div>
+</div>
+
+<!-- ================= SHOP VIEW (search + grid) ================= -->
+<div id="shopView" style="display:none;">
+  <button class="back-to-home-btn" id="backToHomeBtn">← Retour à l'accueil</button>
+  <div class="cat-strip" id="catStrip"></div>
+
+  <div class="catalogue">
+    <div class="loading-state" id="loadingState">
+      <div class="spinner"></div>
+      <div>Chargement du catalogue…</div>
+    </div>
+    <div id="gridContainer"></div>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <span class="glyph">🔎</span>
+      <h3>Aucun produit trouvé</h3>
+      <p>Essayez une autre recherche ou catégorie.</p>
+    </div>
   </div>
 </div>
 
@@ -714,6 +798,10 @@ button{font-family:inherit;cursor:pointer;}
 
       <div id="tabProducts" style="display:none;">
         <button class="btn-primary" id="newProductBtn">+ Ajouter un produit</button>
+        <div class="form-group" style="margin-top:14px;">
+          <label>Rechercher par référence ou nom</label>
+          <input type="text" id="adminProductSearch" placeholder="Ex. MAT221">
+        </div>
         <div class="admin-section-label">Produits existants</div>
         <div id="adminProductList"></div>
       </div>
@@ -857,6 +945,7 @@ button{font-family:inherit;cursor:pointer;}
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
 </body>
