@@ -139,6 +139,18 @@
 
   function $(id) { return document.getElementById(id); }
 
+  function generateUUID() {
+    if (window.crypto && window.crypto.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+    // fallback لتوليد UUID v4 بدون الاعتماد على crypto.randomUUID
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0;
+      var v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
   function log(msg, type) {
     var el = $('log');
     el.style.display = 'block';
@@ -243,13 +255,28 @@
 
         log('➕ القسم غير موجود، سيتم إنشاؤه بـ sort_order = ' + nextSortOrder + '...');
 
+        var catPayload = { name: CATEGORY_NAME, sort_order: nextSortOrder };
         var insertCatRes = await supabaseClient
           .from('categories')
-          .insert([{ name: CATEGORY_NAME, sort_order: nextSortOrder }])
+          .insert([catPayload])
           .select('id')
           .single();
 
-        if (insertCatRes.error) throw insertCatRes.error;
+        if (insertCatRes.error) {
+          // إذا كان عمود id لا يتولّد تلقائياً، نولّد UUID بأنفسنا ونعيد المحاولة
+          if (insertCatRes.error.message && insertCatRes.error.message.indexOf('null value in column "id"') !== -1) {
+            log('ℹ️ عمود id لا يتولّد تلقائياً، سيتم توليد معرف يدوياً...', 'info');
+            catPayload.id = generateUUID();
+            insertCatRes = await supabaseClient
+              .from('categories')
+              .insert([catPayload])
+              .select('id')
+              .single();
+            if (insertCatRes.error) throw insertCatRes.error;
+          } else {
+            throw insertCatRes.error;
+          }
+        }
 
         categoryId = insertCatRes.data.id;
         log('✅ تم إنشاء القسم بنجاح (id: ' + categoryId + ').', 'ok');
@@ -307,7 +334,19 @@
           .insert(rows)
           .select('ref');
 
-        if (insertProdRes.error) throw insertProdRes.error;
+        if (insertProdRes.error) {
+          if (insertProdRes.error.message && insertProdRes.error.message.indexOf('null value in column "id"') !== -1) {
+            log('ℹ️ عمود id بجدول المنتجات لا يتولّد تلقائياً، سيتم توليد معرفات يدوياً...', 'info');
+            rows.forEach(function(r) { r.id = generateUUID(); });
+            insertProdRes = await supabaseClient
+              .from('products')
+              .insert(rows)
+              .select('ref');
+            if (insertProdRes.error) throw insertProdRes.error;
+          } else {
+            throw insertProdRes.error;
+          }
+        }
 
         var insertedRefs = insertProdRes.data.map(function(p) { return p.ref; });
         log('✅ تمت إضافة ' + insertedRefs.length + ' منتج بنجاح: ' + insertedRefs.join(', '), 'ok');
