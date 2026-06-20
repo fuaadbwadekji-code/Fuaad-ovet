@@ -145,6 +145,9 @@ button{font-family:inherit;cursor:pointer;}
   border-color:var(--mustard);
   font-weight:600;
 }
+.cat-chip.catalogue-chip{
+  background:var(--navy-soft);border:1.5px solid var(--mustard);color:var(--mustard);font-weight:600;
+}
 .cat-chip.featured-chip{
   background:linear-gradient(135deg, var(--mustard), var(--brick));
   color:#fff;border-color:transparent;font-weight:600;
@@ -167,26 +170,9 @@ button{font-family:inherit;cursor:pointer;}
 @keyframes spin{to{transform:rotate(360deg);}}
 
 /* ---------- Home view ---------- */
-.home-hero{
-  padding:28px 20px 8px;text-align:center;
-}
-.home-hero h2{
-  font-family:'Fraunces';font-size:24px;font-weight:700;color:var(--cream);margin:0 0 6px;
-}
-.home-hero p{
-  font-size:13.5px;color:var(--cream-dim);margin:0;
-}
-.all-products-btn{
-  display:block;margin:18px auto 6px;
-  background:var(--mustard);color:var(--navy-deep);
-  border:none;padding:13px 26px;border-radius:24px;
-  font-size:14.5px;font-weight:700;letter-spacing:0.2px;
-}
 .home-tiles{
   display:grid;grid-template-columns:repeat(2,1fr);gap:14px;
-  padding:18px;max-width:880px;margin:0 auto;padding-bottom:100px;
 }
-@media(min-width:700px){.home-tiles{grid-template-columns:repeat(3,1fr);}}
 .home-tile{
   position:relative;background:var(--cream);border-radius:12px;overflow:hidden;
   box-shadow:var(--shadow);aspect-ratio:1/1;
@@ -199,7 +185,7 @@ button{font-family:inherit;cursor:pointer;}
   position:relative;width:100%;
   background:linear-gradient(to top, rgba(16,25,44,0.92), transparent);
   color:#fff;padding:24px 12px 10px;
-  font-family:'Fraunda','Fraunces',serif;font-weight:700;font-size:13.5px;
+  font-family:'Fraunces',serif;font-weight:700;font-size:13.5px;
   line-height:1.25;
 }
 .home-tile .tile-count{
@@ -207,12 +193,6 @@ button{font-family:inherit;cursor:pointer;}
 }
 .home-tile.featured-tile{
   background:linear-gradient(135deg, var(--mustard), var(--brick));
-}
-.back-to-home-btn{
-  display:block;margin:14px 16px 0;
-  background:var(--navy-soft);color:var(--cream);
-  border:1px solid rgba(216,154,44,0.3);
-  padding:9px 16px;border-radius:18px;font-size:13px;font-weight:600;
 }
 
 /* ---------- Catalogue / grid ---------- */
@@ -654,37 +634,26 @@ button{font-family:inherit;cursor:pointer;}
       </button>
     </div>
   </div>
-  <div class="search-wrap" id="searchWrap" style="display:none;">
+  <div class="search-wrap">
     <span class="s-icon">🔍</span>
     <input type="text" id="searchInput" placeholder="Rechercher un produit ou une référence…" autocomplete="off">
     <button class="search-clear" id="searchClear">✕</button>
   </div>
 </div>
 
-<!-- ================= HOME VIEW (category tiles) ================= -->
-<div id="homeView">
-  <button class="all-products-btn" id="goToAllProductsBtn">
-    🗂️ Voir tous les produits
-  </button>
-  <div id="homeTilesContainer" class="home-tiles"></div>
-</div>
+<div class="cat-strip" id="catStrip"></div>
 
-<!-- ================= SHOP VIEW (search + grid) ================= -->
-<div id="shopView" style="display:none;">
-  <button class="back-to-home-btn" id="backToHomeBtn">← Retour à l'accueil</button>
-  <div class="cat-strip" id="catStrip"></div>
-
-  <div class="catalogue">
-    <div class="loading-state" id="loadingState">
-      <div class="spinner"></div>
-      <div>Chargement du catalogue…</div>
-    </div>
-    <div id="gridContainer"></div>
-    <div class="empty-state" id="emptyState" style="display:none;">
-      <span class="glyph">🔎</span>
-      <h3>Aucun produit trouvé</h3>
-      <p>Essayez une autre recherche ou catégorie.</p>
-    </div>
+<!-- ================= CATALOGUE ================= -->
+<div class="catalogue">
+  <div class="loading-state" id="loadingState">
+    <div class="spinner"></div>
+    <div>Chargement du catalogue…</div>
+  </div>
+  <div id="gridContainer"></div>
+  <div class="empty-state" id="emptyState" style="display:none;">
+    <span class="glyph">🔎</span>
+    <h3>Aucun produit trouvé</h3>
+    <p>Essayez une autre recherche ou catégorie.</p>
   </div>
 </div>
 
@@ -755,6 +724,17 @@ button{font-family:inherit;cursor:pointer;}
       <h3 id="successOrderNum">Commande n°—</h3>
       <p>Merci ! La boutique a bien reçu votre commande et la prépare.</p>
     </div>
+  </div>
+</div>
+
+<!-- ================= CATALOGUE BROWSER DRAWER ================= -->
+<div class="drawer" id="catalogueDrawer">
+  <div class="drawer-header">
+    <h2>Catalogue par catégorie</h2>
+    <button class="drawer-close" data-close="catalogueDrawer">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div id="homeTilesContainer" class="home-tiles" style="padding:0;"></div>
   </div>
 </div>
 

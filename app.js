@@ -109,7 +109,8 @@ async function loadAllData() {
 function renderCategoryStrip() {
   const strip = document.getElementById('catStrip');
   const allCount = products.length;
-  let html = `<button class="cat-chip ${activeCategory === 'all' ? 'active' : ''}" data-cat="all">Tout <span class="count">${allCount}</span></button>`;
+  let html = `<button class="cat-chip catalogue-chip" data-action="open-catalogue">🗂️ Catalogue</button>`;
+  html += `<button class="cat-chip ${activeCategory === 'all' ? 'active' : ''}" data-cat="all">Tout <span class="count">${allCount}</span></button>`;
   const featuredCount = products.filter(p => p.featured).length;
   if (featuredCount > 0) {
     html += `<button class="cat-chip featured-chip ${activeCategory === 'featured' ? 'active' : ''}" data-cat="featured">⭐ Meilleures ventes <span class="count">${featuredCount}</span></button>`;
@@ -119,13 +120,20 @@ function renderCategoryStrip() {
     html += `<button class="cat-chip ${activeCategory === c.id ? 'active' : ''}" data-cat="${c.id}">${escapeHtml(c.name)} <span class="count">${count}</span></button>`;
   });
   strip.innerHTML = html;
-  strip.querySelectorAll('.cat-chip').forEach(btn => {
+  strip.querySelectorAll('.cat-chip[data-cat]').forEach(btn => {
     btn.addEventListener('click', () => {
       activeCategory = btn.dataset.cat;
       renderCategoryStrip();
       renderGrid();
     });
   });
+  const catalogueBtn = strip.querySelector('[data-action="open-catalogue"]');
+  if (catalogueBtn) {
+    catalogueBtn.addEventListener('click', () => {
+      renderHomeTiles();
+      openDrawer('catalogueDrawer');
+    });
+  }
 }
 
 /* =========================================================
@@ -214,7 +222,7 @@ function startOrderPolling() {
 }
 
 /* =========================================================
-   VUES — Accueil (mosaïque de catégories) / Boutique
+   CATALOGUE PAR CATÉGORIE — mosaïque dans un tiroir
    ========================================================= */
 function renderHomeTiles() {
   const container = document.getElementById('homeTilesContainer');
@@ -244,31 +252,8 @@ function renderHomeTiles() {
       activeCategory = tile.dataset.cat;
       renderCategoryStrip();
       renderGrid();
-      showShopView();
+      closeDrawer('catalogueDrawer');
     });
-  });
-}
-
-function showHomeView() {
-  document.getElementById('homeView').style.display = 'block';
-  document.getElementById('shopView').style.display = 'none';
-  document.getElementById('searchWrap').style.display = 'none';
-}
-function showShopView() {
-  document.getElementById('homeView').style.display = 'none';
-  document.getElementById('shopView').style.display = 'block';
-  document.getElementById('searchWrap').style.display = 'block';
-}
-
-function setupHomeNav() {
-  document.getElementById('goToAllProductsBtn').addEventListener('click', () => {
-    activeCategory = 'all';
-    renderCategoryStrip();
-    renderGrid();
-    showShopView();
-  });
-  document.getElementById('backToHomeBtn').addEventListener('click', () => {
-    showHomeView();
   });
 }
 
@@ -868,6 +853,7 @@ function renderAdminProductList() {
         <div class="meta">Réf. ${escapeHtml(p.ref)} · ${fmtPrice(p.price)} · ${cat ? escapeHtml(cat.name) : '—'}${unitInfo}${badges}</div>
       </div>
       <div class="admin-row-actions">
+        <button class="admin-icon-btn" data-lot="${p.id}" title="Définir un lot">📦</button>
         <button class="admin-icon-btn" data-edit="${p.id}">✎</button>
         <button class="admin-icon-btn danger" data-del="${p.id}">🗑</button>
       </div>
@@ -875,6 +861,14 @@ function renderAdminProductList() {
   });
   list.innerHTML = html;
   list.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openProductForm(b.dataset.edit)));
+  list.querySelectorAll('[data-lot]').forEach(b => b.addEventListener('click', () => {
+    openProductForm(b.dataset.lot);
+    setTimeout(() => {
+      document.getElementById('unitToggleBulk').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById('unitToggleBulk').click();
+      document.getElementById('formUnitStep').focus();
+    }, 350);
+  }));
   list.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => deleteProduct(b.dataset.del)));
 }
 
@@ -1526,7 +1520,6 @@ function init() {
   setupUnitToggle();
   setupCheckout();
   setupGeneralUI();
-  setupHomeNav();
   loadAllData();
 }
 
