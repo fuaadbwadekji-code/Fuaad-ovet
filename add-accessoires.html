@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — Accessoires (13 catégories)</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>👛 Ajout des accessoires (13 catégories, 39 produits)</h1>
+<p>Tote Bag, Sacs à main, Sacs Perles, Sacs Coeurs, Portefeuilles, et 4 types de porte-monnaies, miroirs ronds/rectangles, trousses à crayons. Chaque référence existe en 3 couleurs (M=bleu, RS=rose, CL=blanc/bleu). À utiliser une seule fois.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="nvt_images.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORIES = [
+  { id: 'cat-tote-bag', name: 'Tote Bag', sort_order: 6, price: 2.00 },
+  { id: 'cat-sacs-main', name: 'Sacs à Main', sort_order: 7, price: 1.80 },
+  { id: 'cat-sacs-perles', name: 'Sacs Perles', sort_order: 8, price: 2.20 },
+  { id: 'cat-sacs-coeurs', name: 'Sacs Coeurs', sort_order: 9, price: 2.40 },
+  { id: 'cat-portefeuilles', name: 'Portefeuilles GM Double Zip', sort_order: 10, price: 1.90 },
+  { id: 'cat-pm-rectangle', name: 'P.Monnaies Zip Rectangle', sort_order: 11, price: 0.70 },
+  { id: 'cat-pm-arc', name: 'P.Monnaies Forme Arc', sort_order: 12, price: 0.80 },
+  { id: 'cat-pm-coquillage', name: 'P.Monnaies Coquillage', sort_order: 13, price: 0.80 },
+  { id: 'cat-pm-carre', name: 'P.Monnaies Carré', sort_order: 14, price: 0.80 },
+  { id: 'cat-pm-sacados', name: 'P.Monnaies Sac à Dos', sort_order: 15, price: 0.90 },
+  { id: 'cat-trousses', name: 'Trousses à Crayons', sort_order: 16, price: 1.00 },
+  { id: 'cat-miroirs-ronds', name: 'Miroirs Ronds', sort_order: 17, price: 1.00 },
+  { id: 'cat-miroirs-rect', name: 'Miroirs Rectangles', sort_order: 18, price: 1.10 }
+];
+
+const COLOR_NAMES = { M: 'bleu', RS: 'rose', CL: 'blanc & bleu' };
+
+const NEW_PRODUCTS = [
+  // Tote Bag (noms et couleurs particuliers)
+  { id: 'TB2137', ref: 'TB2137', name: 'Tote bag Paris France — fleurs bleues', categoryId: 'cat-tote-bag' },
+  { id: 'TB2138', ref: 'TB2138', name: 'Tote bag Cannes French Riviera — fleurs roses', categoryId: 'cat-tote-bag' },
+  { id: 'TB2139', ref: 'TB2139', name: 'Tote bag Cannes French Riviera — toile bleue', categoryId: 'cat-tote-bag' },
+  // Sacs à main
+  { id: 'SAC52M', ref: 'SAC52M', name: 'Sac à main Paris France — bleu fleuri', categoryId: 'cat-sacs-main' },
+  { id: 'SAC52RS', ref: 'SAC52RS', name: 'Sac à main Paris France — rose fleuri', categoryId: 'cat-sacs-main' },
+  { id: 'SAC52CL', ref: 'SAC52CL', name: 'Sac à main Paris France — toile blanc & bleu', categoryId: 'cat-sacs-main' },
+  // Sacs Perles
+  { id: 'SAC91M', ref: 'SAC91M', name: 'Sac perles Paris France — bleu fleuri', categoryId: 'cat-sacs-perles' },
+  { id: 'SAC91RS', ref: 'SAC91RS', name: 'Sac perles Paris France — rose fleuri', categoryId: 'cat-sacs-perles' },
+  { id: 'SAC91CL', ref: 'SAC91CL', name: 'Sac perles Paris France — toile blanc & bleu', categoryId: 'cat-sacs-perles' },
+  // Sacs Coeurs
+  { id: 'SAC93M', ref: 'SAC93M', name: 'Sac coeur Paris France — bleu fleuri', categoryId: 'cat-sacs-coeurs' },
+  { id: 'SAC93RS', ref: 'SAC93RS', name: 'Sac coeur Paris France — rose fleuri', categoryId: 'cat-sacs-coeurs' },
+  { id: 'SAC93CL', ref: 'SAC93CL', name: 'Sac coeur Paris France — toile blanc & bleu', categoryId: 'cat-sacs-coeurs' },
+  // Portefeuilles
+  { id: 'PM0011M', ref: 'PM0011M', name: 'Portefeuille double zip Paris France — bleu fleuri', categoryId: 'cat-portefeuilles' },
+  { id: 'PM0011RS', ref: 'PM0011RS', name: 'Portefeuille double zip Paris France — rose fleuri', categoryId: 'cat-portefeuilles' },
+  { id: 'PM0011CL', ref: 'PM0011CL', name: 'Portefeuille double zip Paris France — toile blanc & bleu', categoryId: 'cat-portefeuilles' },
+  // P.Monnaies Rectangle
+  { id: 'PM04M', ref: 'PM04M', name: 'Porte-monnaie zip rectangle Paris France — bleu fleuri', categoryId: 'cat-pm-rectangle' },
+  { id: 'PM04RS', ref: 'PM04RS', name: 'Porte-monnaie zip rectangle Paris France — rose fleuri', categoryId: 'cat-pm-rectangle' },
+  { id: 'PM04CL', ref: 'PM04CL', name: 'Porte-monnaie zip rectangle Paris France — toile blanc & bleu', categoryId: 'cat-pm-rectangle' },
+  // P.Monnaies Arc
+  { id: 'PM51M', ref: 'PM51M', name: 'Porte-monnaie forme arc Paris France — bleu fleuri', categoryId: 'cat-pm-arc' },
+  { id: 'PM51RS', ref: 'PM51RS', name: 'Porte-monnaie forme arc Paris France — rose fleuri', categoryId: 'cat-pm-arc' },
+  { id: 'PM51CL', ref: 'PM51CL', name: 'Porte-monnaie forme arc Paris France — toile blanc & bleu', categoryId: 'cat-pm-arc' },
+  // P.Monnaies Coquillage
+  { id: 'PM57M', ref: 'PM57M', name: 'Porte-monnaie coquillage Paris France — bleu fleuri', categoryId: 'cat-pm-coquillage' },
+  { id: 'PM57RS', ref: 'PM57RS', name: 'Porte-monnaie coquillage Paris France — rose fleuri', categoryId: 'cat-pm-coquillage' },
+  { id: 'PM57CL', ref: 'PM57CL', name: 'Porte-monnaie coquillage Paris France — toile blanc & bleu', categoryId: 'cat-pm-coquillage' },
+  // P.Monnaies Carré
+  { id: 'PM56M', ref: 'PM56M', name: 'Porte-monnaie carré Paris France — bleu fleuri', categoryId: 'cat-pm-carre' },
+  { id: 'PM56RS', ref: 'PM56RS', name: 'Porte-monnaie carré Paris France — rose fleuri', categoryId: 'cat-pm-carre' },
+  { id: 'PM56CL', ref: 'PM56CL', name: 'Porte-monnaie carré Paris France — toile blanc & bleu', categoryId: 'cat-pm-carre' },
+  // P.Monnaies Sac à dos
+  { id: 'PM252M', ref: 'PM252M', name: 'Porte-monnaie sac à dos Paris France — bleu fleuri', categoryId: 'cat-pm-sacados' },
+  { id: 'PM252RS', ref: 'PM252RS', name: 'Porte-monnaie sac à dos Paris France — rose fleuri', categoryId: 'cat-pm-sacados' },
+  { id: 'PM252CL', ref: 'PM252CL', name: 'Porte-monnaie sac à dos Paris France — toile blanc & bleu', categoryId: 'cat-pm-sacados' },
+  // Trousses
+  { id: 'TR188M', ref: 'TR188M', name: 'Trousse à crayons Paris France — bleu fleuri', categoryId: 'cat-trousses' },
+  { id: 'TR188RS', ref: 'TR188RS', name: 'Trousse à crayons Paris France — rose fleuri', categoryId: 'cat-trousses' },
+  { id: 'TR188CL', ref: 'TR188CL', name: 'Trousse à crayons Paris France — toile blanc & bleu', categoryId: 'cat-trousses' },
+  // Miroirs Ronds
+  { id: 'MIR333M', ref: 'MIR333M', name: 'Miroir rond Paris France — bleu fleuri', categoryId: 'cat-miroirs-ronds' },
+  { id: 'MIR333RS', ref: 'MIR333RS', name: 'Miroir rond Paris France — rose fleuri', categoryId: 'cat-miroirs-ronds' },
+  { id: 'MIR333CL', ref: 'MIR333CL', name: 'Miroir rond Paris France — toile blanc & bleu', categoryId: 'cat-miroirs-ronds' },
+  // Miroirs Rectangles
+  { id: 'MIRE333M', ref: 'MIRE333M', name: 'Miroir rectangle Paris France — bleu fleuri', categoryId: 'cat-miroirs-rect' },
+  { id: 'MIRE333RS', ref: 'MIRE333RS', name: 'Miroir rectangle Paris France — rose fleuri', categoryId: 'cat-miroirs-rect' },
+  { id: 'MIRE333CL', ref: 'MIRE333CL', name: 'Miroir rectangle Paris France — toile blanc & bleu', categoryId: 'cat-miroirs-rect' }
+];
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof NVT_IMAGES === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : nvt_images.js ne s\'est pas chargé.</div></div>';
+    return;
+  }
+
+  const catHeader = document.createElement('h2');
+  catHeader.textContent = 'Catégories';
+  results.appendChild(catHeader);
+
+  for (const cat of NEW_CATEGORIES) {
+    const catRow = document.createElement('div');
+    catRow.className = 'row';
+    catRow.innerHTML = `<div><div>${cat.name}</div><div class="status">Création…</div></div>`;
+    results.appendChild(catRow);
+    const catStatus = catRow.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('categories').upsert({ id: cat.id, name: cat.name, sort_order: cat.sort_order });
+      if (error) throw error;
+      catStatus.textContent = '✓ Créée';
+      catStatus.className = 'status ok';
+    } catch (e) {
+      catStatus.textContent = '✗ Erreur : ' + e.message;
+      catStatus.className = 'status err';
+    }
+  }
+
+  const prodHeader = document.createElement('h2');
+  prodHeader.textContent = 'Produits';
+  results.appendChild(prodHeader);
+
+  for (const p of NEW_PRODUCTS) {
+    const cat = NEW_CATEGORIES.find(c => c.id === p.categoryId);
+    const row = document.createElement('div');
+    row.className = 'row';
+    const img = NVT_IMAGES[p.ref] || '';
+    row.innerHTML = `<img src="${img}"><div><div>${p.name}</div><div class="status">Envoi…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: p.id, ref: p.ref, name: p.name, price: cat.price,
+        category_id: p.categoryId, image: img,
+        unit_step: 1, unit_label: '', sort_order: 100
+      });
+      if (error) throw error;
+      statusEl.textContent = `✓ Ajouté — ${cat.price.toFixed(2)}€`;
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+    }
+  }
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — Monuments &amp; Boules de neige</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>🗼 Ajout "Monuments Résine" et "Boule de Neige"</h1>
+<p>Cette page ajoute 2 catégories et leurs 12 produits (chacun avec son propre prix). À utiliser une seule fois.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="monuments_images.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORIES = [
+  { id: 'cat-monuments', name: 'Monument Résine', sort_order: 4 },
+  { id: 'cat-boule-neige', name: 'Boule de Neige', sort_order: 5 }
+];
+
+const NEW_PRODUCTS = [
+  { id: 'MR01', ref: 'MR01', name: 'Monument résine — Paris multi-monuments', price: 2.00, categoryId: 'cat-monuments' },
+  { id: 'MRTO1', ref: 'MRTO1', name: 'Tour Eiffel résine — doré', price: 1.00, categoryId: 'cat-monuments' },
+  { id: 'MRTO2', ref: 'MRTO2', name: 'Tour Eiffel résine — argent', price: 1.00, categoryId: 'cat-monuments' },
+  { id: 'MR03', ref: 'MR03', name: 'Notre-Dame de Paris résine', price: 2.90, categoryId: 'cat-monuments' },
+  { id: 'MR04', ref: 'MR04', name: 'Notre-Dame de Paris résine — détaillée', price: 3.30, categoryId: 'cat-monuments' },
+  { id: 'BN45R', ref: 'BN45R', name: 'Boule de neige Paris — socle rouge', price: 1.10, categoryId: 'cat-boule-neige' },
+  { id: 'BN45N', ref: 'BN45N', name: 'Boule de neige Paris — socle noir', price: 1.10, categoryId: 'cat-boule-neige' },
+  { id: 'BN45M', ref: 'BN45M', name: 'Boule de neige Paris — socle marine', price: 1.10, categoryId: 'cat-boule-neige' },
+  { id: 'BN45AF', ref: 'BN45AF', name: 'Boule de neige Paris — socle argent antique', price: 1.10, categoryId: 'cat-boule-neige' },
+  { id: 'BN45BG', ref: 'BN45BG', name: 'Boule de neige Paris — socle beige doré', price: 1.10, categoryId: 'cat-boule-neige' },
+  { id: 'BN45RS', ref: 'BN45RS', name: 'Boule de neige Paris — socle rose', price: 1.10, categoryId: 'cat-boule-neige' },
+  { id: 'BN45BL', ref: 'BN45BL', name: 'Boule de neige Paris — socle bleu ciel', price: 1.10, categoryId: 'cat-boule-neige' }
+];
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof MONUMENTS_IMAGES === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : monuments_images.js ne s\'est pas chargé.</div></div>';
+    return;
+  }
+
+  for (const cat of NEW_CATEGORIES) {
+    const catRow = document.createElement('div');
+    catRow.className = 'row';
+    catRow.innerHTML = `<div><div>Catégorie : ${cat.name}</div><div class="status">Création…</div></div>`;
+    results.appendChild(catRow);
+    const catStatus = catRow.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('categories').upsert(cat);
+      if (error) throw error;
+      catStatus.textContent = '✓ Catégorie créée';
+      catStatus.className = 'status ok';
+    } catch (e) {
+      catStatus.textContent = '✗ Erreur : ' + e.message;
+      catStatus.className = 'status err';
+    }
+  }
+
+  for (const p of NEW_PRODUCTS) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const img = MONUMENTS_IMAGES[p.ref] || '';
+    row.innerHTML = `<img src="${img}"><div><div>${p.name} — ${p.price.toFixed(2)}€</div><div class="status">Envoi…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: p.id, ref: p.ref, name: p.name, price: p.price,
+        category_id: p.categoryId, image: img,
+        unit_step: 1, unit_label: '', sort_order: 100
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓ Ajouté avec succès';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+    }
+  }
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>

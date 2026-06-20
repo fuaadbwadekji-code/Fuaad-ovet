@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — Tabliers</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>👜 Ajout du catalogue "Tabliers"</h1>
+<p>Cette page ajoute la catégorie "Tabliers" et ses 13 produits (réf. TAB01 à TAB13, 3,30€ chacun, vente à l'unité). À utiliser une seule fois.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="tabliers_images.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORY = { id: 'cat-tabliers', name: 'Tabliers', sort_order: 3 };
+
+const NEW_PRODUCTS = [
+  { id: 'TAB01', ref: 'TAB01', name: 'Tablier Paris — carreaux café' },
+  { id: 'TAB02', ref: 'TAB02', name: 'Tablier Paris — coeurs rouges' },
+  { id: 'TAB03', ref: 'TAB03', name: 'Tablier Paris — chats sur les toits' },
+  { id: 'TAB04', ref: 'TAB04', name: 'Tablier Paris — liseré bleu' },
+  { id: 'TAB06', ref: 'TAB06', name: 'Tablier Take me to Paris — ballerine' },
+  { id: 'TAB07', ref: 'TAB07', name: 'Tablier Paris — tartan et chats dorés' },
+  { id: 'TAB08', ref: 'TAB08', name: 'Tablier Paris — aquarelle florale' },
+  { id: 'TAB09', ref: 'TAB09', name: 'Tablier Paris — élégante au chapeau' },
+  { id: 'TAB10', ref: 'TAB10', name: 'Tablier Paris — vichy bordeaux' },
+  { id: 'TAB11A', ref: 'TAB11A', name: 'Tablier Paris — pied-de-poule brun' },
+  { id: 'TAB11B', ref: 'TAB11B', name: 'Tablier Paris — pied-de-poule bordeaux' },
+  { id: 'TAB12', ref: 'TAB12', name: 'Tablier Café de Paris — robe noire' },
+  { id: 'TAB13', ref: 'TAB13', name: 'Tablier Bonjour Paris — macarons' }
+];
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof TABLIERS_IMAGES === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : tabliers_images.js ne s\'est pas chargé.</div></div>';
+    return;
+  }
+
+  const catRow = document.createElement('div');
+  catRow.className = 'row';
+  catRow.innerHTML = `<div><div>Catégorie : ${NEW_CATEGORY.name}</div><div class="status">Création…</div></div>`;
+  results.appendChild(catRow);
+  const catStatus = catRow.querySelector('.status');
+  try {
+    const { error } = await supabaseClient.from('categories').upsert(NEW_CATEGORY);
+    if (error) throw error;
+    catStatus.textContent = '✓ Catégorie créée';
+    catStatus.className = 'status ok';
+  } catch (e) {
+    catStatus.textContent = '✗ Erreur catégorie : ' + e.message;
+    catStatus.className = 'status err';
+    return;
+  }
+
+  for (const p of NEW_PRODUCTS) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const img = TABLIERS_IMAGES[p.ref] || '';
+    row.innerHTML = `<img src="${img}"><div><div>${p.name}</div><div class="status">Envoi…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: p.id, ref: p.ref, name: p.name, price: 3.30,
+        category_id: NEW_CATEGORY.id, image: img,
+        unit_step: 1, unit_label: '', sort_order: 100
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓ Ajouté avec succès';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+    }
+  }
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>

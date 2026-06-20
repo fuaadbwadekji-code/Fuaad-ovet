@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — T-shirts</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+p.note{background:#243652;padding:12px;border-radius:8px;font-size:13px;line-height:1.5;}
+</style>
+</head>
+<body>
+<h1>👕 Ajout "T-shirts Enfant" et "T-shirts Adulte"</h1>
+<p>Ajoute 2 catégories (8 tailles enfant + 8 tailles adulte = 16 produits), à 2,80€/unité.</p>
+<p class="note">⚙️ Configure aussi automatiquement le <strong>tarif de gros</strong> : dès que 200 t-shirts au total (enfant + adulte confondus) sont dans le panier, chaque t-shirt passe à 2,50€.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="tshirt_images.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORIES = [
+  { id: 'cat-tshirts-enfant', name: 'T-shirts Enfant', sort_order: 19, bulk_threshold_qty: 200, bulk_price: 2.50, bulk_group_id: 'tshirts' },
+  { id: 'cat-tshirts-adulte', name: 'T-shirts Adulte', sort_order: 20, bulk_threshold_qty: 200, bulk_price: 2.50, bulk_group_id: 'tshirts' }
+];
+
+const CHILD_SIZES = ['2','4','6','8','10','12','14'];
+const ADULT_SIZES = ['XS','S','M','L','XL','XXL','3XL'];
+
+const NEW_PRODUCTS = [];
+CHILD_SIZES.forEach(size => {
+  NEW_PRODUCTS.push({
+    id: 'TS' + size, ref: 'TS' + size,
+    name: `T-shirt enfant I love Paris — Taille ${size} ans`,
+    categoryId: 'cat-tshirts-enfant'
+  });
+});
+ADULT_SIZES.forEach(size => {
+  const ref = 'TS' + size;
+  NEW_PRODUCTS.push({
+    id: ref, ref: ref,
+    name: `T-shirt adulte I love Paris — Taille ${size}`,
+    categoryId: 'cat-tshirts-adulte'
+  });
+});
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof TSHIRT_IMAGE === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : tshirt_images.js ne s\'est pas chargé.</div></div>';
+    return;
+  }
+
+  const catHeader = document.createElement('h2');
+  catHeader.textContent = 'Catégories + tarif de gros';
+  results.appendChild(catHeader);
+
+  for (const cat of NEW_CATEGORIES) {
+    const catRow = document.createElement('div');
+    catRow.className = 'row';
+    catRow.innerHTML = `<div><div>${cat.name}</div><div class="status">Création…</div></div>`;
+    results.appendChild(catRow);
+    const catStatus = catRow.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('categories').upsert(cat);
+      if (error) throw error;
+      catStatus.textContent = '✓ Créée avec tarif de gros (200 → 2,50€)';
+      catStatus.className = 'status ok';
+    } catch (e) {
+      catStatus.textContent = '✗ Erreur : ' + e.message;
+      catStatus.className = 'status err';
+    }
+  }
+
+  const prodHeader = document.createElement('h2');
+  prodHeader.textContent = 'Produits (16 tailles)';
+  results.appendChild(prodHeader);
+
+  for (const p of NEW_PRODUCTS) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<img src="${TSHIRT_IMAGE}"><div><div>${p.name}</div><div class="status">Envoi…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: p.id, ref: p.ref, name: p.name, price: 2.80,
+        category_id: p.categoryId, image: TSHIRT_IMAGE,
+        unit_step: 1, unit_label: '', sort_order: 100
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓ Ajouté — 2,80€ (2,50€ si ≥200)';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+    }
+  }
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>

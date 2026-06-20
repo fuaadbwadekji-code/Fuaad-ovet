@@ -67,7 +67,12 @@ async function loadAllData() {
     if (prodRes.error) throw prodRes.error;
     if (settRes.error) throw settRes.error;
 
-    categories = catRes.data || [];
+    categories = (catRes.data || []).map(c => ({
+      id: c.id, name: c.name, sort_order: c.sort_order,
+      bulkGroupId: c.bulk_group_id || null,
+      bulkThresholdQty: c.bulk_threshold_qty || null,
+      bulkPrice: c.bulk_price != null ? Number(c.bulk_price) : null
+    }));
     products = (prodRes.data || []).map(p => ({
       id: p.id, ref: p.ref, name: p.name, price: Number(p.price),
       categoryId: p.category_id, image: p.image,
@@ -162,6 +167,12 @@ function productCardHtml(p) {
   const lots = p.unitStep > 1 ? Math.round(qty / p.unitStep) : qty;
   const img = p.image || '';
   const unitTag = p.unitStep > 1 ? `<div class="t-unit">Lot de ${p.unitStep}</div>` : '';
+  const bulkEligible = getBulkEligibleCategories();
+  const effectivePrice = getEffectivePrice(p, bulkEligible);
+  const isBulk = effectivePrice !== p.price;
+  const priceDisplay = isBulk
+    ? `<span class="price bulk">${fmtPrice(effectivePrice).replace(' €','').split(',')[0]}<span class="cents">,${fmtPrice(effectivePrice).split(',')[1]}</span></span>`
+    : `<span class="price">${fmtPrice(p.price).replace(' €','').split(',')[0]}<span class="cents">,${fmtPrice(p.price).split(',')[1]}</span></span>`;
   return `
   <div class="ticket" data-id="${p.id}">
     <div class="ticket-main">
@@ -177,7 +188,7 @@ function productCardHtml(p) {
     </div>
     <div class="perf-seam"></div>
     <div class="ticket-stub">
-      <span class="price">${fmtPrice(p.price).replace(' €','').split(',')[0]}<span class="cents">,${fmtPrice(p.price).split(',')[1]}</span></span>
+      ${priceDisplay}
       ${lots > 0 ? `
         <div class="qty-control">
           <button class="qty-minus" data-id="${p.id}">−</button>
@@ -221,13 +232,61 @@ function addToCart(id, deltaLots) {
   renderGrid();
 }
 
-function cartTotal() {
-  let total = 0, count = 0;
+/* Calcule, pour chaque "groupe de prix de gros" (qui peut regrouper
+   plusieurs catégories, ex. T-shirts Enfant + Adulte), si le seuil est
+   atteint en additionnant les quantités de TOUTES les catégories du
+   groupe présentes dans le panier. Retourne une Map categoryId -> bool
+   (le résultat est répliqué sur chaque catégorie membre du groupe). */
+function getBulkEligibleCategories() {
+  const categoryQty = {};
   Object.entries(cart).forEach(([id, qty]) => {
     const p = products.find(x => x.id === id);
-    if (p) { total += p.price * qty; count += qty; }
+    if (!p) return;
+    categoryQty[p.categoryId] = (categoryQty[p.categoryId] || 0) + qty;
   });
-  return { total, count };
+
+  // Regrouper les catégories par bulkGroupId (catégories sans groupe = groupe solo)
+  const groups = {}; // groupKey -> { threshold, price, categoryIds: [] }
+  categories.forEach(c => {
+    if (!c.bulkThresholdQty || c.bulkPrice == null) return;
+    const groupKey = c.bulkGroupId || ('solo:' + c.id);
+    if (!groups[groupKey]) {
+      groups[groupKey] = { threshold: c.bulkThresholdQty, price: c.bulkPrice, categoryIds: [] };
+    }
+    groups[groupKey].categoryIds.push(c.id);
+  });
+
+  const eligible = {};
+  Object.values(groups).forEach(g => {
+    const totalQty = g.categoryIds.reduce((sum, cid) => sum + (categoryQty[cid] || 0), 0);
+    const isEligible = totalQty >= g.threshold;
+    g.categoryIds.forEach(cid => { eligible[cid] = isEligible; });
+  });
+  return eligible;
+}
+
+/* Prix unitaire effectif d'un produit, en tenant compte d'un éventuel
+   prix de gros déclenché par la catégorie. */
+function getEffectivePrice(product, bulkEligible) {
+  const cat = categories.find(c => c.id === product.categoryId);
+  if (cat && cat.bulkThresholdQty && cat.bulkPrice != null) {
+    const isEligible = bulkEligible ? bulkEligible[cat.id] : getBulkEligibleCategories()[cat.id];
+    if (isEligible) return cat.bulkPrice;
+  }
+  return product.price;
+}
+
+function cartTotal() {
+  let total = 0, count = 0;
+  const bulkEligible = getBulkEligibleCategories();
+  Object.entries(cart).forEach(([id, qty]) => {
+    const p = products.find(x => x.id === id);
+    if (p) {
+      const price = getEffectivePrice(p, bulkEligible);
+      total += price * qty; count += qty;
+    }
+  });
+  return { total, count, bulkEligible };
 }
 
 function updateCartUI() {
@@ -259,7 +318,37 @@ function renderCartDrawer() {
   }
   footer.style.display = 'block';
 
-  let html = '';
+  const { bulkEligible } = cartTotal();
+
+  // Regroupe les avertissements de prix de gros par groupe (catégories combinées)
+  const bulkGroups = {};
+  categories.forEach(c => {
+    if (!c.bulkThresholdQty || c.bulkPrice == null) return;
+    const groupKey = c.bulkGroupId || ('solo:' + c.id);
+    if (!bulkGroups[groupKey]) {
+      bulkGroups[groupKey] = { threshold: c.bulkThresholdQty, price: c.bulkPrice, names: [], categoryIds: [] };
+    }
+    bulkGroups[groupKey].names.push(c.name);
+    bulkGroups[groupKey].categoryIds.push(c.id);
+  });
+
+  const bulkNotices = [];
+  Object.values(bulkGroups).forEach(g => {
+    const qtyInGroup = Object.entries(cart).reduce((sum, [id, qty]) => {
+      const p = products.find(x => x.id === id);
+      return p && g.categoryIds.includes(p.categoryId) ? sum + qty : sum;
+    }, 0);
+    if (qtyInGroup === 0) return;
+    const label = g.names.join(' + ');
+    if (qtyInGroup >= g.threshold) {
+      bulkNotices.push(`<div class="bulk-notice active">🎉 Tarif de gros activé pour « ${escapeHtml(label)} » : ${fmtPrice(g.price)} / article (${qtyInGroup} articles)</div>`);
+    } else {
+      const remaining = g.threshold - qtyInGroup;
+      bulkNotices.push(`<div class="bulk-notice">Ajoutez encore ${remaining} article(s) « ${escapeHtml(label)} » pour débloquer le tarif de gros à ${fmtPrice(g.price)}/article</div>`);
+    }
+  });
+
+  let html = bulkNotices.join('');
   ids.forEach(id => {
     const p = products.find(x => x.id === id);
     if (!p) return;
@@ -267,6 +356,8 @@ function renderCartDrawer() {
     const step = p.unitStep || 1;
     const lots = step > 1 ? Math.round(qty / step) : qty;
     const lotLabel = step > 1 ? `${lots} lot${lots > 1 ? 's' : ''} de ${step} (${qty} unités)` : `${qty}`;
+    const effectivePrice = getEffectivePrice(p, bulkEligible);
+    const isBulk = effectivePrice !== p.price;
     html += `
     <div class="cart-line" data-id="${id}">
       <img src="${p.image || ''}" alt="">
@@ -279,7 +370,7 @@ function renderCartDrawer() {
             <span>${lots}</span>
             <button class="cl-plus" data-id="${id}">+</button>
           </div>
-          <span class="cart-line-price">${fmtPrice(p.price * qty)}</span>
+          <span class="cart-line-price">${isBulk ? `<span class="old-price">${fmtPrice(p.price * qty)}</span> ` : ''}${fmtPrice(effectivePrice * qty)}</span>
         </div>
       </div>
     </div>`;
@@ -343,11 +434,12 @@ function setupCheckout() {
 }
 
 async function submitOrder(clientName) {
-  const { total, count } = cartTotal();
+  const { total, count, bulkEligible } = cartTotal();
   const items = Object.keys(cart).map(id => {
     const p = products.find(x => x.id === id);
     const qty = cart[id];
-    return { ref: p.ref, name: p.name, qty, price: p.price, lineTotal: +(p.price * qty).toFixed(2) };
+    const price = getEffectivePrice(p, bulkEligible);
+    return { ref: p.ref, name: p.name, qty, price: price, lineTotal: +(price * qty).toFixed(2) };
   });
 
   const btn = document.getElementById('confirmOrderBtn');
@@ -548,16 +640,44 @@ function renderAdminCatList() {
   let html = '';
   categories.forEach(c => {
     const count = products.filter(p => p.categoryId === c.id).length;
+    const hasBulk = c.bulkThresholdQty && c.bulkPrice != null;
     html += `
     <div class="cat-manage-row">
       <input type="text" value="${escapeHtml(c.name)}" data-cat-id="${c.id}">
       <span style="font-size:11px;color:var(--brass);flex-shrink:0;">${count} art.</span>
       <button class="admin-icon-btn danger" data-delcat="${c.id}">🗑</button>
+    </div>
+    <div class="bulk-pricing-box">
+      <div class="bg-remove-toggle" style="margin:0;">
+        <div class="lb">Tarif de gros par palier
+          <small>Ex. dès 200 articles (toutes catégories liées), prix réduit</small>
+        </div>
+        <label class="switch">
+          <input type="checkbox" class="bulk-toggle" data-cat-id="${c.id}" ${hasBulk ? 'checked' : ''}>
+          <span class="track"></span>
+        </label>
+      </div>
+      <div class="row bulk-fields" data-cat-id="${c.id}" style="display:${hasBulk ? 'flex' : 'none'};flex-wrap:wrap;">
+        <div class="form-group">
+          <label>Seuil (quantité)</label>
+          <input type="number" class="bulk-threshold" data-cat-id="${c.id}" value="${c.bulkThresholdQty || ''}" placeholder="200">
+        </div>
+        <div class="form-group">
+          <label>Prix de gros (€)</label>
+          <input type="number" step="0.01" class="bulk-price" data-cat-id="${c.id}" value="${c.bulkPrice != null ? c.bulkPrice : ''}" placeholder="2.50">
+        </div>
+        <div class="form-group" style="flex-basis:100%;">
+          <label>Groupe lié (optionnel)</label>
+          <input type="text" class="bulk-group" data-cat-id="${c.id}" value="${escapeHtml(c.bulkGroupId || '')}" placeholder="ex. tshirts">
+          <div class="form-hint">Donnez le même nom de groupe à plusieurs catégories (ex. "tshirts" pour Enfant et Adulte) pour que leurs quantités s'additionnent vers le même seuil.</div>
+        </div>
+      </div>
+      <button class="btn-secondary save-bulk-btn" data-cat-id="${c.id}" style="margin-top:10px;padding:9px;font-size:13px;">Enregistrer le tarif de gros</button>
     </div>`;
   });
   list.innerHTML = html;
 
-  list.querySelectorAll('input[data-cat-id]').forEach(inp => {
+  list.querySelectorAll('input[data-cat-id]:not(.bulk-toggle):not(.bulk-threshold):not(.bulk-price)').forEach(inp => {
     inp.addEventListener('change', async () => {
       const cat = categories.find(c => c.id === inp.dataset.catId);
       if (cat && inp.value.trim()) {
@@ -585,6 +705,45 @@ function renderAdminCatList() {
       renderCategoryStrip();
       renderGrid();
       showToast('Catégorie supprimée');
+    });
+  });
+  list.querySelectorAll('.bulk-toggle').forEach(toggle => {
+    toggle.addEventListener('change', () => {
+      const fieldsRow = list.querySelector(`.bulk-fields[data-cat-id="${toggle.dataset.catId}"]`);
+      fieldsRow.style.display = toggle.checked ? 'flex' : 'none';
+    });
+  });
+  list.querySelectorAll('.save-bulk-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const catId = btn.dataset.catId;
+      const cat = categories.find(c => c.id === catId);
+      const toggle = list.querySelector(`.bulk-toggle[data-cat-id="${catId}"]`);
+      let bulk_threshold_qty = null, bulk_price = null, bulk_group_id = null;
+      if (toggle.checked) {
+        const thresholdInp = list.querySelector(`.bulk-threshold[data-cat-id="${catId}"]`);
+        const priceInp = list.querySelector(`.bulk-price[data-cat-id="${catId}"]`);
+        const groupInp = list.querySelector(`.bulk-group[data-cat-id="${catId}"]`);
+        bulk_threshold_qty = parseInt(thresholdInp.value, 10);
+        bulk_price = parseFloat(priceInp.value);
+        bulk_group_id = groupInp.value.trim() || null;
+        if (!bulk_threshold_qty || bulk_threshold_qty < 1 || isNaN(bulk_price) || bulk_price < 0) {
+          showToast('Indiquez un seuil et un prix valides');
+          return;
+        }
+      }
+      try {
+        const { error } = await supabaseClient.from('categories').update({
+          bulk_threshold_qty, bulk_price, bulk_group_id
+        }).eq('id', catId);
+        if (error) throw error;
+        cat.bulkThresholdQty = bulk_threshold_qty;
+        cat.bulkPrice = bulk_price;
+        cat.bulkGroupId = bulk_group_id;
+        renderGrid();
+        showToast(toggle.checked ? 'Tarif de gros activé' : 'Tarif de gros désactivé');
+      } catch (e) {
+        showToast('⚠️ Erreur lors de l\'enregistrement');
+      }
     });
   });
 }
