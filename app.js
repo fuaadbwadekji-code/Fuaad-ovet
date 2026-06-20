@@ -325,7 +325,7 @@ function productCardHtml(p) {
   const qty = cart[p.id] || 0; // en unités réelles
   const lots = p.unitStep > 1 ? Math.round(qty / p.unitStep) : qty;
   const img = p.image || '';
-  const unitTag = p.unitStep > 1 ? `<div class="t-unit">Lot de ${p.unitStep}</div>` : '';
+  const unitTag = p.unitStep > 1 ? `<span class="t-unit">📦 Lot de ${p.unitStep}</span>` : '';
   const bulkEligible = getBulkEligibleCategories();
   const effectivePrice = getEffectivePrice(p, bulkEligible);
   const isBulk = effectivePrice !== p.price;
