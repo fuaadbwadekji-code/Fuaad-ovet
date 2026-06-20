@@ -44,10 +44,19 @@ document.getElementById('runBtn').addEventListener('click', async () => {
     results.appendChild(row);
     const statusEl = row.querySelector('.status');
     try {
-      const { error } = await supabaseClient.from('products').update({ image: img }).eq('id', ref);
+      const { data, error } = await supabaseClient
+        .from('products')
+        .update({ image: img })
+        .eq('ref', ref)
+        .select('id, ref');
       if (error) throw error;
-      statusEl.textContent = '✓ Photo mise à jour';
-      statusEl.className = 'status ok';
+      if (!data || data.length === 0) {
+        statusEl.textContent = '✗ AUCUNE ligne mise à jour (référence introuvable dans la base !)';
+        statusEl.className = 'status err';
+      } else {
+        statusEl.textContent = `✓ Photo mise à jour (id réel: ${data[0].id})`;
+        statusEl.className = 'status ok';
+      }
     } catch (e) {
       statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
       statusEl.className = 'status err';
