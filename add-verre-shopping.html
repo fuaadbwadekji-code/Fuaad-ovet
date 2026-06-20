@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>إضافة — أكواب الشوت</title>
+<style>
+body{
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #1B2A45;
+  color: #F2E9D8;
+  padding: 30px;
+  max-width: 800px;
+  margin: 0 auto;
+  direction: rtl;
+}
+
+h1{
+  font-size: 24px;
+  margin-bottom: 10px;
+  color: #D89A2C;
+}
+
+p{
+  font-size: 14px;
+  margin-bottom: 20px;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+
+.category-section{
+  background: #243652;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border-right: 4px solid #D89A2C;
+}
+
+.category-title{
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 15px;
+  color: #D89A2C;
+}
+
+.products-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.product-item{
+  background: #1B2A45;
+  padding: 10px;
+  border-radius: 6px;
+  text-align: center;
+  border: 1px solid #3A4A62;
+  transition: all 0.2s;
+}
+
+.product-item:hover{
+  background: #2A3A52;
+  border-color: #D89A2C;
+}
+
+.product-image{
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 4px;
+  margin: 0 auto 8px;
+  display: block;
+}
+
+.product-ref{
+  font-size: 12px;
+  font-weight: 700;
+  color: #D89A2C;
+  margin-bottom: 4px;
+}
+
+.product-status{
+  font-size: 11px;
+  height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-loading{
+  color: #F2E9D8;
+}
+
+.status-ok{
+  color: #7C8F6E;
+}
+
+.status-error{
+  color: #B23B2E;
+}
+
+.controls{
+  margin-bottom: 20px;
+}
+
+button{
+  background: #D89A2C;
+  color: #10192C;
+  border: none;
+  padding: 14px 32px;
+  border-radius: 20px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+button:hover{
+  background: #E8A93C;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(216, 154, 44, 0.3);
+}
+
+button:active{
+  transform: translateY(0);
+}
+
+button:disabled{
+  background: #888;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.stats{
+  background: #243652;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 20px;
+  font-size: 14px;
+}
+
+.stats-item{
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #3A4A62;
+}
+
+.stats-item:last-child{
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.done-message{
+  background: #2A4A2A;
+  border: 1px solid #7C8F6E;
+  color: #7C8F6E;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 20px;
+  text-align: center;
+  font-weight: 700;
+  display: none;
+}
+
+.error-message{
+  background: #4A2A2A;
+  border: 1px solid #B23B2E;
+  color: #B23B2E;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 20px;
+  display: none;
+}
+
+.info-box{
+  background: #243652;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border-left: 4px solid #D89A2C;
+}
+
+@media (max-width: 600px){
+  body{
+    padding: 15px;
+  }
+  
+  .products-grid{
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  button{
+    width: 100%;
+  }
+}
+</style>
+</head>
+<body>
+
+<h1>🍷 إضافة أكواب الشوت</h1>
+<p>هذه الصفحة تضيف 62 كوب شوت إلى قاعدة البيانات مع صورها الأصلية من الكاتالوج.</p>
+
+<div class="info-box">
+  <strong>ℹ️ معلومة:</strong> سيتم إضافة الصور من URL الصور الأصلية. يمكنك تعديل الصور لاحقاً من لوحة التحكم.
+</div>
+
+<div class="controls">
+  <button id="addAllBtn" onclick="addAllProducts()">✓ إضافة جميع الأكواب (62)</button>
+  <button id="clearBtn" onclick="clearAll()" style="display:none;">🔄 حذف الكل والبدء من جديد</button>
+</div>
+
+<div id="categories"></div>
+
+<div id="errorMessage" class="error-message"></div>
+<div id="doneMessage" class="done-message">✓ تم الانتهاء من إضافة جميع الأكواب!</div>
+
+<div id="stats" class="stats" style="display:none;">
+  <div class="stats-item">
+    <span>إجمالي المنتجات:</span>
+    <strong id="totalProducts">0</strong>
+  </div>
+  <div class="stats-item">
+    <span>تمت إضافته:</span>
+    <strong id="successCount" style="color:#7C8F6E;">0</strong>
+  </div>
+  <div class="stats-item">
+    <span>أخطاء:</span>
+    <strong id="errorCount" style="color:#B23B2E;">0</strong>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="verre_images.js"></script>
+
+<script>
+// بيانات المنتجات
+const PRODUCTS_DATA = {
+  'couleur': [
+    { ref: 'VE31033', name: 'كوب شوت ملون أخضر', price: 0.80, category: 'couleur' },
+    { ref: 'VE31034', name: 'كوب شوت ملون برتقالي', price: 0.80, category: 'couleur' },
+    { ref: 'VE31035', name: 'كوب شوت ملون وردي', price: 0.80, category: 'couleur' },
+    { ref: 'VE31036', name: 'كوب شوت ملون أصفر', price: 0.80, category: 'couleur' },
+    { ref: 'VE31037', name: 'كوب شوت ملون أخضر 2', price: 0.80, category: 'couleur' },
+    { ref: 'VE31038', name: 'كوب شوت ملون برتقالي 2', price: 0.80, category: 'couleur' },
+    { ref: 'VE31039', name: 'كوب شوت ملون وردي 2', price: 0.80, category: 'couleur' },
+    { ref: 'VE31040', name: 'كوب شوت ملون أصفر 2', price: 0.80, category: 'couleur' },
+    { ref: 'VE6109', name: 'كوب شوت وردي باريس', price: 0.80, category: 'couleur' },
+    { ref: 'VE61010', name: 'كوب شوت برتقالي باريس', price: 0.80, category: 'couleur' },
+  ],
+  'opaque': [
+    { ref: 'VE2101', name: 'كوب شوت معتم أسود', price: 1.00, category: 'opaque' },
+    { ref: 'VE2102', name: 'كوب شوت معتم كريمي', price: 1.00, category: 'opaque' },
+    { ref: 'VE2103', name: 'كوب شوت معتم أسود 2', price: 1.00, category: 'opaque' },
+    { ref: 'VE2104', name: 'كوب شوت معتم كريمي 2', price: 1.00, category: 'opaque' },
+    { ref: 'VE3107', name: 'كوب شوت معتم باريس', price: 0.80, category: 'opaque' },
+    { ref: 'VE3108', name: 'كوب شوت معتم برج إيفل', price: 0.80, category: 'opaque' },
+    { ref: 'VE3109', name: 'كوب شوت معتم أحب باريس', price: 0.80, category: 'opaque' },
+    { ref: 'VE3110', name: 'كوب شوت معتم باريس سيتي', price: 0.80, category: 'opaque' },
+    { ref: 'VE3111', name: 'كوب شوت معتم اسكتشات', price: 0.80, category: 'opaque' },
+    { ref: 'VE3113', name: 'كوب شوت معتم أبيض', price: 0.80, category: 'opaque' },
+    { ref: 'VE6101', name: 'كوب شوت معتم علم فرنسا', price: 0.80, category: 'opaque' },
+    { ref: 'VE6106', name: 'كوب شوت معتم باريس ذهبي', price: 0.80, category: 'opaque' },
+    { ref: 'VE6108', name: 'كوب شوت معتم باريس أسود', price: 0.80, category: 'opaque' },
+    { ref: 'VE6112', name: 'كوب شوت معتم باريس', price: 0.80, category: 'opaque' },
+    { ref: 'VE6113', name: 'كوب شوت معتم باريس 2', price: 0.80, category: 'opaque' },
+    { ref: 'VE6114', name: 'كوب شوت معتم باريس وردي', price: 0.80, category: 'opaque' },
+    { ref: 'VE61016', name: 'كوب شوت معتم باريس رمادي', price: 0.80, category: 'opaque' },
+  ],
+  'transparent': [
+    { ref: 'VE3101', name: 'كوب شوت شفاف باريس', price: 0.80, category: 'transparent' },
+    { ref: 'VE3102', name: 'كوب شوت شفاف أحب باريس', price: 0.80, category: 'transparent' },
+    { ref: 'VE3103', name: 'كوب شوت شفاف ذهبي', price: 0.80, category: 'transparent' },
+    { ref: 'VE3104', name: 'كوب شوت شفاف أحمر', price: 0.80, category: 'transparent' },
+    { ref: 'VE3105', name: 'كوب شوت شفاف برج إيفل', price: 0.80, category: 'transparent' },
+    { ref: 'VE3106', name: 'كوب شوت شفاف باريس نقاط', price: 0.80, category: 'transparent' },
+    { ref: 'VE3118', name: 'كوب شوت شفاف باريس اسكتشات', price: 0.80, category: 'transparent' },
+    { ref: 'VE3119', name: 'كوب شوت شفاف باريس بني', price: 0.80, category: 'transparent' },
+    { ref: 'VE3120', name: 'كوب شوت شفاف باريس وفرنسا', price: 0.80, category: 'transparent' },
+    { ref: 'VE3121', name: 'كوب شوت شفاف باريس بيج', price: 0.80, category: 'transparent' },
+    { ref: 'VE3122', name: 'كوب شوت شفاف بني', price: 0.80, category: 'transparent' },
+    { ref: 'VE3123', name: 'كوب شوت شفاف أسود وأبيض', price: 0.80, category: 'transparent' },
+    { ref: 'VE3124', name: 'كوب شوت شفاف باريس فرنسا', price: 0.80, category: 'transparent' },
+    { ref: 'VE3125', name: 'كوب شوت شفاف ديزاين', price: 0.80, category: 'transparent' },
+    { ref: 'VE3127', name: 'كوب شوت شفاف باريس كاتدرائية', price: 0.80, category: 'transparent' },
+    { ref: 'VE3128', name: 'كوب شوت شفاف باريس', price: 0.80, category: 'transparent' },
+    { ref: 'VE6105', name: 'كوب شوت شفاف ذهبي', price: 0.80, category: 'transparent' },
+    { ref: 'VE6107', name: 'كوب شوت شفاف باريس أسود', price: 0.80, category: 'transparent' },
+    { ref: 'VE61011', name: 'كوب شوت شفاف باريس قلب', price: 0.80, category: 'transparent' },
+    { ref: 'VE61015', name: 'كوب شوت شفاف باريس أبيض', price: 0.80, category: 'transparent' },
+  ],
+  'or': [
+    { ref: 'VE31031', name: 'كوب شوت ذهبي موناليزا', price: 0.80, category: 'or' },
+    { ref: 'VE31032', name: 'كوب شوت ذهبي موناليزا 2', price: 0.80, category: 'or' },
+    { ref: 'VE3112', name: 'كوب شوت ذهبي اسكتشات', price: 0.80, category: 'or' },
+    { ref: 'VE3116', name: 'كوب شوت ذهبي كاتدرائية', price: 0.80, category: 'or' },
+    { ref: 'VE3126', name: 'كوب شوت ذهبي باريس', price: 0.80, category: 'or' },
+    { ref: 'VE31017', name: 'كوب شوت باريس ليل', price: 0.80, category: 'or' },
+    { ref: 'VE31029', name: 'كوب شوت باريس كاتدرائية', price: 0.80, category: 'or' },
+    { ref: 'VE31030', name: 'كوب شوت باريس نوتردام', price: 0.80, category: 'or' },
+    { ref: 'VE6102', name: 'كوب شوت ذهبي برج إيفل', price: 0.80, category: 'or' },
+    { ref: 'VE6103', name: 'كوب شوت ذهبي باريس', price: 0.80, category: 'or' },
+    { ref: 'VE6104', name: 'كوب شوت ذهبي باريس أبيض', price: 0.80, category: 'or' },
+    { ref: 'VE61017', name: 'كوب شوت ذهبي باريس أبيض وأزرق', price: 0.80, category: 'or' },
+    { ref: 'VE61018', name: 'كوب شوت ذهبي باريس أسود', price: 0.80, category: 'or' },
+    { ref: 'VE61019', name: 'كوب شوت ذهبي اسكتشات أبيض', price: 0.80, category: 'or' },
+    { ref: 'VE61020', name: 'كوب شوت ذهبي اسكتشات أسود', price: 0.80, category: 'or' },
+  ],
+};
+
+const CATEGORY_NAMES = {
+  'couleur': '🎨 أكواب ملونة',
+  'transparent': '🔍 أكواب شفافة',
+  'opaque': '⚪ أكواب معتمة',
+  'or': '✨ أكواب ذهبية'
+};
+
+let supabaseClient;
+let allProducts = [];
+let totalStats = { total: 0, success: 0, error: 0 };
+
+// دالة البحث عن المنتج
+function getProduct(ref) {
+  return allProducts.find(p => p.id === ref);
+}
+
+// دالة إضافة جميع المنتجات
+async function addAllProducts() {
+  try {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    
+    const categoriesContainer = document.getElementById('categories');
+    categoriesContainer.innerHTML = '';
+    
+    // إعادة تعيين الإحصائيات
+    totalStats = { total: 0, success: 0, error: 0 };
+    
+    // إنشاء عناصر التصنيفات
+    for (const [categoryKey, products] of Object.entries(PRODUCTS_DATA)) {
+      const categorySection = document.createElement('div');
+      categorySection.className = 'category-section';
+      
+      const titleEl = document.createElement('div');
+      titleEl.className = 'category-title';
+      titleEl.textContent = CATEGORY_NAMES[categoryKey];
+      categorySection.appendChild(titleEl);
+      
+      const productsGrid = document.createElement('div');
+      productsGrid.className = 'products-grid';
+      
+      for (const product of products) {
+        const item = document.createElement('div');
+        item.className = 'product-item';
+        item.id = 'item-' + product.ref;
+        
+        const img = document.createElement('img');
+        img.src = VERRE_IMAGES[product.ref] || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect fill=%22%23ccc%22 width=%22100%22 height=%22100%22/%3E%3C/svg%3E';
+        img.className = 'product-image';
+        
+        const ref = document.createElement('div');
+        ref.className = 'product-ref';
+        ref.textContent = product.ref;
+        
+        const status = document.createElement('div');
+        status.className = 'product-status status-loading';
+        status.textContent = 'في الانتظار...';
+        
+        item.appendChild(img);
+        item.appendChild(ref);
+        item.appendChild(status);
+        productsGrid.appendChild(item);
+      }
+      
+      categorySection.appendChild(productsGrid);
+      categoriesContainer.appendChild(categorySection);
+      totalStats.total += products.length;
+    }
+    
+    // عرض الإحصائيات
+    document.getElementById('stats').style.display = 'block';
+    document.getElementById('totalProducts').textContent = totalStats.total;
+    document.getElementById('addAllBtn').disabled = true;
+    
+    // إضافة المنتجات
+    for (const [categoryKey, products] of Object.entries(PRODUCTS_DATA)) {
+      for (const product of products) {
+        await addProductToDb(product);
+      }
+    }
+    
+    // إنهاء
+    document.getElementById('doneMessage').style.display = 'block';
+    document.getElementById('clearBtn').style.display = 'inline-block';
+    
+  } catch (error) {
+    const errorDiv = document.getElementById('errorMessage');
+    errorDiv.style.display = 'block';
+    errorDiv.textContent = '❌ خطأ: ' + (error.message || JSON.stringify(error));
+  }
+}
+
+// دالة إضافة منتج واحد
+async function addProductToDb(product) {
+  const itemEl = document.getElementById('item-' + product.ref);
+  const statusEl = itemEl?.querySelector('.product-status');
+  
+  try {
+    const imageUrl = VERRE_IMAGES[product.ref] || '';
+    
+    // محاولة الإدراج
+    const { data, error } = await supabaseClient.from('products').insert([{
+      id: product.ref,
+      name: product.name,
+      price: product.price,
+      category: product.category,
+      image: imageUrl,
+      reference: product.ref
+    }]);
+    
+    if (error) throw error;
+    
+    if (statusEl) {
+      statusEl.textContent = '✓ تمت الإضافة';
+      statusEl.className = 'product-status status-ok';
+    }
+    totalStats.success++;
+    
+  } catch (error) {
+    // قد يكون المنتج موجود بالفعل، نحاول التحديث
+    try {
+      const { error: updateError } = await supabaseClient.from('products').update({
+        name: product.name,
+        price: product.price,
+        category: product.category,
+        image: VERRE_IMAGES[product.ref] || '',
+        reference: product.ref
+      }).eq('id', product.ref);
+      
+      if (updateError) throw updateError;
+      
+      if (statusEl) {
+        statusEl.textContent = '🔄 تم التحديث';
+        statusEl.className = 'product-status status-ok';
+      }
+      totalStats.success++;
+      
+    } catch (err) {
+      if (statusEl) {
+        statusEl.textContent = '✗ ' + (err.message?.substring(0, 20) || 'خطأ');
+        statusEl.className = 'product-status status-error';
+      }
+      totalStats.error++;
+    }
+  }
+  
+  // تحديث الإحصائيات
+  document.getElementById('successCount').textContent = totalStats.success;
+  document.getElementById('errorCount').textContent = totalStats.error;
+}
+
+// دالة حذف الكل
+function clearAll() {
+  if (confirm('هل أنت متأكد؟ سيتم إعادة تعيين الصفحة.')) {
+    location.reload();
+  }
+}
+
+// تحميل البيانات الأولية
+window.addEventListener('load', () => {
+  // تجهيز جميع المنتجات في قائمة واحدة
+  for (const category of Object.values(PRODUCTS_DATA)) {
+    allProducts.push(...category);
+  }
+});
+</script>
+
+</body>
+</html>
