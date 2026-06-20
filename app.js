@@ -967,6 +967,15 @@ function renderAdminCatList() {
         </div>
       </div>
       <button class="btn-secondary save-bulk-btn" data-cat-id="${c.id}" style="margin-top:10px;padding:9px;font-size:13px;">Enregistrer le tarif de gros</button>
+    </div>
+    <div class="lot-bulk-box">
+      <div class="lqp-label" style="margin-bottom:8px;">📦 Définir le lot pour tous les produits de cette catégorie (${count} article${count > 1 ? 's' : ''})</div>
+      <div class="lot-bulk-buttons">
+        <button class="lqp-btn" data-bulklot-cat="${c.id}" data-bulklot-qty="6">6</button>
+        <button class="lqp-btn" data-bulklot-cat="${c.id}" data-bulklot-qty="10">10</button>
+        <button class="lqp-btn" data-bulklot-cat="${c.id}" data-bulklot-qty="12">12</button>
+        <button class="lqp-btn unit" data-bulklot-cat="${c.id}" data-bulklot-qty="1">À l'unité</button>
+      </div>
     </div>`;
   });
   list.innerHTML = html;
@@ -1040,6 +1049,36 @@ function renderAdminCatList() {
       }
     });
   });
+  list.querySelectorAll('[data-bulklot-cat]').forEach(btn => {
+    btn.addEventListener('click', () => bulkSetUnitStepForCategory(btn.dataset.bulklotCat, parseInt(btn.dataset.bulklotQty, 10)));
+  });
+}
+
+async function bulkSetUnitStepForCategory(categoryId, qty) {
+  const cat = categories.find(c => c.id === categoryId);
+  const catProducts = products.filter(p => p.categoryId === categoryId);
+  if (catProducts.length === 0) {
+    showToast('Aucun produit dans cette catégorie');
+    return;
+  }
+  const label = qty > 1 ? `lot de ${qty}` : 'la vente à l\'unité';
+  if (!confirm(`Appliquer "${label}" aux ${catProducts.length} produit(s) de « ${cat.name} » ?`)) return;
+
+  const unitLabel = qty > 1 ? `Lot de ${qty}` : '';
+  try {
+    const { error } = await supabaseClient
+      .from('products')
+      .update({ unit_step: qty, unit_label: unitLabel })
+      .eq('category_id', categoryId);
+    if (error) throw error;
+    catProducts.forEach(p => { p.unitStep = qty; p.unitLabel = unitLabel; });
+    showToast(`✓ ${catProducts.length} produit(s) mis à jour`);
+    renderAdminProductList();
+    renderGrid();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠️ Erreur lors de la mise à jour groupée');
+  }
 }
 
 function setupAddCategory() {
