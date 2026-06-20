@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Diagnostic</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;}
+img{max-width:200px;display:block;margin-top:8px;background:#fff;}
+pre{background:#10192C;padding:10px;border-radius:6px;overflow-x:auto;font-size:11px;white-space:pre-wrap;word-break:break-all;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:20px;}
+</style>
+</head>
+<body>
+<h1>🔍 Diagnostic — image réelle dans Supabase</h1>
+<button id="checkBtn">Vérifier MR01, MR03, BN45N</button>
+<div id="results"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+document.getElementById('checkBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = 'Chargement…';
+  const { data, error } = await supabaseClient.from('products').select('id, ref, name, image').in('id', ['MR01','MR03','BN45N']);
+  if (error) {
+    results.innerHTML = '<div class="row">Erreur : ' + error.message + '</div>';
+    return;
+  }
+  results.innerHTML = '';
+  if (!data || data.length === 0) {
+    results.innerHTML = '<div class="row">⚠️ Aucun produit trouvé avec ces IDs (MR01, MR03, BN45N) !</div>';
+    return;
+  }
+  data.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'row';
+    const imgLen = p.image ? p.image.length : 0;
+    div.innerHTML = `
+      <strong>${p.id}</strong> — ${p.name}<br>
+      Longueur image stockée : ${imgLen} caractères<br>
+      <img src="${p.image || ''}">
+      <pre>${(p.image || '').slice(0,120)}...</pre>
+    `;
+    results.appendChild(div);
+  });
+});
+</script>
+</body>
+</html>
