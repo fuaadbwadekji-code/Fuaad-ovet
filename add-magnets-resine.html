@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إضافة قسم: MAGNETS RÉSINE</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="magnets-resine_images.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    min-height: 100vh;
+    margin: 0;
+    padding: 30px 15px;
+    color: #222;
+  }
+  .card {
+    max-width: 720px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+    padding: 30px;
+  }
+  h1 {
+    text-align: center;
+    color: #1e3c72;
+    margin-top: 0;
+    font-size: 24px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #666;
+    margin-bottom: 25px;
+    font-size: 14px;
+  }
+  .product-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    margin: 20px 0;
+  }
+  .product-item {
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 8px;
+    text-align: center;
+    background: #fafafa;
+  }
+  .product-item img {
+    width: 100%;
+    aspect-ratio: 1/1;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #fff;
+  }
+  .product-item .ref {
+    font-size: 11px;
+    color: #888;
+    margin-top: 6px;
+  }
+  .product-item .price {
+    font-weight: bold;
+    color: #1e3c72;
+    font-size: 13px;
+  }
+  button {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    font-size: 17px;
+    font-weight: bold;
+    color: #fff;
+    background: linear-gradient(135deg, #2a5298, #1e3c72);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-top: 20px;
+    transition: transform 0.15s, opacity 0.15s;
+  }
+  button:hover:not(:disabled) { transform: translateY(-2px); }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  #log {
+    margin-top: 20px;
+    background: #0f172a;
+    color: #d1fae5;
+    border-radius: 10px;
+    padding: 15px;
+    font-family: 'Consolas', monospace;
+    font-size: 13px;
+    max-height: 320px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    direction: ltr;
+    text-align: left;
+    display: none;
+  }
+  .status-ok { color: #4ade80; }
+  .status-err { color: #f87171; }
+  .status-info { color: #60a5fa; }
+  .summary {
+    background: #f0f4ff;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>🧲 MAGNETS RÉSINE — باريس</h1>
+  <p class="subtitle">إضافة قسم جديد و 6 منتجات إلى قاعدة بيانات Supabase</p>
+
+  <div class="summary">
+    <strong>القسم:</strong> MAGNETS RÉSINE<br>
+    <strong>عدد المنتجات:</strong> 6 (MAT107 → MAT112)<br>
+    <strong>السعر:</strong> 1.00€ لكل قطعة
+  </div>
+
+  <div class="product-list" id="productList"></div>
+
+  <button id="runBtn" onclick="runImport()">🚀 ابدأ الإضافة إلى Supabase</button>
+
+  <div id="log"></div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://ujwjydjjxzlmwuxaoukf.supabase.co";
+const SUPABASE_KEY = "sb_publishable_X95sZEaadGOpz9b4PkJvAA_Wq1K_aN9";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const CATEGORY_NAME = "MAGNETS RÉSINE";
+
+// بيانات المنتجات المستخرجة من الكاتالوج
+const PRODUCTS = [
+  { ref: "MAT107", name: "Magnet Résine - Timbre I Love Paris",       price: 1.00 },
+  { ref: "MAT108", name: "Magnet Résine - Timbre Paris",               price: 1.00 },
+  { ref: "MAT109", name: "Magnet Résine - Arc de Triomphe Paris",      price: 1.00 },
+  { ref: "MAT110", name: "Magnet Résine - Notre-Dame de Paris",        price: 1.00 },
+  { ref: "MAT111", name: "Magnet Résine - Notre-Dame de Paris (relief)", price: 1.00 },
+  { ref: "MAT112", name: "Magnet Résine - Paris (Tour Eiffel, Notre-Dame, Arc)", price: 1.00 },
+];
+
+// عرض معاينة المنتجات قبل الإضافة
+function renderPreview() {
+  const list = document.getElementById('productList');
+  list.innerHTML = PRODUCTS.map(p => `
+    <div class="product-item">
+      <img src="${magnetsResineImages[p.ref] || ''}" alt="${p.ref}">
+      <div class="ref">${p.ref}</div>
+      <div class="price">${p.price.toFixed(2)}€</div>
+    </div>
+  `).join('');
+}
+renderPreview();
+
+function log(msg, type = 'info') {
+  const el = document.getElementById('log');
+  el.style.display = 'block';
+  const cls = type === 'ok' ? 'status-ok' : type === 'err' ? 'status-err' : 'status-info';
+  el.innerHTML += `<span class="${cls}">${msg}</span>\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function runImport() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ جاري التنفيذ...';
+  document.getElementById('log').innerHTML = '';
+
+  try {
+    log('🔎 التحقق من وجود القسم "' + CATEGORY_NAME + '"...');
+
+    // 1) تحقق إذا القسم موجود مسبقاً (لتجنب التكرار عند إعادة التشغيل)
+    const { data: existingCats, error: catFetchErr } = await supabase
+      .from('categories')
+      .select('id, name, sort_order')
+      .eq('name', CATEGORY_NAME)
+      .limit(1);
+
+    if (catFetchErr) throw catFetchErr;
+
+    let categoryId;
+
+    if (existingCats && existingCats.length > 0) {
+      categoryId = existingCats[0].id;
+      log(`✅ القسم موجود مسبقاً (id: ${categoryId}) — سيتم إضافة المنتجات تحته.`, 'ok');
+    } else {
+      // إيجاد آخر sort_order لإضافة القسم الجديد في النهاية
+      const { data: maxRows, error: maxErr } = await supabase
+        .from('categories')
+        .select('sort_order')
+        .order('sort_order', { ascending: false })
+        .limit(1);
+
+      if (maxErr) throw maxErr;
+
+      const nextSortOrder = (maxRows && maxRows.length > 0 && maxRows[0].sort_order != null)
+        ? maxRows[0].sort_order + 1
+        : 1;
+
+      log(`➕ القسم غير موجود، سيتم إنشاؤه بـ sort_order = ${nextSortOrder}...`);
+
+      const { data: newCat, error: insertCatErr } = await supabase
+        .from('categories')
+        .insert([{ name: CATEGORY_NAME, sort_order: nextSortOrder }])
+        .select('id')
+        .single();
+
+      if (insertCatErr) throw insertCatErr;
+
+      categoryId = newCat.id;
+      log(`✅ تم إنشاء القسم بنجاح (id: ${categoryId}).`, 'ok');
+    }
+
+    // 2) إضافة المنتجات (تجاهل أي منتج عنده نفس ref موجود مسبقاً لتجنب التكرار)
+    log('📦 جاري التحقق من المنتجات الموجودة مسبقاً...');
+
+    const refs = PRODUCTS.map(p => p.ref);
+    const { data: existingProducts, error: prodFetchErr } = await supabase
+      .from('products')
+      .select('ref')
+      .in('ref', refs);
+
+    if (prodFetchErr) throw prodFetchErr;
+
+    const existingRefs = new Set((existingProducts || []).map(p => p.ref));
+    const toInsert = PRODUCTS.filter(p => !existingRefs.has(p.ref));
+
+    if (existingRefs.size > 0) {
+      log(`ℹ️ ${existingRefs.size} منتج(ات) موجودة مسبقاً وسيتم تجاهلها: ${[...existingRefs].join(', ')}`, 'info');
+    }
+
+    if (toInsert.length === 0) {
+      log('✅ كل المنتجات موجودة مسبقاً، لا حاجة لإضافة شيء جديد.', 'ok');
+    } else {
+      // إيجاد آخر sort_order للمنتجات
+      const { data: maxProdRows, error: maxProdErr } = await supabase
+        .from('products')
+        .select('sort_order')
+        .order('sort_order', { ascending: false })
+        .limit(1);
+
+      if (maxProdErr) throw maxProdErr;
+
+      let nextProdSort = (maxProdRows && maxProdRows.length > 0 && maxProdRows[0].sort_order != null)
+        ? maxProdRows[0].sort_order + 1
+        : 1;
+
+      const rows = toInsert.map((p, idx) => ({
+        ref: p.ref,
+        name: p.name,
+        price: p.price,
+        category_id: categoryId,
+        image: magnetsResineImages[p.ref] || null,
+        sort_order: nextProdSort + idx,
+      }));
+
+      log(`📤 إضافة ${rows.length} منتج جديد...`);
+
+      const { data: insertedProducts, error: insertProdErr } = await supabase
+        .from('products')
+        .insert(rows)
+        .select('ref');
+
+      if (insertProdErr) throw insertProdErr;
+
+      log(`✅ تمت إضافة ${insertedProducts.length} منتج بنجاح: ${insertedProducts.map(p => p.ref).join(', ')}`, 'ok');
+    }
+
+    log('🎉 العملية اكتملت بنجاح!', 'ok');
+    btn.textContent = '✅ تمت الإضافة بنجاح';
+
+  } catch (err) {
+    console.error(err);
+    log('❌ خطأ: ' + (err.message || JSON.stringify(err)), 'err');
+    btn.textContent = '❌ حدث خطأ — أعد المحاولة';
+    btn.disabled = false;
+  }
+}
+</script>
+
+</body>
+</html>
