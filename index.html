@@ -61,11 +61,13 @@ button{font-family:inherit;cursor:pointer;}
 .topbar-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
 .brand{display:flex;align-items:center;gap:10px;}
 .brand .mark{
-  font-size:22px;width:38px;height:38px;border-radius:50%;
+  width:40px;height:40px;border-radius:10px;
   background:var(--mustard);color:var(--navy-deep);
   display:flex;align-items:center;justify-content:center;
   flex-shrink:0;
+  padding:6px;
 }
+.brand .mark svg{width:100%;height:100%;}
 .brand h1{
   font-size:19px;font-weight:700;letter-spacing:0.3px;margin:0;color:var(--cream);
 }
@@ -83,6 +85,11 @@ button{font-family:inherit;cursor:pointer;}
   font-size:17px;
 }
 .icon-btn:active{background:var(--navy);}
+.icon-btn.cart-btn{
+  width:52px;height:52px;
+  padding:11px;
+}
+.icon-btn.cart-btn svg{width:100%;height:100%;}
 .cart-badge{
   position:absolute;top:-4px;right:-4px;
   background:var(--brick);color:#fff;
@@ -138,6 +145,12 @@ button{font-family:inherit;cursor:pointer;}
   border-color:var(--mustard);
   font-weight:600;
 }
+.cat-chip.featured-chip{
+  background:linear-gradient(135deg, var(--mustard), var(--brick));
+  color:#fff;border-color:transparent;font-weight:600;
+}
+.cat-chip.featured-chip.active{background:var(--mustard);color:var(--navy-deep);}
+.section-title.featured-title{color:var(--mustard);}
 .cat-chip .count{opacity:0.7;font-size:11px;margin-left:3px;}
 
 /* ---------- Loading ---------- */
@@ -246,6 +259,19 @@ button{font-family:inherit;cursor:pointer;}
 .empty-state .glyph{font-size:38px;margin-bottom:10px;display:block;}
 .empty-state h3{margin:0 0 6px;font-size:17px;font-family:'Fraunces';}
 .empty-state p{margin:0;font-size:13px;opacity:0.8;}
+
+.ticket.out-of-stock{opacity:0.72;}
+.ticket.out-of-stock .ticket-img-wrap img{filter:grayscale(0.4);}
+.stock-banner{
+  position:absolute;bottom:0;left:0;right:0;
+  background:rgba(178,59,46,0.92);color:#fff;
+  font-size:11px;font-weight:700;text-align:center;
+  padding:5px 0;letter-spacing:0.3px;
+}
+.stock-label{
+  font-size:11.5px;font-weight:700;color:var(--navy-deep);opacity:0.7;
+  font-style:italic;
+}
 
 /* ---------- Floating cart bar ---------- */
 .cart-fab{
@@ -389,6 +415,14 @@ button{font-family:inherit;cursor:pointer;}
 .switch input:checked + .track::before{transform:translateX(18px);}
 .bg-status{font-size:11px;margin-top:6px;color:var(--mustard);min-height:14px;}
 
+.crop-stage{
+  display:flex;align-items:center;justify-content:center;
+  background:#000;border-radius:10px;overflow:hidden;
+  touch-action:none;
+}
+.crop-stage canvas{display:block;max-width:100%;cursor:grab;}
+.crop-stage canvas:active{cursor:grabbing;}
+
 .admin-section-label{
   font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mustard);
   margin:18px 4px 10px;font-weight:600;
@@ -485,6 +519,15 @@ button{font-family:inherit;cursor:pointer;}
 }
 .bulk-pricing-box .row{display:flex;gap:10px;margin-top:8px;}
 .bulk-pricing-box .row .form-group{flex:1;margin-bottom:0;}
+
+.invoice-summary{
+  background:var(--navy-soft);border-radius:10px;padding:14px;margin:14px 0;
+}
+.invoice-summary .ln{display:flex;justify-content:space-between;font-size:13.5px;color:var(--cream-dim);margin-bottom:6px;}
+.invoice-summary .ln.total{
+  font-size:17px;font-weight:700;color:var(--cream);font-family:'Fraunces';
+  margin-top:8px;padding-top:10px;border-top:1px dashed rgba(216,154,44,0.3);
+}
 </style>
 </head>
 <body>
@@ -494,15 +537,50 @@ button{font-family:inherit;cursor:pointer;}
 <div class="topbar">
   <div class="topbar-row">
     <div class="brand">
-      <span class="mark">🗼</span>
+      <span class="mark">
+        <svg viewBox="0 0 100 130" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g fill="#1B2A45">
+            <rect x="49.3" y="2" width="1.4" height="12"/>
+            <path d="M47.5 14 L52.5 14 L51.3 24 L48.7 24 Z"/>
+            <path d="M48.7 24 L51.3 24 L52.5 34 L47.5 34 Z"/>
+            <path d="M48.2 26.5 L51.8 26.5 L50 30 Z" fill="#D89A2C" opacity="0.5"/>
+            <rect x="46.5" y="34" width="7" height="1.6" fill="#D89A2C"/>
+            <path d="M46.5 35.6 L53.5 35.6 L56.5 54 L43.5 54 Z"/>
+            <path d="M45.5 39 L54.5 39 L48 46 Z" fill="#D89A2C" opacity="0.45"/>
+            <path d="M54.5 39 L45.5 39 L52 46 Z" fill="#D89A2C" opacity="0.45"/>
+            <path d="M44.7 47.5 L55.3 47.5 L50 53 Z" fill="#D89A2C" opacity="0.45"/>
+            <rect x="41" y="54" width="18" height="2.2" fill="#D89A2C"/>
+            <path d="M41.5 56.2 L58.5 56.2 L63 80 L37 80 Z"/>
+            <path d="M40 62 L60 62 L52 70 L48 70 Z" fill="#D89A2C" opacity="0.4"/>
+            <path d="M38.5 70 L61.5 70 L54 78 L46 78 Z" fill="#D89A2C" opacity="0.4"/>
+            <rect x="35" y="80" width="30" height="2.4" fill="#D89A2C"/>
+            <path d="M37 82.4 L43 82.4 L34 122 L25 122 Z"/>
+            <path d="M63 82.4 L57 82.4 L66 122 L75 122 Z"/>
+            <path d="M34 122 L25 122 L25 118 Q25 104 50 104 Q75 104 75 118 L75 122 L66 122 L66 119 Q66 110 50 110 Q34 110 34 119 Z"/>
+            <rect x="20" y="122" width="60" height="2" fill="#D89A2C"/>
+          </g>
+        </svg>
+      </span>
       <div>
         <h1 id="shopNameDisplay">Souvenirs de Paris</h1>
         <div class="sub">Catalogue Boutique</div>
       </div>
     </div>
     <div class="topbar-actions">
-      <button class="icon-btn" id="cartIconBtn" aria-label="Panier">
-        🧺
+      <button class="icon-btn cart-btn" id="cartIconBtn" aria-label="Panier">
+        <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="basketGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#E8B84F"/>
+              <stop offset="100%" stop-color="#B97D1A"/>
+            </linearGradient>
+          </defs>
+          <path d="M8 9C8 5 9.5 2 13 2C16.5 2 18 5 18 9" stroke="#8C5A1B" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+          <path d="M4.5 9.5H21.5L19.8 20.5C19.6 21.7 18.6 22.5 17.4 22.5H8.6C7.4 22.5 6.4 21.7 6.2 20.5L4.5 9.5Z" fill="url(#basketGrad)" stroke="#7A4E16" stroke-width="0.5"/>
+          <path d="M6 12H20M6.4 14.5H19.6M6.8 17H19.2M7.2 19.5H18.8" stroke="#7A4E16" stroke-width="0.6" opacity="0.55"/>
+          <path d="M9 9.5L8 22.3M13 9.5V22.5M17 9.5L18 22.3" stroke="#7A4E16" stroke-width="0.6" opacity="0.55"/>
+          <rect x="4.3" y="8.7" width="17.4" height="1.6" rx="0.6" fill="#8C5A1B"/>
+        </svg>
         <span class="cart-badge" id="cartBadge" style="display:none;">0</span>
       </button>
     </div>
@@ -572,6 +650,11 @@ button{font-family:inherit;cursor:pointer;}
         <label>Votre nom</label>
         <input type="text" id="clientNameInput" placeholder="Ex. Tarek Ahmad">
       </div>
+      <div class="form-group">
+        <label>Nom du magasin (optionnel)</label>
+        <input type="text" id="clientShopInput" placeholder="Ex. Art Attak">
+      </div>
+      <div class="invoice-summary" id="checkoutInvoiceSummary"></div>
       <button class="choice-btn local" id="confirmOrderBtn">
         <span class="ic">✓</span>
         <span class="tx"><strong>Envoyer la commande</strong><span>Elle apparaîtra dans l'espace administrateur</span></span>
@@ -689,6 +772,7 @@ button{font-family:inherit;cursor:pointer;}
         </div>
         <input type="file" accept="image/*" id="imageFileInput">
       </div>
+      <button class="btn-secondary" id="openCropBtn" style="display:none;margin-top:8px;padding:9px;font-size:13px;">✂️ Recadrer / ajuster cette photo</button>
       <div class="bg-remove-toggle">
         <div class="lb">Détourer automatiquement
           <small>Retire le fond de la photo (traitement local)</small>
@@ -727,8 +811,46 @@ button{font-family:inherit;cursor:pointer;}
         <div class="form-hint">Chaque ajout au panier comptera ce nombre d'unités (ex. 12 = un paquet de 12).</div>
       </div>
     </div>
-    <button class="btn-primary" id="saveProductBtn">Enregistrer le produit</button>
+    <div class="bg-remove-toggle">
+      <div class="lb">Rupture de stock
+        <small>Le produit reste visible mais ne peut plus être commandé</small>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="outOfStockToggle">
+        <span class="track"></span>
+      </label>
+    </div>
+    <div class="bg-remove-toggle" style="margin-top:8px;">
+      <div class="lb">Mettre en avant
+        <small>Affiche ce produit dans « ⭐ Meilleures ventes »</small>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="featuredToggle">
+        <span class="track"></span>
+      </label>
+    </div>
+    <button class="btn-primary" id="saveProductBtn" style="margin-top:16px;">Enregistrer le produit</button>
     <button class="btn-danger-outline" id="deleteProductBtn" style="display:none;">Supprimer ce produit</button>
+  </div>
+</div>
+
+<!-- ================= IMAGE CROP DRAWER ================= -->
+<div class="drawer" id="cropDrawer">
+  <div class="drawer-header">
+    <h2>Recadrer la photo</h2>
+    <button class="drawer-close" data-close="cropDrawer">✕</button>
+  </div>
+  <div class="drawer-body">
+    <p style="font-size:13px;color:var(--cream-dim);margin-top:0;">Faites glisser pour déplacer, utilisez le curseur pour zoomer.</p>
+    <div class="crop-stage" id="cropStage">
+      <canvas id="cropCanvas" width="320" height="320"></canvas>
+    </div>
+    <div class="form-group" style="margin-top:14px;">
+      <label>Zoom</label>
+      <input type="range" id="cropZoomSlider" min="100" max="300" value="100" style="width:100%;">
+    </div>
+    <button class="btn-primary" id="applyCropBtn">Appliquer le recadrage</button>
+    <button class="btn-secondary" id="cancelCropBtn">Annuler</button>
   </div>
 </div>
 

@@ -6,6 +6,9 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, 
   global: { headers: { 'Cache-Control': 'no-cache' } }
 });
 
+/* ---------- Constantes ---------- */
+const TVA_RATE = 0.20; // 20% — appliqué uniquement au moment de la confirmation de commande
+
 /* ---------- État ---------- */
 let categories = [];
 let products = [];
@@ -78,7 +81,8 @@ async function loadAllData() {
     products = (prodRes.data || []).map(p => ({
       id: p.id, ref: p.ref, name: p.name, price: Number(p.price),
       categoryId: p.category_id, image: p.image,
-      unitStep: p.unit_step || 1, unitLabel: p.unit_label || ''
+      unitStep: p.unit_step || 1, unitLabel: p.unit_label || '',
+      outOfStock: !!p.out_of_stock, featured: !!p.featured
     }));
     settings = settRes.data || settings;
 
@@ -100,6 +104,10 @@ function renderCategoryStrip() {
   const strip = document.getElementById('catStrip');
   const allCount = products.length;
   let html = `<button class="cat-chip ${activeCategory === 'all' ? 'active' : ''}" data-cat="all">Tout <span class="count">${allCount}</span></button>`;
+  const featuredCount = products.filter(p => p.featured).length;
+  if (featuredCount > 0) {
+    html += `<button class="cat-chip featured-chip ${activeCategory === 'featured' ? 'active' : ''}" data-cat="featured">⭐ Meilleures ventes <span class="count">${featuredCount}</span></button>`;
+  }
   categories.forEach(c => {
     const count = products.filter(p => p.categoryId === c.id).length;
     html += `<button class="cat-chip ${activeCategory === c.id ? 'active' : ''}" data-cat="${c.id}">${escapeHtml(c.name)} <span class="count">${count}</span></button>`;
@@ -119,7 +127,11 @@ function renderCategoryStrip() {
    ========================================================= */
 function getFilteredProducts() {
   let list = products.slice();
-  if (activeCategory !== 'all') list = list.filter(p => p.categoryId === activeCategory);
+  if (activeCategory === 'featured') {
+    list = list.filter(p => p.featured);
+  } else if (activeCategory !== 'all') {
+    list = list.filter(p => p.categoryId === activeCategory);
+  }
   if (searchTerm.trim()) {
     const q = searchTerm.trim().toLowerCase();
     list = list.filter(p => p.name.toLowerCase().includes(q) || p.ref.toLowerCase().includes(q));
@@ -141,6 +153,12 @@ function renderGrid() {
 
   let html = '';
   if (activeCategory === 'all' && !searchTerm.trim()) {
+    const featured = products.filter(p => p.featured);
+    if (featured.length) {
+      html += `<div class="section-title featured-title">⭐ Meilleures ventes</div><div class="grid">`;
+      featured.forEach(p => html += productCardHtml(p));
+      html += `</div>`;
+    }
     categories.forEach(cat => {
       const items = products.filter(p => p.categoryId === cat.id);
       if (items.length === 0) return;
@@ -154,6 +172,10 @@ function renderGrid() {
       orphan.forEach(p => html += productCardHtml(p));
       html += `</div>`;
     }
+  } else if (activeCategory === 'featured') {
+    html += `<div class="grid">`;
+    products.filter(p => p.featured).forEach(p => html += productCardHtml(p));
+    html += `</div>`;
   } else {
     html += `<div class="grid">`;
     list.forEach(p => html += productCardHtml(p));
@@ -175,6 +197,30 @@ function productCardHtml(p) {
   const priceDisplay = isBulk
     ? `<span class="price bulk">${fmtPrice(effectivePrice).replace(' €','').split(',')[0]}<span class="cents">,${fmtPrice(effectivePrice).split(',')[1]}</span></span>`
     : `<span class="price">${fmtPrice(p.price).replace(' €','').split(',')[0]}<span class="cents">,${fmtPrice(p.price).split(',')[1]}</span></span>`;
+
+  if (p.outOfStock) {
+    return `
+    <div class="ticket out-of-stock" data-id="${p.id}">
+      <div class="ticket-main">
+        <div class="ticket-img-wrap">
+          <img src="${img}" alt="${escapeHtml(p.name)}" loading="lazy">
+          <span class="stamp">RÉF<br>${escapeHtml(p.ref)}</span>
+          <div class="stock-banner">Rupture de stock</div>
+        </div>
+        <div class="ticket-body">
+          <div class="t-name">${escapeHtml(p.name)}</div>
+          <div class="t-ref">Réf. ${escapeHtml(p.ref)}</div>
+          ${unitTag}
+        </div>
+      </div>
+      <div class="perf-seam"></div>
+      <div class="ticket-stub">
+        ${priceDisplay}
+        <span class="stock-label">Indisponible</span>
+      </div>
+    </div>`;
+  }
+
   return `
   <div class="ticket" data-id="${p.id}">
     <div class="ticket-main">
@@ -222,6 +268,10 @@ function attachCardListeners() {
 function addToCart(id, deltaLots) {
   const p = products.find(x => x.id === id);
   if (!p) return;
+  if (p.outOfStock && deltaLots > 0) {
+    showToast('Ce produit est en rupture de stock');
+    return;
+  }
   const step = p.unitStep || 1;
   const currentQty = cart[id] || 0;
   const newQty = currentQty + deltaLots * step;
@@ -414,16 +464,17 @@ function setupCheckout() {
   document.getElementById('checkoutBtn').addEventListener('click', () => {
     if (Object.keys(cart).length === 0) return;
     closeDrawer('cartDrawer');
-    setTimeout(() => openDrawer('checkoutDrawer'), 200);
+    setTimeout(() => { openDrawer('checkoutDrawer'); renderInvoiceSummary(); }, 200);
   });
 
   document.getElementById('confirmOrderBtn').addEventListener('click', async () => {
     const name = document.getElementById('clientNameInput').value.trim();
+    const shopName = document.getElementById('clientShopInput').value.trim();
     if (!name) {
       showToast('Merci d\'indiquer votre nom');
       return;
     }
-    await submitOrder(name);
+    await submitOrder(name, shopName);
   });
 
   document.getElementById('clearCartBtn').addEventListener('click', () => {
@@ -435,8 +486,22 @@ function setupCheckout() {
   });
 }
 
-async function submitOrder(clientName) {
+function renderInvoiceSummary() {
+  const { total, count } = cartTotal();
+  const tva = total * TVA_RATE;
+  const totalWithTva = total + tva;
+  const box = document.getElementById('checkoutInvoiceSummary');
+  box.innerHTML = `
+    <div class="ln"><span>Sous-total (${count} article${count > 1 ? 's' : ''})</span><span>${fmtPrice(total)}</span></div>
+    <div class="ln"><span>TVA (20%)</span><span>${fmtPrice(tva)}</span></div>
+    <div class="ln total"><span>Total à payer</span><span>${fmtPrice(totalWithTva)}</span></div>
+  `;
+}
+
+async function submitOrder(clientName, shopName) {
   const { total, count, bulkEligible } = cartTotal();
+  const tva = total * TVA_RATE;
+  const totalWithTva = total + tva;
   const items = Object.keys(cart).map(id => {
     const p = products.find(x => x.id === id);
     const qty = cart[id];
@@ -454,8 +519,11 @@ async function submitOrder(clientName) {
     const { error: insertError } = await supabaseClient.from('orders').insert({
       order_number: orderNumber,
       client_name: clientName,
+      shop_name: shopName || null,
       items: items,
       total: total,
+      tva: +tva.toFixed(2),
+      total_with_tva: +totalWithTva.toFixed(2),
       status: 'nouvelle'
     });
     if (insertError) throw insertError;
@@ -472,6 +540,7 @@ async function submitOrder(clientName) {
     updateCartUI();
     renderGrid();
     document.getElementById('clientNameInput').value = '';
+    document.getElementById('clientShopInput').value = '';
     closeDrawer('checkoutDrawer');
     setTimeout(() => openDrawer('orderSuccessDrawer'), 200);
   } catch (e) {
@@ -551,16 +620,24 @@ async function renderAdminOrderList() {
       const date = new Date(o.created_at);
       const dateStr = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' + date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
       const itemsLines = (o.items || []).map(it => `${escapeHtml(it.name)} (${escapeHtml(it.ref)}) x${it.qty}`).join('<br>');
+      const clientLine = o.shop_name
+        ? `${escapeHtml(o.client_name || 'Client')} <span style="opacity:0.6;font-weight:500;">— ${escapeHtml(o.shop_name)}</span>`
+        : escapeHtml(o.client_name || 'Client');
+      const totalWithTva = o.total_with_tva != null ? Number(o.total_with_tva) : Number(o.total);
+      const tvaLine = o.tva != null
+        ? `<div style="font-size:11px;color:#7a6f5c;margin-top:4px;">Sous-total ${fmtPrice(Number(o.total))} + TVA 20% (${fmtPrice(Number(o.tva))})</div>`
+        : '';
       html += `
       <div class="order-card" data-order-id="${o.id}">
         <div class="oc-top">
           <span class="oc-num">Commande n°${escapeHtml(o.order_number)}</span>
           <span class="oc-date">${dateStr}</span>
         </div>
-        <div class="oc-client">${escapeHtml(o.client_name || 'Client')}</div>
+        <div class="oc-client">${clientLine}</div>
         <div class="oc-items">${itemsLines}</div>
+        ${tvaLine}
         <div class="oc-bottom">
-          <span class="oc-total">${fmtPrice(Number(o.total))}</span>
+          <span class="oc-total">${fmtPrice(totalWithTva)}</span>
           <select class="status-select" data-order-id="${o.id}">
             <option value="nouvelle" ${o.status === 'nouvelle' ? 'selected' : ''}>Nouvelle</option>
             <option value="en_cours" ${o.status === 'en_cours' ? 'selected' : ''}>En cours</option>
@@ -595,12 +672,13 @@ function renderAdminProductList() {
   products.forEach(p => {
     const cat = categories.find(c => c.id === p.categoryId);
     const unitInfo = p.unitStep > 1 ? ` · lot de ${p.unitStep}` : '';
+    const badges = `${p.outOfStock ? ' <span style="color:var(--brick);font-weight:700;">· Rupture</span>' : ''}${p.featured ? ' <span style="color:var(--mustard);font-weight:700;">· ⭐</span>' : ''}`;
     html += `
     <div class="admin-product-row">
       <img src="${p.image || ''}" alt="">
       <div class="info">
         <div class="nm">${escapeHtml(p.name)}</div>
-        <div class="meta">Réf. ${escapeHtml(p.ref)} · ${fmtPrice(p.price)} · ${cat ? escapeHtml(cat.name) : '—'}${unitInfo}</div>
+        <div class="meta">Réf. ${escapeHtml(p.ref)} · ${fmtPrice(p.price)} · ${cat ? escapeHtml(cat.name) : '—'}${unitInfo}${badges}</div>
       </div>
       <div class="admin-row-actions">
         <button class="admin-icon-btn" data-edit="${p.id}">✎</button>
@@ -832,6 +910,7 @@ function openProductForm(productId) {
   const imgPreview = document.getElementById('imagePreview');
   const imgPlaceholder = document.getElementById('imagePlaceholder');
   const delBtn = document.getElementById('deleteProductBtn');
+  const cropBtn = document.getElementById('openCropBtn');
   document.getElementById('bgStatus').textContent = '';
   document.getElementById('bgRemoveToggle').checked = true;
 
@@ -842,11 +921,14 @@ function openProductForm(productId) {
     document.getElementById('formRef').value = p.ref;
     document.getElementById('formPrice').value = p.price;
     document.getElementById('formCategory').value = p.categoryId;
+    document.getElementById('outOfStockToggle').checked = !!p.outOfStock;
+    document.getElementById('featuredToggle').checked = !!p.featured;
     imgPreview.src = p.image || '';
     imgPreview.style.display = 'block';
     imgPlaceholder.style.display = 'none';
     pendingImageData = p.image;
     delBtn.style.display = 'block';
+    cropBtn.style.display = p.image ? 'block' : 'none';
 
     if (p.unitStep > 1) {
       currentUnitMode = 'bulk';
@@ -867,9 +949,12 @@ function openProductForm(productId) {
     document.getElementById('formRef').value = '';
     document.getElementById('formPrice').value = '';
     if (categories.length) document.getElementById('formCategory').value = categories[0].id;
+    document.getElementById('outOfStockToggle').checked = false;
+    document.getElementById('featuredToggle').checked = false;
     imgPreview.style.display = 'none';
     imgPlaceholder.style.display = 'block';
     delBtn.style.display = 'none';
+    cropBtn.style.display = 'none';
     currentUnitMode = 'unit';
     document.getElementById('unitToggleUnit').classList.add('active');
     document.getElementById('unitToggleBulk').classList.remove('active');
@@ -985,6 +1070,7 @@ function setupImageUpload() {
                 document.getElementById('imagePlaceholder').style.display = 'none';
                 bgStatus.textContent = '⚠️ Détourage indisponible, photo originale conservée';
               }
+              document.getElementById('openCropBtn').style.display = 'block';
             });
           };
           resizedImg.src = canvas.toDataURL('image/jpeg', 0.92);
@@ -994,11 +1080,131 @@ function setupImageUpload() {
           document.getElementById('imagePreview').style.display = 'block';
           document.getElementById('imagePlaceholder').style.display = 'none';
           bgStatus.textContent = '';
+          document.getElementById('openCropBtn').style.display = 'block';
         }
       };
       img.src = ev.target.result;
     };
     reader.readAsDataURL(file);
+  });
+}
+
+/* ---------- Recadrage / ajustement manuel de la photo ----------
+   Permet de zoomer et déplacer l'image existante dans un cadre carré,
+   puis d'exporter le résultat comme nouvelle image du produit. */
+let cropImageObj = null;
+let cropState = { scale: 1, offsetX: 0, offsetY: 0, dragging: false, lastX: 0, lastY: 0 };
+
+function setupImageCropper() {
+  const canvas = document.getElementById('cropCanvas');
+  const ctx = canvas.getContext('2d');
+  const zoomSlider = document.getElementById('cropZoomSlider');
+
+  function drawCrop() {
+    if (!cropImageObj) return;
+    const size = canvas.width; // carré
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, size, size);
+
+    const iw = cropImageObj.naturalWidth, ih = cropImageObj.naturalHeight;
+    const baseScale = Math.max(size / iw, size / ih); // couvre tout le cadre
+    const scale = baseScale * cropState.scale;
+    const drawW = iw * scale, drawH = ih * scale;
+    const drawX = (size - drawW) / 2 + cropState.offsetX;
+    const drawY = (size - drawH) / 2 + cropState.offsetY;
+    ctx.drawImage(cropImageObj, drawX, drawY, drawW, drawH);
+  }
+
+  function clampOffsets() {
+    if (!cropImageObj) return;
+    const size = canvas.width;
+    const iw = cropImageObj.naturalWidth, ih = cropImageObj.naturalHeight;
+    const baseScale = Math.max(size / iw, size / ih);
+    const scale = baseScale * cropState.scale;
+    const drawW = iw * scale, drawH = ih * scale;
+    const maxOffsetX = Math.max(0, (drawW - size) / 2);
+    const maxOffsetY = Math.max(0, (drawH - size) / 2);
+    cropState.offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, cropState.offsetX));
+    cropState.offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, cropState.offsetY));
+  }
+
+  function pointerDown(x, y) {
+    cropState.dragging = true;
+    cropState.lastX = x;
+    cropState.lastY = y;
+  }
+  function pointerMove(x, y) {
+    if (!cropState.dragging) return;
+    cropState.offsetX += (x - cropState.lastX);
+    cropState.offsetY += (y - cropState.lastY);
+    cropState.lastX = x;
+    cropState.lastY = y;
+    clampOffsets();
+    drawCrop();
+  }
+  function pointerUp() { cropState.dragging = false; }
+
+  canvas.addEventListener('mousedown', (e) => pointerDown(e.offsetX, e.offsetY));
+  canvas.addEventListener('mousemove', (e) => pointerMove(e.offsetX, e.offsetY));
+  window.addEventListener('mouseup', pointerUp);
+  canvas.addEventListener('touchstart', (e) => {
+    const r = canvas.getBoundingClientRect();
+    const t = e.touches[0];
+    pointerDown(t.clientX - r.left, t.clientY - r.top);
+  }, { passive: true });
+  canvas.addEventListener('touchmove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    const t = e.touches[0];
+    pointerMove(t.clientX - r.left, t.clientY - r.top);
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('touchend', pointerUp);
+
+  zoomSlider.addEventListener('input', () => {
+    cropState.scale = zoomSlider.value / 100;
+    clampOffsets();
+    drawCrop();
+  });
+
+  document.getElementById('openCropBtn').addEventListener('click', () => {
+    if (!pendingImageData) return;
+    cropImageObj = new Image();
+    cropImageObj.onload = () => {
+      cropState = { scale: 1, offsetX: 0, offsetY: 0, dragging: false, lastX: 0, lastY: 0 };
+      zoomSlider.value = 100;
+      drawCrop();
+    };
+    cropImageObj.src = pendingImageData;
+    openDrawer('cropDrawer');
+  });
+
+  document.getElementById('cancelCropBtn').addEventListener('click', () => {
+    closeDrawer('cropDrawer');
+  });
+
+  document.getElementById('applyCropBtn').addEventListener('click', () => {
+    const outSize = 700;
+    const outCanvas = document.createElement('canvas');
+    outCanvas.width = outSize; outCanvas.height = outSize;
+    const outCtx = outCanvas.getContext('2d');
+    outCtx.fillStyle = '#ffffff';
+    outCtx.fillRect(0, 0, outSize, outSize);
+
+    const iw = cropImageObj.naturalWidth, ih = cropImageObj.naturalHeight;
+    const baseScale = Math.max(outSize / iw, outSize / ih);
+    const scale = baseScale * cropState.scale;
+    const ratio = outSize / canvas.width;
+    const drawW = iw * scale, drawH = ih * scale;
+    const drawX = (outSize - drawW) / 2 + cropState.offsetX * ratio;
+    const drawY = (outSize - drawH) / 2 + cropState.offsetY * ratio;
+    outCtx.drawImage(cropImageObj, drawX, drawY, drawW, drawH);
+
+    pendingImageData = outCanvas.toDataURL('image/jpeg', 0.88);
+    document.getElementById('imagePreview').src = pendingImageData;
+    document.getElementById('imagePreview').style.display = 'block';
+    document.getElementById('imagePlaceholder').style.display = 'none';
+    closeDrawer('cropDrawer');
+    showToast('✓ Photo recadrée');
   });
 }
 
@@ -1008,6 +1214,8 @@ function setupProductFormSave() {
     const ref = document.getElementById('formRef').value.trim();
     const price = parseFloat(document.getElementById('formPrice').value);
     const categoryId = document.getElementById('formCategory').value;
+    const outOfStock = document.getElementById('outOfStockToggle').checked;
+    const featured = document.getElementById('featuredToggle').checked;
     let unitStep = 1, unitLabel = '';
     if (currentUnitMode === 'bulk') {
       unitStep = parseInt(document.getElementById('formUnitStep').value, 10);
@@ -1034,21 +1242,24 @@ function setupProductFormSave() {
       if (editingProductId) {
         const { error } = await supabaseClient.from('products').update({
           name, ref, price, category_id: categoryId, image: pendingImageData,
-          unit_step: unitStep, unit_label: unitLabel
+          unit_step: unitStep, unit_label: unitLabel,
+          out_of_stock: outOfStock, featured: featured
         }).eq('id', editingProductId);
         if (error) throw error;
         const p = products.find(x => x.id === editingProductId);
         p.name = name; p.ref = ref; p.price = price; p.categoryId = categoryId;
         p.image = pendingImageData; p.unitStep = unitStep; p.unitLabel = unitLabel;
+        p.outOfStock = outOfStock; p.featured = featured;
         showToast('Produit mis à jour');
       } else {
         const newId = uid('prod');
         const { error } = await supabaseClient.from('products').insert({
           id: newId, ref, name, price, category_id: categoryId, image: pendingImageData,
-          unit_step: unitStep, unit_label: unitLabel, sort_order: products.length + 1
+          unit_step: unitStep, unit_label: unitLabel, sort_order: products.length + 1,
+          out_of_stock: outOfStock, featured: featured
         });
         if (error) throw error;
-        products.push({ id: newId, ref, name, price, categoryId, image: pendingImageData, unitStep, unitLabel });
+        products.push({ id: newId, ref, name, price, categoryId, image: pendingImageData, unitStep, unitLabel, outOfStock, featured });
         showToast('Produit ajouté');
       }
       closeDrawer('productFormDrawer');
@@ -1118,6 +1329,7 @@ function init() {
   setupAddCategory();
   setupSettingsSave();
   setupImageUpload();
+  setupImageCropper();
   setupProductFormSave();
   setupUnitToggle();
   setupCheckout();
