@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — Foulards</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>🧣 Ajout du catalogue "Foulards"</h1>
+<p>Cette page ajoute la catégorie "Foulards" et ses 41 motifs (réf. FL1BL à FL31, 2,00€ chacun). À utiliser une seule fois.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="foulards_part1.js"></script>
+<script src="foulards_part2.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORY = { id: 'cat-foulards', name: 'Foulards', sort_order: 26 };
+
+const REFS = ['FL1BL','FL1N','FL2FU','FL2N','FL3','FL4','FL5R','FL6','FL7R','FL8FU','FL8N','FL9N','FL9G',
+  'FL10','FL10R','FL10G','FL11','FL12','FL12B','FL12BG','FL12K','FL12FU','FL15a','FL17','FL18FU','FL18N',
+  'FL18VE','FL19B','FL19BG','FL20B','FL20R','FL21B','FL21BG','FL22BG','FL23','FL26BL','FL26N','FL27','FL29','FL30','FL31'];
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof FOULARDS_PART1_IMAGES === 'undefined' || typeof FOULARDS_PART2_IMAGES === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : fichiers images non chargés.</div></div>';
+    return;
+  }
+  const FOULARDS_IMAGES = Object.assign({}, FOULARDS_PART1_IMAGES, FOULARDS_PART2_IMAGES);
+
+  const catRow = document.createElement('div');
+  catRow.className = 'row';
+  catRow.innerHTML = `<div><div>Catégorie : ${NEW_CATEGORY.name}</div><div class="status">Création…</div></div>`;
+  results.appendChild(catRow);
+  const catStatus = catRow.querySelector('.status');
+  try {
+    const { error } = await supabaseClient.from('categories').upsert(NEW_CATEGORY);
+    if (error) throw error;
+    catStatus.textContent = '✓ Catégorie créée';
+    catStatus.className = 'status ok';
+  } catch (e) {
+    catStatus.textContent = '✗ Erreur catégorie : ' + e.message;
+    catStatus.className = 'status err';
+    return;
+  }
+
+  for (const ref of REFS) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const img = FOULARDS_IMAGES[ref] || '';
+    const name = `Foulard Paris — motif ${ref.replace('FL','')}`;
+    row.innerHTML = `<img src="${img}"><div><div>${name}</div><div class="status">Envoi…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: ref, ref: ref, name: name, price: 2.00,
+        category_id: NEW_CATEGORY.id, image: img,
+        unit_step: 1, unit_label: '', sort_order: 100
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓ Ajouté avec succès';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+    }
+  }
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>
