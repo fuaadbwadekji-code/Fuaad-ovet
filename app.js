@@ -86,7 +86,8 @@ async function loadAllData() {
       id: p.id, ref: p.ref, name: p.name, price: Number(p.price),
       categoryId: p.category_id, image: p.image,
       unitStep: p.unit_step || 1, unitLabel: p.unit_label || '',
-      outOfStock: !!p.out_of_stock, featured: !!p.featured
+      outOfStock: !!p.out_of_stock, featured: !!p.featured,
+      hidden: !!p.hidden
     }));
     settings = settRes.data || settings;
 
@@ -108,15 +109,16 @@ async function loadAllData() {
    ========================================================= */
 function renderCategoryStrip() {
   const strip = document.getElementById('catStrip');
-  const allCount = products.length;
+  const visibleProducts = products.filter(p => !p.hidden);
+  const allCount = visibleProducts.length;
   let html = `<button class="cat-chip catalogue-chip" data-action="open-catalogue">🗂️ Catalogue</button>`;
   html += `<button class="cat-chip ${activeCategory === 'all' ? 'active' : ''}" data-cat="all">Tout <span class="count">${allCount}</span></button>`;
-  const featuredCount = products.filter(p => p.featured).length;
+  const featuredCount = visibleProducts.filter(p => p.featured).length;
   if (featuredCount > 0) {
     html += `<button class="cat-chip featured-chip ${activeCategory === 'featured' ? 'active' : ''}" data-cat="featured">⭐ Meilleures ventes <span class="count">${featuredCount}</span></button>`;
   }
   categories.forEach(c => {
-    const count = products.filter(p => p.categoryId === c.id).length;
+    const count = visibleProducts.filter(p => p.categoryId === c.id).length;
     html += `<button class="cat-chip ${activeCategory === c.id ? 'active' : ''}" data-cat="${c.id}">${escapeHtml(c.name)} <span class="count">${count}</span></button>`;
   });
   strip.innerHTML = html;
@@ -226,10 +228,11 @@ function startOrderPolling() {
    ========================================================= */
 function renderHomeTiles() {
   const container = document.getElementById('homeTilesContainer');
+  const visibleProducts = products.filter(p => !p.hidden);
   let html = '';
-  const featuredCount = products.filter(p => p.featured).length;
+  const featuredCount = visibleProducts.filter(p => p.featured).length;
   if (featuredCount > 0) {
-    const sample = products.find(p => p.featured);
+    const sample = visibleProducts.find(p => p.featured);
     html += `
     <div class="home-tile featured-tile" data-cat="featured">
       <img src="${sample.image || ''}" alt="">
@@ -237,7 +240,7 @@ function renderHomeTiles() {
     </div>`;
   }
   categories.forEach(cat => {
-    const items = products.filter(p => p.categoryId === cat.id);
+    const items = visibleProducts.filter(p => p.categoryId === cat.id);
     if (items.length === 0) return;
     const sample = items[0];
     html += `
@@ -261,7 +264,7 @@ function renderHomeTiles() {
    RENDU — Grille produits
    ========================================================= */
 function getFilteredProducts() {
-  let list = products.slice();
+  let list = products.filter(p => !p.hidden);
   if (activeCategory === 'featured') {
     list = list.filter(p => p.featured);
   } else if (activeCategory !== 'all') {
@@ -278,6 +281,7 @@ function renderGrid() {
   const container = document.getElementById('gridContainer');
   const empty = document.getElementById('emptyState');
   const list = getFilteredProducts();
+  const visibleProducts = products.filter(p => !p.hidden);
 
   if (list.length === 0) {
     container.innerHTML = '';
@@ -288,20 +292,20 @@ function renderGrid() {
 
   let html = '';
   if (activeCategory === 'all' && !searchTerm.trim()) {
-    const featured = products.filter(p => p.featured);
+    const featured = visibleProducts.filter(p => p.featured);
     if (featured.length) {
       html += `<div class="section-title featured-title">⭐ Meilleures ventes</div><div class="grid">`;
       featured.forEach(p => html += productCardHtml(p));
       html += `</div>`;
     }
     categories.forEach(cat => {
-      const items = products.filter(p => p.categoryId === cat.id);
+      const items = visibleProducts.filter(p => p.categoryId === cat.id);
       if (items.length === 0) return;
       html += `<div class="section-title">${escapeHtml(cat.name)}</div><div class="grid">`;
       items.forEach(p => html += productCardHtml(p));
       html += `</div>`;
     });
-    const orphan = products.filter(p => !categories.some(c => c.id === p.categoryId));
+    const orphan = visibleProducts.filter(p => !categories.some(c => c.id === p.categoryId));
     if (orphan.length) {
       html += `<div class="section-title">Autres</div><div class="grid">`;
       orphan.forEach(p => html += productCardHtml(p));
@@ -309,7 +313,7 @@ function renderGrid() {
     }
   } else if (activeCategory === 'featured') {
     html += `<div class="grid">`;
-    products.filter(p => p.featured).forEach(p => html += productCardHtml(p));
+    visibleProducts.filter(p => p.featured).forEach(p => html += productCardHtml(p));
     html += `</div>`;
   } else {
     html += `<div class="grid">`;
@@ -844,16 +848,17 @@ function renderAdminProductList() {
   displayProducts.forEach(p => {
     const cat = categories.find(c => c.id === p.categoryId);
     const unitInfo = p.unitStep > 1 ? ` · lot de ${p.unitStep}` : '';
-    const badges = `${p.outOfStock ? ' <span style="color:var(--brick);font-weight:700;">· Rupture</span>' : ''}${p.featured ? ' <span style="color:var(--mustard);font-weight:700;">· ⭐</span>' : ''}`;
+    const badges = `${p.outOfStock ? ' <span style="color:var(--brick);font-weight:700;">· Rupture</span>' : ''}${p.featured ? ' <span style="color:var(--mustard);font-weight:700;">· ⭐</span>' : ''}${p.hidden ? ' <span style="color:var(--brass);font-weight:700;">· Masqué</span>' : ''}`;
     html += `
     <div class="admin-product-row-wrap">
-      <div class="admin-product-row">
+      <div class="admin-product-row${p.hidden ? ' hidden-product-row' : ''}">
         <img src="${p.image || ''}" alt="">
         <div class="info">
           <div class="nm">${escapeHtml(p.name)}</div>
           <div class="meta">Réf. ${escapeHtml(p.ref)} · ${fmtPrice(p.price)} · ${cat ? escapeHtml(cat.name) : '—'}${unitInfo}${badges}</div>
         </div>
         <div class="admin-row-actions">
+          <button class="admin-icon-btn ${p.hidden ? 'active-hide' : ''}" data-hide="${p.id}" title="${p.hidden ? 'Réafficher ce produit' : 'Masquer ce produit'}">${p.hidden ? '👁️‍🗨️' : '👁️'}</button>
           <button class="admin-icon-btn" data-lotmenu="${p.id}" title="Définir un lot">📦</button>
           <button class="admin-icon-btn" data-edit="${p.id}">✎</button>
           <button class="admin-icon-btn danger" data-del="${p.id}">🗑</button>
@@ -870,6 +875,7 @@ function renderAdminProductList() {
   });
   list.innerHTML = html;
   list.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openProductForm(b.dataset.edit)));
+  list.querySelectorAll('[data-hide]').forEach(b => b.addEventListener('click', () => toggleHideProduct(b.dataset.hide)));
   list.querySelectorAll('[data-lotmenu]').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.lotmenu;
     const picker = document.getElementById('lotpicker-' + id);
@@ -883,6 +889,29 @@ function renderAdminProductList() {
     await quickSetUnitStep(id, qty);
   }));
   list.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => deleteProduct(b.dataset.del)));
+}
+
+/* Bascule l'état masqué/visible d'un produit. Un produit masqué reste
+   en base de données (donc récupérable instantanément) mais disparaît
+   complètement de la boutique publique (recherche, catégories, tiroir
+   catalogue) tant qu'il n'est pas réaffiché depuis l'administration. */
+async function toggleHideProduct(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+  const newHidden = !p.hidden;
+  try {
+    const { error } = await supabaseClient.from('products').update({ hidden: newHidden }).eq('id', id);
+    if (error) throw error;
+    p.hidden = newHidden;
+    showToast(newHidden ? `✓ ${p.ref} masqué de la boutique` : `✓ ${p.ref} de nouveau visible`);
+    renderAdminProductList();
+    renderCategoryStrip();
+    renderGrid();
+    renderHomeTiles();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠️ Erreur lors de la mise à jour');
+  }
 }
 
 async function quickSetUnitStep(productId, qty) {
@@ -1512,7 +1541,7 @@ function setupProductFormSave() {
           out_of_stock: outOfStock, featured: featured
         });
         if (error) throw error;
-        products.push({ id: newId, ref, name, price, categoryId, image: pendingImageData, unitStep, unitLabel, outOfStock, featured });
+        products.push({ id: newId, ref, name, price, categoryId, image: pendingImageData, unitStep, unitLabel, outOfStock, featured, hidden: false });
         showToast('Produit ajouté');
       }
       closeDrawer('productFormDrawer');
