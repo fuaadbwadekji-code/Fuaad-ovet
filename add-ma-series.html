@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — Magnets (série MA)</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>🧲 Ajout — Magnets (série MA)</h1>
+<p>Cette page ajoute 18 magnets (Tour Eiffel, Pince sac à main, Décapsuleurs canette) dans la catégorie "Magnets" existante. À utiliser une seule fois.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="ma_series_images.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const TOWER_MAGNETS = [
+  { ref: 'MAGT3', name: 'Magnet Tour Eiffel — PARIS tricolore', price: 1.00 },
+  { ref: 'MAGT2', name: 'Magnet Tour Eiffel — PARIS rouge/bleu vertical', price: 1.00 },
+  { ref: 'MAGT1', name: 'Magnet Tour Eiffel — panneaux directionnels', price: 1.00 },
+  { ref: 'MA134', name: 'Magnet Arc de Triomphe + Tour Eiffel', price: 1.00 },
+  { ref: 'MA80RS', name: 'Magnet décapsuleur PARIS — rose', price: 1.10 },
+  { ref: 'MA80BBR', name: 'Magnet décapsuleur PARIS — bleu/rouge', price: 1.10 },
+  { ref: 'MA114O', name: 'Magnet panneaux monuments PARIS — or', price: 1.00 },
+  { ref: 'MA114A', name: 'Magnet panneaux monuments PARIS — argent', price: 1.00 }
+];
+
+const PINCE_MAGNETS = [
+  { ref: 'MA11151', name: 'Magnet pince sac à main — monuments sépia', price: 1.00 },
+  { ref: 'MA11152', name: 'Magnet pince sac à main — Tour Eiffel automne', price: 1.00 },
+  { ref: 'MA11153', name: 'Magnet pince sac à main — Paris noir et blanc', price: 1.00 }
+];
+
+const DECAP_MAGNETS = [
+  { ref: 'MA1961', name: 'Magnet décapsuleur canette — Paris sépia', price: 0.90 },
+  { ref: 'MA1962', name: 'Magnet décapsuleur canette — Tour Eiffel automne', price: 0.90 },
+  { ref: 'MA1963', name: 'Magnet décapsuleur canette — Paris noir et blanc', price: 0.90 },
+  { ref: 'MA1964', name: 'Magnet décapsuleur canette — Tour Eiffel coucher de soleil', price: 0.90 },
+  { ref: 'MA1965', name: 'Magnet décapsuleur canette — rue parisienne', price: 0.90 },
+  { ref: 'MA1966', name: 'Magnet décapsuleur canette — Arc de Triomphe', price: 0.90 },
+  { ref: 'MA1967', name: 'Magnet décapsuleur canette — Sacré-Cœur', price: 0.90 }
+];
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof MA_SERIES_IMAGES === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : fichier images non chargé.</div></div>';
+    return;
+  }
+
+  async function addGroup(title, items) {
+    const header = document.createElement('h2');
+    header.textContent = title + ' (' + items.length + ')';
+    results.appendChild(header);
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const img = MA_SERIES_IMAGES[item.ref] || '';
+      row.innerHTML = `<img src="${img}"><div><div>${item.name}</div><div class="status">Envoi…</div></div>`;
+      results.appendChild(row);
+      const statusEl = row.querySelector('.status');
+      try {
+        const { error } = await supabaseClient.from('products').upsert({
+          id: item.ref, ref: item.ref, name: item.name, price: item.price,
+          category_id: 'cat-magnets-illustres', image: img,
+          unit_step: 1, unit_label: '', sort_order: 100
+        });
+        if (error) throw error;
+        statusEl.textContent = '✓ Ajouté';
+        statusEl.className = 'status ok';
+      } catch (e) {
+        statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+        statusEl.className = 'status err';
+      }
+    }
+  }
+
+  await addGroup('Magnets Tour Eiffel', TOWER_MAGNETS);
+  await addGroup('Magnets Pince', PINCE_MAGNETS);
+  await addGroup('Magnets Décapsuleurs', DECAP_MAGNETS);
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>
