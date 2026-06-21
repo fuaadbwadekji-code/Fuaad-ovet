@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Test NULL image</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: monospace; padding: 20px; background:#111; color:#0f0; }
+  button { padding: 12px 20px; font-size: 16px; margin: 10px 0; cursor:pointer; }
+  #log { white-space: pre-wrap; background:#000; padding:15px; border-radius:6px; }
+  .err { color: #f55; }
+  .ok { color: #5f5; }
+</style>
+</head>
+<body>
+<h2>اختبار: عمود image يقبل NULL؟</h2>
+<button id="runTest">شغّل الاختبار</button>
+<div id="log"></div>
+
+<script>
+const SUPABASE_URL = "https://ujwjydjjxzlmwuxaoukf.supabase.co";
+const SUPABASE_KEY = "sb_publishable_X95sZEaadGOpz9b4PkJvAA_Wq1K_aN9";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const logEl = document.getElementById('log');
+function log(msg, cls) {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  logEl.appendChild(line);
+}
+
+document.getElementById('runTest').addEventListener('click', async () => {
+  logEl.innerHTML = '';
+  log('بدء الاختبار...');
+
+  const testId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : 'test-' + Date.now();
+
+  // أولاً: ننشئ category مؤقتة (علاقة foreign key)
+  log('إنشاء فئة مؤقتة (cat-test-temp)...');
+  const { error: catError } = await supabase.from('categories').upsert({ id: 'cat-test-temp', name: 'Test Temp', sort_order: 999 });
+  if (catError) {
+    log('❌ فشل إنشاء الفئة المؤقتة:', 'err');
+    log(JSON.stringify(catError, null, 2), 'err');
+    return;
+  }
+  log('✓ الفئة المؤقتة جاهزة', 'ok');
+
+  const testProduct = {
+    id: testId,
+    ref: 'TEST-NULL-IMG',
+    name: 'Produit Test NULL Image',
+    price: 1.00,
+    category_id: 'cat-test-temp',
+    image: null,
+    unit_step: 1,
+    unit_label: '',
+    sort_order: 999,
+    out_of_stock: false
+  };
+
+  log('محاولة إدراج منتج بـ image: null ...');
+  const { data, error } = await supabase.from('products').insert([testProduct]).select();
+
+  if (error) {
+    log('❌ فشل! الخطأ:', 'err');
+    log(JSON.stringify(error, null, 2), 'err');
+    log('---', 'err');
+    log('يعني عمود image لا يقبل NULL. الرجاء إرسال رسالة الخطأ كاملة لكلود.', 'err');
+  } else {
+    log('✅ نجح! العمود يقبل NULL.', 'ok');
+    log(JSON.stringify(data, null, 2), 'ok');
+    log('---', 'ok');
+    log('بدي نحذف المنتج التجريبي هلق...', 'ok');
+
+    const { error: delError } = await supabase.from('products').delete().eq('id', testId);
+    if (delError) {
+      log('⚠️ تحذير: ما قدرت أحذف المنتج التجريبي تلقائياً. الرجاء حذفه يدوياً من لوحة Supabase (id: ' + testId + ')', 'err');
+    } else {
+      log('🗑️ تم حذف المنتج التجريبي بنجاح.', 'ok');
+    }
+  }
+
+  // تنظيف: حذف الفئة المؤقتة
+  const { error: catDelError } = await supabase.from('categories').delete().eq('id', 'cat-test-temp');
+  if (!catDelError) {
+    log('🗑️ تم حذف الفئة المؤقتة بنجاح.', 'ok');
+  }
+});
+</script>
+</body>
+</html>
