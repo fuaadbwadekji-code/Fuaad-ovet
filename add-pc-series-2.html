@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — Porte-clés PC (lot 2)</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>🔑 Ajout — Porte-clés (série PC, lot 2)</h1>
+<p>Cette page ajoute 34 porte-clés supplémentaires dans la catégorie "Portes-Clés" existante. À utiliser une seule fois.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="pc_batch2_images.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const ITEMS = [
+  { ref: 'PC162MIX', name: 'Porte-clés métal Arc — lot de 12 couleurs assorties', price: 1.00 },
+  { ref: 'PC136CHMIX', name: 'Porte-clés Tour Eiffel + plaque Champs-Élysées — lot de 12', price: 1.00 },
+  { ref: 'PC136TEMIX', name: 'Porte-clés Tour Eiffel + plaque Tour Eiffel — lot de 12', price: 1.00 },
+  { ref: 'PC163', name: 'Porte-clés carte de France', price: 1.10 },
+  { ref: 'PC164', name: 'Porte-clés médaillon tricolore Tour Eiffel', price: 1.10 },
+  { ref: 'PC69', name: 'Porte-clés décapsuleur tire-bouchon Paris', price: 1.00 },
+  { ref: 'PC3', name: 'Porte-clés décapsuleur drapeau France', price: 1.00 },
+  { ref: 'PC72', name: 'Porte-clés cœur monuments Paris', price: 1.00 },
+  { ref: 'PC8', name: 'Porte-clés décapsuleur lettres PARIS', price: 1.00 },
+  { ref: 'PC6', name: 'Porte-clés décapsuleur Tour Eiffel France', price: 1.00 },
+  { ref: 'PC66', name: 'Porte-clés plaque gravée Tour Eiffel', price: 1.20 },
+  { ref: 'PCUI121', name: 'Porte-clés duo cœur séparable Paris/France', price: 1.20 },
+  { ref: 'PC176B', name: 'Porte-clés décapsuleur Arc de Triomphe', price: 1.10 },
+  { ref: 'PC162B', name: 'Porte-clés Arc de Triomphe métal', price: 1.00 },
+  { ref: 'PC71', name: 'Porte-clés ballon football Paris France', price: 1.00 },
+  { ref: 'PC120', name: 'Porte-clés médaillon tricolore Paris France', price: 1.20 },
+  { ref: 'PC123', name: 'Porte-clés médaillon tricolore monuments', price: 1.20 },
+  { ref: 'PC138A', name: 'Porte-clés Tour Eiffel plaque Paris — argent', price: 1.00 },
+  { ref: 'PC138AF', name: 'Porte-clés Tour Eiffel plaque Paris — argent foncé', price: 1.00 },
+  { ref: 'PC1380', name: 'Porte-clés Tour Eiffel plaque Paris — or', price: 1.00 },
+  { ref: 'PC138B', name: 'Porte-clés Tour Eiffel plaque Paris — bronze', price: 1.00 },
+  { ref: 'PC138C', name: 'Porte-clés Tour Eiffel plaque Paris — cuivre', price: 1.00 },
+  { ref: 'PC143A', name: 'Porte-clés Tour Eiffel I Love Paris — argent', price: 1.00 },
+  { ref: 'PC143AF', name: 'Porte-clés Tour Eiffel I Love Paris — argent foncé', price: 1.00 },
+  { ref: 'PC1430', name: 'Porte-clés Tour Eiffel I Love Paris — or', price: 1.00 },
+  { ref: 'PC143B', name: 'Porte-clés Tour Eiffel I Love Paris — bronze', price: 1.00 },
+  { ref: 'PC143C', name: 'Porte-clés Tour Eiffel I Love Paris — cuivre', price: 1.00 },
+  { ref: 'PC172A', name: 'Porte-clés Tour Eiffel cœur tricolore — argent', price: 1.00 },
+  { ref: 'PC172AF', name: 'Porte-clés Tour Eiffel cœur tricolore — argent foncé', price: 1.00 },
+  { ref: 'PC1720', name: 'Porte-clés Tour Eiffel cœur tricolore — or', price: 1.00 },
+  { ref: 'PC172B', name: 'Porte-clés Tour Eiffel cœur tricolore — bronze', price: 1.00 },
+  { ref: 'PC172C', name: 'Porte-clés Tour Eiffel cœur tricolore — cuivre', price: 1.00 },
+  { ref: 'PC177O', name: 'Porte-clés écusson France Paris monuments', price: 1.00 },
+  { ref: 'PC164MIX', name: 'Porte-clés capsule tricolore Paris — lot de 12 couleurs', price: 1.10 }
+];
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof PC_BATCH2_IMAGES === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : fichier images non chargé.</div></div>';
+    return;
+  }
+
+  for (const item of ITEMS) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const img = PC_BATCH2_IMAGES[item.ref] || '';
+    row.innerHTML = `<img src="${img}"><div><div>${item.name}</div><div class="status">Envoi…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: item.ref, ref: item.ref, name: item.name, price: item.price,
+        category_id: 'cat-portes-cles', image: img,
+        unit_step: 1, unit_label: '', sort_order: 100
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓ Ajouté';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+    }
+  }
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>
