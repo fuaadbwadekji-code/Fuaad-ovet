@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ajout — Lot 3 (8 sections, sans images)</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:20px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:10px 14px;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.row .name{font-size:14px;}
+.status{font-size:13px;white-space:nowrap;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+.wait{color:#999;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;width:100%;}
+button:disabled{background:#666;}
+#summary{margin-top:20px;font-size:15px;font-weight:bold;padding:14px;border-radius:8px;background:#243652;}
+</style>
+</head>
+<body>
+<h1>📦 Ajout Lot 3 — 8 sections (sans images)</h1>
+<p>يضيف منتجات Cadre Photo, Plaque de Rue, Crayons, Stylos, Balle de Baseball, Carnets, Magnets Timbres, Magnets Plaque Souples. بدون صور (image = null). يُستخدم مرة واحدة فقط.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="summary" style="display:none;"></div>
+<div id="results" style="margin-top:16px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_X95sZEaadGOpz9b4PkJvAA_Wq1K_aN9';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORIES = [
+  { id: 'cat-cadre-photo', name: 'Cadres Photo', sort_order: 40 },
+  { id: 'cat-plaque-rue', name: 'Plaques de Rue', sort_order: 41 },
+  { id: 'cat-crayons', name: 'Crayons', sort_order: 42 },
+  { id: 'cat-stylos', name: 'Stylos', sort_order: 43 },
+  { id: 'cat-balle-baseball', name: 'Balle de Baseball', sort_order: 44 },
+  { id: 'cat-carnets', name: 'Carnets', sort_order: 45 },
+  { id: 'cat-magnets-timbres', name: 'Magnets Timbres', sort_order: 46 },
+  { id: 'cat-magnets-plaque', name: 'Magnets Plaque Souples', sort_order: 47 }
+];
+
+/* ===================== CADRES PHOTO (pages 86-88) ===================== */
+const CADRE_PHOTO = [
+  { ref: 'PH3', name: 'Cadre photo doré, 2 monuments/rouge (12x8.5cm)', price: 3.00 },
+  { ref: 'PH4', name: 'Cadre photo argenté, 2 monuments/bleu (12x8.5cm)', price: 3.00 },
+  { ref: 'PH7-BL', name: 'Cadre photo argenté carré, Tour/coeur bleu (12x13.5cm)', price: 3.50 },
+  { ref: 'PH7-RS', name: 'Cadre photo argenté carré, Tour/coeur rose (12x13.5cm)', price: 3.50 },
+  { ref: 'PH8', name: 'Cadre photo argenté, 4 monuments/coeur (19x16.5cm)', price: 4.90 },
+  { ref: 'PH9', name: 'Cadre photo argenté carré, 4 monuments (12x12cm)', price: 4.90 },
+  { ref: 'PH11B', name: 'Cadre photo argenté, 5 monuments blanc (15x20cm)', price: 4.90 },
+  { ref: 'PH13', name: 'Cadre photo argenté, 2 monuments/étoiles (15x20cm)', price: 4.90 },
+  { ref: 'PH32A', name: 'Cadre photo GM argenté, Moulin Rouge (18x20cm)', price: 4.90 },
+  { ref: 'PH32B', name: 'Cadre photo GM bronze, Moulin Rouge (18x20cm)', price: 4.90 },
+  { ref: 'PH33A', name: 'Cadre photo rect argenté, 5 mnts/lovers (17x19.5cm)', price: 4.90 },
+  { ref: 'PH33B', name: 'Cadre photo rect bronze, 5 mnts/lovers (17x19.5cm)', price: 4.90 },
+  { ref: 'PH58B', name: 'Cadre photo mini blanc argenté, Tour/socle (9.5x12cm)', price: 4.90 },
+  { ref: 'PH58RS', name: 'Cadre photo mini rose argenté, Tour/socle (9.5x12cm)', price: 4.90 },
+  { ref: 'PH14', name: 'Cadre photo, 5 monuments (18x25cm)', price: 4.90 },
+  { ref: 'PH15', name: 'Cadre photo GM double argenté, 5 monuments (18x25cm)', price: 4.90 },
+  { ref: 'PH18', name: 'Cadre photo, 5 monuments/lovers (14x18.5cm)', price: 4.90 },
+  { ref: 'PH21', name: 'Cadre photo PM argenté, Moulin Rouge (9x10cm)', price: 3.00 },
+  { ref: 'PH22', name: 'Cadre photo carré argenté, 5 mnts/lovers (14x16cm)', price: 4.00 },
+  { ref: 'PH30', name: 'Cadre photo rect bronze, Flèches (16x21cm)', price: 4.90 },
+  { ref: 'PH31A', name: 'Cadre photo rect argenté, Moulin Rouge (14.5x21cm)', price: 4.90 },
+  { ref: 'PH31B', name: 'Cadre photo rect bronze, Moulin Rouge (14.5x21cm)', price: 4.90 }
+];
+
+/* ===================== PLAQUES DE RUE (page 79) ===================== */
+const PLAQUE_RUE = [
+  { ref: 'PLA99001', name: 'Plaque de rue — Tournée du Chat Noir', price: 2.00 },
+  { ref: 'PLA99006', name: 'Plaque de rue — Paris immatriculation F75', price: 2.00 },
+  { ref: 'PLA99007', name: 'Plaque de rue — Paris drapeau/tour', price: 2.00 },
+  { ref: 'PLA99009', name: 'Plaque de rue — Avenue des Champs Élysées (8e Arr.)', price: 2.00 },
+  { ref: 'PLA99010', name: 'Plaque de rue — Tour Eiffel Paris (7e Arr.)', price: 2.00 },
+  { ref: 'PLA99011', name: 'Plaque de rue — Montmartre (18e Arr.)', price: 2.00 },
+  { ref: 'PLA99012', name: 'Plaque de rue — Notre-Dame (4e Arr.)', price: 2.00 },
+  { ref: 'PLA99014', name: 'Plaque de rue — Paris Ville Lumière', price: 2.00 },
+  { ref: 'PLA99015', name: 'Plaque de rue — Paris la ville magie', price: 2.00 },
+  { ref: 'PLA99016', name: 'Plaque de rue — I left my heart in Paris', price: 2.00 },
+  { ref: 'PLA99019', name: 'Plaque de rue — I love Paris', price: 2.00 },
+  { ref: 'PLA99021', name: 'Plaque de rue — Cabarets rouge', price: 2.00 },
+  { ref: 'PLA99022', name: 'Plaque de rue — Cabarets jaune', price: 2.00 },
+  { ref: 'PLA99023', name: 'Plaque de rue — Paris monuments collage', price: 2.00 },
+  { ref: 'PLA99024', name: 'Plaque de rue — Paris peinture collage', price: 2.00 }
+];
+
+/* ===================== CRAYONS (page 53, 63) ===================== */
+const CRAYONS = [
+  { ref: 'CRA5820', name: 'Boîte de 72 crayons Paris (présentoir)', price: 15.85 },
+  { ref: 'CR41', name: 'Crayons de couleur — boîte de 12 petits crayons', price: 1.75 }
+];
+
+/* ===================== STYLOS (page 54, 63) ===================== */
+const STYLOS = [
+  { ref: 'STY22A', name: 'Stylo Paris — Tour Eiffel/carte', price: 0.33 },
+  { ref: 'STY22B', name: 'Stylo Paris — monuments vintage', price: 0.33 },
+  { ref: 'STY22E', name: 'Stylo Paris — drapeau France', price: 0.33 },
+  { ref: 'STY22G', name: 'Stylo Paris — vintage clé/papillon', price: 0.33 },
+  { ref: 'STY22H', name: 'Stylo Paris — femme vintage/roses', price: 0.33 },
+  { ref: 'STY22I', name: 'Stylo Paris — Tour Eiffel sépia', price: 0.33 },
+  { ref: 'CAR911', name: 'Carnet et stylo Paris', price: 1.00 }
+];
+
+/* ===================== BALLE DE BASEBALL (page 55) ===================== */
+const BALLE_BASEBALL = [
+  { ref: 'BALBL', name: 'Balle de baseball — Paris bleue', price: 2.20 },
+  { ref: 'BALF', name: 'Balle de baseball — coq France', price: 2.20 },
+  { ref: 'BALP', name: 'Balle de baseball — I love Paris blanche', price: 2.20 }
+];
+
+/* ===================== CARNETS (pages 61-62) ===================== */
+const CARNETS = [
+  { ref: 'CAR90-02', name: 'Carnet photo PM — Paris/Seine (7.3x10.5cm)', price: 1.00 },
+  { ref: 'CAR90-07', name: 'Carnet photo PM — Paris/métro (7.3x10.5cm)', price: 1.00 },
+  { ref: 'CAR90-09', name: 'Carnet photo PM — Paris/Arc de Triomphe (7.3x10.5cm)', price: 1.00 },
+  { ref: 'CAR90-TO', name: 'Carnet photo PM — Tour Eiffel noir/blanc (7.3x10.5cm)', price: 1.00 },
+  { ref: 'CAR190-2', name: 'Carnet MM — Paris/Seine (9x14cm)', price: 1.50 },
+  { ref: 'CAR190-7', name: 'Carnet MM — Paris/métro (9x14cm)', price: 1.50 },
+  { ref: 'CAR190-9', name: 'Carnet MM — Paris/Arc de Triomphe (9x14cm)', price: 1.50 },
+  { ref: 'CAR190-TO', name: 'Carnet MM — Tour/bateau (9x14cm)', price: 1.50 }
+];
+
+/* ===================== MAGNETS TIMBRES (page 42) ===================== */
+const MAGNETS_TIMBRES = [
+  { ref: 'MA12001', name: 'Magnet timbre — Notre-Dame/Seine', price: 0.80 },
+  { ref: 'MA12002', name: 'Magnet timbre — Tour Eiffel/Seine', price: 0.80 },
+  { ref: 'MA12003', name: 'Magnet timbre — Paris coucher de soleil', price: 0.80 },
+  { ref: 'MA12004', name: 'Magnet timbre — Tour Eiffel/bateaux', price: 0.80 },
+  { ref: 'MA12005', name: 'Magnet timbre — La Joconde', price: 0.80 },
+  { ref: 'MA12006', name: 'Magnet timbre — Tournée du Chat Noir', price: 0.80 },
+  { ref: 'MA12007', name: 'Magnet timbre — Moulin Rouge', price: 0.80 },
+  { ref: 'MA12008', name: 'Magnet timbre — rue Paris parapluie rouge', price: 0.80 },
+  { ref: 'MA12009', name: 'Magnet timbre — Tour Eiffel/fontaines', price: 0.80 },
+  { ref: 'MA120010', name: 'Magnet timbre — Notre-Dame marché', price: 0.80 },
+  { ref: 'MA120011', name: 'Magnet timbre — Sacré-Cœur/rue', price: 0.80 },
+  { ref: 'MA120012', name: 'Magnet timbre — Arc de Triomphe/rue', price: 0.80 },
+  { ref: 'MA120013', name: 'Magnet timbre — Tour Eiffel/bateau-mouche', price: 0.80 },
+  { ref: 'MA120014', name: 'Magnet timbre — Tour Eiffel/pont', price: 0.80 },
+  { ref: 'MA120015', name: 'Magnet timbre — Paris vue Seine', price: 0.80 }
+];
+
+/* ===================== MAGNETS PLAQUE SOUPLES (page 51) ===================== */
+const MAGNETS_PLAQUE = [
+  { ref: 'MA112-02', name: 'Magnet plaque souple — Capital City of Paris noir (12x5cm)', price: 0.50 },
+  { ref: 'MA112-03', name: 'Magnet plaque souple — Capital City of Paris blanc (12x5cm)', price: 0.50 },
+  { ref: 'MA112-06', name: 'Magnet plaque souple — Paris immatriculation F75 (12x5cm)', price: 0.50 },
+  { ref: 'MA112-07', name: 'Magnet plaque souple — Paris drapeau/tour (12x5cm)', price: 0.50 },
+  { ref: 'MA112-09', name: 'Magnet plaque souple — Avenue des Champs Élysées (7x9cm)', price: 0.50 },
+  { ref: 'MA112-12', name: 'Magnet plaque souple — Notre-Dame (7x9cm)', price: 0.50 },
+  { ref: 'MA112-14', name: 'Magnet plaque souple — Paris Ville Lumière (12x5cm)', price: 0.50 },
+  { ref: 'MA112-17', name: 'Magnet plaque souple — Paris Old No.1 City blanc (12x5cm)', price: 0.50 },
+  { ref: 'MA112-18', name: 'Magnet plaque souple — Paris Old No.1 City noir (12x5cm)', price: 0.50 },
+  { ref: 'MA112-19', name: 'Magnet plaque souple — I love Paris (12x5cm)', price: 0.50 },
+  { ref: 'MA112-20', name: 'Magnet plaque souple — La Joconde (12x5cm)', price: 0.50 }
+];
+
+function logRow(name) {
+  const results = document.getElementById('results');
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div class="name">${name}</div><div class="status wait">…</div>`;
+  results.appendChild(row);
+  return row.querySelector('.status');
+}
+
+async function addGroup(title, items, categoryId) {
+  const results = document.getElementById('results');
+  const header = document.createElement('h2');
+  header.textContent = title + ' (' + items.length + ')';
+  results.appendChild(header);
+
+  let okCount = 0, errCount = 0;
+
+  for (const item of items) {
+    const statusEl = logRow(item.name);
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: item.ref,
+        ref: item.ref,
+        name: item.name,
+        price: item.price,
+        category_id: categoryId,
+        image: null,
+        unit_step: 1,
+        unit_label: '',
+        sort_order: 100,
+        out_of_stock: item.outOfStock || false
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓';
+      statusEl.className = 'status ok';
+      okCount++;
+    } catch (e) {
+      statusEl.textContent = '✗ ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+      errCount++;
+    }
+  }
+  return { okCount, errCount };
+}
+
+document.getElementById('runBtn').addEventListener('click', async function() {
+  const btn = this;
+  btn.disabled = true;
+  btn.textContent = 'جاري الإضافة...';
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  const catHeader = document.createElement('h2');
+  catHeader.textContent = 'Catégories';
+  results.appendChild(catHeader);
+
+  let catErrors = 0;
+  for (const cat of NEW_CATEGORIES) {
+    const statusEl = logRow(cat.name);
+    try {
+      const { error } = await supabaseClient.from('categories').upsert({ id: cat.id, name: cat.name, sort_order: cat.sort_order });
+      if (error) throw error;
+      statusEl.textContent = '✓';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+      catErrors++;
+    }
+  }
+
+  let totalOk = 0, totalErr = catErrors;
+
+  const groups = [
+    ['Cadres Photo', CADRE_PHOTO, 'cat-cadre-photo'],
+    ['Plaques de Rue', PLAQUE_RUE, 'cat-plaque-rue'],
+    ['Crayons', CRAYONS, 'cat-crayons'],
+    ['Stylos', STYLOS, 'cat-stylos'],
+    ['Balle de Baseball', BALLE_BASEBALL, 'cat-balle-baseball'],
+    ['Carnets', CARNETS, 'cat-carnets'],
+    ['Magnets Timbres', MAGNETS_TIMBRES, 'cat-magnets-timbres'],
+    ['Magnets Plaque Souples', MAGNETS_PLAQUE, 'cat-magnets-plaque']
+  ];
+
+  for (const [title, items, catId] of groups) {
+    const r = await addGroup(title, items, catId);
+    totalOk += r.okCount;
+    totalErr += r.errCount;
+  }
+
+  const summary = document.getElementById('summary');
+  summary.style.display = 'block';
+  summary.textContent = `— انتهى — ✓ ${totalOk} منتج تمت إضافته بنجاح | ✗ ${totalErr} خطأ`;
+  summary.style.background = totalErr > 0 ? '#B23B2E' : '#2d5a2d';
+
+  btn.textContent = 'تمت العملية ✓';
+});
+</script>
+</body>
+</html>
