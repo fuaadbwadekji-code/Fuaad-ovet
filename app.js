@@ -859,11 +859,13 @@ function renderAdminProductList() {
         </div>
         <div class="admin-row-actions">
           <button class="admin-icon-btn ${p.hidden ? 'active-hide' : ''}" data-hide="${p.id}" title="${p.hidden ? 'Réafficher ce produit' : 'Masquer ce produit'}">${p.hidden ? '👁️‍🗨️' : '👁️'}</button>
+          <button class="admin-icon-btn" data-quickphoto="${p.id}" title="Changer la photo rapidement">📷</button>
           <button class="admin-icon-btn" data-lotmenu="${p.id}" title="Définir un lot">📦</button>
           <button class="admin-icon-btn" data-edit="${p.id}">✎</button>
           <button class="admin-icon-btn danger" data-del="${p.id}">🗑</button>
         </div>
       </div>
+      <input type="file" accept="image/*" class="quickphoto-input" data-quickphoto-input="${p.id}" style="display:none;">
       <div class="lot-quickpicker" id="lotpicker-${p.id}" style="display:none;">
         <span class="lqp-label">Vente par lot de :</span>
         <button class="lqp-btn ${p.unitStep === 6 ? 'active' : ''}" data-quicklot="${p.id}" data-qty="6">6</button>
@@ -876,6 +878,17 @@ function renderAdminProductList() {
   list.innerHTML = html;
   list.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openProductForm(b.dataset.edit)));
   list.querySelectorAll('[data-hide]').forEach(b => b.addEventListener('click', () => toggleHideProduct(b.dataset.hide)));
+  list.querySelectorAll('[data-quickphoto]').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.quickphoto;
+    const fileInput = list.querySelector(`[data-quickphoto-input="${id}"]`);
+    if (fileInput) fileInput.click();
+  }));
+  list.querySelectorAll('[data-quickphoto-input]').forEach(input => input.addEventListener('change', (e) => {
+    const id = input.dataset.quickphotoInput;
+    const file = e.target.files[0];
+    if (file) quickSetProductImage(id, file);
+    input.value = '';
+  }));
   list.querySelectorAll('[data-lotmenu]').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.lotmenu;
     const picker = document.getElementById('lotpicker-' + id);
@@ -914,6 +927,51 @@ async function toggleHideProduct(id) {
   }
 }
 
+/* Remplace rapidement la photo d'un produit depuis la liste admin,
+   sans passer par le formulaire complet. Aucun traitement (pas de
+   détourage) : la photo est juste redimensionnée puis enregistrée
+   immédiatement. */
+function quickSetProductImage(productId, file) {
+  const p = products.find(x => x.id === productId);
+  if (!p) return;
+  if (file.size > 6 * 1024 * 1024) {
+    showToast('Image trop lourde (max 6 Mo)');
+    return;
+  }
+  showToast('⏳ Envoi de la photo…');
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = async () => {
+      const maxDim = 800;
+      let w = img.width, h = img.height;
+      if (w > h && w > maxDim) { h = h * maxDim / w; w = maxDim; }
+      else if (h > maxDim) { w = w * maxDim / h; h = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const newImageData = canvas.toDataURL('image/jpeg', 0.85);
+
+      try {
+        const { error } = await supabaseClient.from('products').update({ image: newImageData }).eq('id', productId);
+        if (error) throw error;
+        p.image = newImageData;
+        showToast(`✓ Photo de ${p.ref} mise à jour`);
+        renderAdminProductList();
+        renderGrid();
+        renderHomeTiles();
+      } catch (e) {
+        console.error(e);
+        showToast('⚠️ Erreur lors de l\'enregistrement de la photo');
+      }
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 async function quickSetUnitStep(productId, qty) {
   const p = products.find(x => x.id === productId);
   if (!p) return;
@@ -933,6 +991,7 @@ async function quickSetUnitStep(productId, qty) {
     showToast('⚠️ Erreur lors de la mise à jour');
   }
 }
+
 
 async function deleteProduct(id) {
   if (!confirm('Supprimer ce produit définitivement ?')) return;
@@ -1193,8 +1252,6 @@ function openProductForm(productId) {
   const imgPlaceholder = document.getElementById('imagePlaceholder');
   const delBtn = document.getElementById('deleteProductBtn');
   const cropBtn = document.getElementById('openCropBtn');
-  document.getElementById('bgStatus').textContent = '';
-  document.getElementById('bgRemoveToggle').checked = true;
 
   if (editingProductId) {
     const p = products.find(x => x.id === editingProductId);
@@ -1246,69 +1303,6 @@ function openProductForm(productId) {
   openDrawer('productFormDrawer');
 }
 
-/* ---------- Détourage local (suppression de fond) ----------
-   Technique : on suppose un fond ~uniforme proche des coins de l'image
-   (cas standard des photos produit en studio). On calcule la couleur
-   moyenne des 4 coins puis on rend transparent tout pixel suffisamment
-   proche de cette couleur, avec un anti-aliasing sur les bords. */
-function removeBackgroundLocally(imgEl, callback) {
-  const w = imgEl.naturalWidth, h = imgEl.naturalHeight;
-  const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(imgEl, 0, 0, w, h);
-
-  let imageData;
-  try {
-    imageData = ctx.getImageData(0, 0, w, h);
-  } catch (e) {
-    callback(null);
-    return;
-  }
-  const data = imageData.data;
-
-  // échantillonner les coins pour estimer la couleur de fond
-  const sampleSize = Math.max(4, Math.round(Math.min(w, h) * 0.03));
-  function avgColorAt(x0, y0) {
-    let r = 0, g = 0, b = 0, n = 0;
-    for (let y = y0; y < y0 + sampleSize; y++) {
-      for (let x = x0; x < x0 + sampleSize; x++) {
-        const i = (y * w + x) * 4;
-        r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
-      }
-    }
-    return [r / n, g / n, b / n];
-  }
-  const corners = [
-    avgColorAt(0, 0),
-    avgColorAt(w - sampleSize, 0),
-    avgColorAt(0, h - sampleSize),
-    avgColorAt(w - sampleSize, h - sampleSize)
-  ];
-  const bg = [
-    corners.reduce((s, c) => s + c[0], 0) / 4,
-    corners.reduce((s, c) => s + c[1], 0) / 4,
-    corners.reduce((s, c) => s + c[2], 0) / 4
-  ];
-
-  const threshold = 38;   // distance couleur tolérée comme "fond"
-  const featherZone = 24; // zone de transition douce
-
-  for (let i = 0; i < data.length; i += 4) {
-    const dr = data[i] - bg[0], dg = data[i + 1] - bg[1], db = data[i + 2] - bg[2];
-    const dist = Math.sqrt(dr * dr + dg * dg + db * db);
-    if (dist < threshold) {
-      data[i + 3] = 0;
-    } else if (dist < threshold + featherZone) {
-      const alpha = (dist - threshold) / featherZone;
-      data[i + 3] = Math.round(data[i + 3] * alpha);
-    }
-  }
-
-  ctx.putImageData(imageData, 0, 0);
-  callback(canvas.toDataURL('image/png'));
-}
-
 function setupImageUpload() {
   const fileInput = document.getElementById('imageFileInput');
   fileInput.addEventListener('change', (e) => {
@@ -1318,8 +1312,6 @@ function setupImageUpload() {
       showToast('Image trop lourde (max 6 Mo)');
       return;
     }
-    const bgStatus = document.getElementById('bgStatus');
-    bgStatus.textContent = '⏳ Traitement de l\'image…';
 
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -1334,36 +1326,11 @@ function setupImageUpload() {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, w, h);
 
-        const removeChecked = document.getElementById('bgRemoveToggle').checked;
-        if (removeChecked) {
-          const resizedImg = new Image();
-          resizedImg.onload = () => {
-            removeBackgroundLocally(resizedImg, (resultDataUrl) => {
-              if (resultDataUrl) {
-                pendingImageData = resultDataUrl;
-                document.getElementById('imagePreview').src = resultDataUrl;
-                document.getElementById('imagePreview').style.display = 'block';
-                document.getElementById('imagePlaceholder').style.display = 'none';
-                bgStatus.textContent = '✓ Fond retiré automatiquement';
-              } else {
-                pendingImageData = canvas.toDataURL('image/jpeg', 0.85);
-                document.getElementById('imagePreview').src = pendingImageData;
-                document.getElementById('imagePreview').style.display = 'block';
-                document.getElementById('imagePlaceholder').style.display = 'none';
-                bgStatus.textContent = '⚠️ Détourage indisponible, photo originale conservée';
-              }
-              document.getElementById('openCropBtn').style.display = 'block';
-            });
-          };
-          resizedImg.src = canvas.toDataURL('image/jpeg', 0.92);
-        } else {
-          pendingImageData = canvas.toDataURL('image/jpeg', 0.85);
-          document.getElementById('imagePreview').src = pendingImageData;
-          document.getElementById('imagePreview').style.display = 'block';
-          document.getElementById('imagePlaceholder').style.display = 'none';
-          bgStatus.textContent = '';
-          document.getElementById('openCropBtn').style.display = 'block';
-        }
+        pendingImageData = canvas.toDataURL('image/jpeg', 0.85);
+        document.getElementById('imagePreview').src = pendingImageData;
+        document.getElementById('imagePreview').style.display = 'block';
+        document.getElementById('imagePlaceholder').style.display = 'none';
+        document.getElementById('openCropBtn').style.display = 'block';
       };
       img.src = ev.target.result;
     };
