@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>اختبار منتج واحد</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; background:#111; color:#eee; font-size:18px; }
+  button { padding: 18px 24px; font-size: 20px; margin: 15px 0; cursor:pointer; width:100%; border-radius:10px; border:none; background:#2563eb; color:#fff; font-weight:bold; }
+  button:disabled { background:#555; }
+  #status { font-size: 22px; font-weight:bold; padding:20px; border-radius:10px; margin-top:15px; min-height:60px; }
+  .wait { background:#333; color:#aaa; }
+  .ok { background:#0a5; color:#fff; }
+  .err { background:#a22; color:#fff; }
+  #detail { white-space: pre-wrap; background:#000; color:#5f5; padding:10px; border-radius:6px; margin-top:10px; font-size:13px; font-family:monospace; }
+</style>
+</head>
+<body>
+<h2>📦 اختبار: إضافة منتج واحد بدون صورة</h2>
+<div id="status" class="wait">اضغطي الزر تحت ⬇️</div>
+<button id="runBtn">جرّب الإضافة الآن</button>
+<div id="detail"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const statusEl = document.getElementById('status');
+const detailEl = document.getElementById('detail');
+const btn = document.getElementById('runBtn');
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls;
+}
+
+function showDetail(text) {
+  detailEl.textContent = text;
+}
+
+btn.addEventListener('click', async function() {
+  btn.disabled = true;
+  setStatus('⏳ جاري التحقق...', 'wait');
+  showDetail('');
+
+  try {
+    if (typeof window.supabase === 'undefined') {
+      setStatus('🔴 خطأ: مكتبة Supabase ما حمّلت. تحققي من الإنترنت.', 'err');
+      btn.disabled = false;
+      return;
+    }
+
+    const SUPABASE_URL = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_X95sZEaadGOpz9b4PkJvAA_Wq1K_aN9';
+    const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const testId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : ('test-' + Date.now());
+
+    setStatus('⏳ جاري إنشاء فئة تجريبية...', 'wait');
+    const catResult = await client.from('categories').upsert({ id: 'cat-test-temp', name: 'Test Temp', sort_order: 999 });
+    if (catResult.error) {
+      setStatus('🔴 فشل عند إنشاء الفئة', 'err');
+      showDetail(JSON.stringify(catResult.error, null, 2));
+      btn.disabled = false;
+      return;
+    }
+
+    setStatus('⏳ جاري إضافة المنتج بدون صورة...', 'wait');
+    const productResult = await client.from('products').insert([{
+      id: testId,
+      ref: 'TEST-NULL-IMG',
+      name: 'Produit Test',
+      price: 1.00,
+      category_id: 'cat-test-temp',
+      image: null,
+      unit_step: 1,
+      unit_label: '',
+      sort_order: 999,
+      out_of_stock: false
+    }]).select();
+
+    if (productResult.error) {
+      setStatus('🔴 فشل! العمود image لا يقبل بدون صورة', 'err');
+      showDetail(JSON.stringify(productResult.error, null, 2));
+      btn.disabled = false;
+      return;
+    }
+
+    setStatus('✅ نجح! ممكن نضيف منتجات بدون صور', 'ok');
+    showDetail(JSON.stringify(productResult.data, null, 2));
+
+    // تنظيف
+    await client.from('products').delete().eq('id', testId);
+    await client.from('categories').delete().eq('id', 'cat-test-temp');
+
+  } catch (e) {
+    setStatus('🔴 خطأ غير متوقع', 'err');
+    showDetail((e && e.message) ? e.message : JSON.stringify(e));
+  }
+
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>
