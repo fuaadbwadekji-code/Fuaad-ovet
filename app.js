@@ -47,6 +47,16 @@ function escapeHtml(s) {
   return d.innerHTML;
 }
 
+/* Un produit est visible dans la boutique publique seulement si :
+   - il n'est pas masqué individuellement, ET
+   - sa catégorie n'est pas masquée. */
+function isProductVisible(p) {
+  if (p.hidden) return false;
+  const cat = categories.find(c => c.id === p.categoryId);
+  if (cat && cat.hidden) return false;
+  return true;
+}
+
 /* ---------- Drawers ---------- */
 function openDrawer(id) {
   document.getElementById('overlay').classList.add('show');
@@ -80,7 +90,8 @@ async function loadAllData() {
       id: c.id, name: c.name, sort_order: c.sort_order,
       bulkGroupId: c.bulk_group_id || null,
       bulkThresholdQty: c.bulk_threshold_qty || null,
-      bulkPrice: c.bulk_price != null ? Number(c.bulk_price) : null
+      bulkPrice: c.bulk_price != null ? Number(c.bulk_price) : null,
+      hidden: !!c.hidden
     }));
     products = (prodRes.data || []).map(p => ({
       id: p.id, ref: p.ref, name: p.name, price: Number(p.price),
@@ -109,7 +120,7 @@ async function loadAllData() {
    ========================================================= */
 function renderCategoryStrip() {
   const strip = document.getElementById('catStrip');
-  const visibleProducts = products.filter(p => !p.hidden);
+  const visibleProducts = products.filter(isProductVisible);
   const allCount = visibleProducts.length;
   let html = `<button class="cat-chip catalogue-chip" data-action="open-catalogue">🗂️ Catalogue</button>`;
   html += `<button class="cat-chip ${activeCategory === 'all' ? 'active' : ''}" data-cat="all">Tout <span class="count">${allCount}</span></button>`;
@@ -117,7 +128,7 @@ function renderCategoryStrip() {
   if (featuredCount > 0) {
     html += `<button class="cat-chip featured-chip ${activeCategory === 'featured' ? 'active' : ''}" data-cat="featured">⭐ Meilleures ventes <span class="count">${featuredCount}</span></button>`;
   }
-  categories.forEach(c => {
+  categories.filter(c => !c.hidden).forEach(c => {
     const count = visibleProducts.filter(p => p.categoryId === c.id).length;
     html += `<button class="cat-chip ${activeCategory === c.id ? 'active' : ''}" data-cat="${c.id}">${escapeHtml(c.name)} <span class="count">${count}</span></button>`;
   });
@@ -228,7 +239,7 @@ function startOrderPolling() {
    ========================================================= */
 function renderHomeTiles() {
   const container = document.getElementById('homeTilesContainer');
-  const visibleProducts = products.filter(p => !p.hidden);
+  const visibleProducts = products.filter(isProductVisible);
   let html = '';
   const featuredCount = visibleProducts.filter(p => p.featured).length;
   if (featuredCount > 0) {
@@ -239,7 +250,7 @@ function renderHomeTiles() {
       <div class="tile-label">⭐ Meilleures ventes<span class="tile-count">${featuredCount} article${featuredCount > 1 ? 's' : ''}</span></div>
     </div>`;
   }
-  categories.forEach(cat => {
+  categories.filter(cat => !cat.hidden).forEach(cat => {
     const items = visibleProducts.filter(p => p.categoryId === cat.id);
     if (items.length === 0) return;
     const sample = items[0];
@@ -264,7 +275,7 @@ function renderHomeTiles() {
    RENDU — Grille produits
    ========================================================= */
 function getFilteredProducts() {
-  let list = products.filter(p => !p.hidden);
+  let list = products.filter(isProductVisible);
   if (activeCategory === 'featured') {
     list = list.filter(p => p.featured);
   } else if (activeCategory !== 'all') {
@@ -281,7 +292,7 @@ function renderGrid() {
   const container = document.getElementById('gridContainer');
   const empty = document.getElementById('emptyState');
   const list = getFilteredProducts();
-  const visibleProducts = products.filter(p => !p.hidden);
+  const visibleProducts = products.filter(isProductVisible);
 
   if (list.length === 0) {
     container.innerHTML = '';
@@ -298,7 +309,7 @@ function renderGrid() {
       featured.forEach(p => html += productCardHtml(p));
       html += `</div>`;
     }
-    categories.forEach(cat => {
+    categories.filter(cat => !cat.hidden).forEach(cat => {
       const items = visibleProducts.filter(p => p.categoryId === cat.id);
       if (items.length === 0) return;
       html += `<div class="section-title">${escapeHtml(cat.name)}</div><div class="grid">`;
@@ -1024,9 +1035,10 @@ function renderAdminCatList() {
     const count = products.filter(p => p.categoryId === c.id).length;
     const hasBulk = c.bulkThresholdQty && c.bulkPrice != null;
     html += `
-    <div class="cat-manage-row">
+    <div class="cat-manage-row${c.hidden ? ' hidden-product-row' : ''}">
       <input type="text" value="${escapeHtml(c.name)}" data-cat-id="${c.id}">
       <span style="font-size:11px;color:var(--brass);flex-shrink:0;">${count} art.</span>
+      <button class="admin-icon-btn ${c.hidden ? 'active-hide' : ''}" data-hidecat="${c.id}" title="${c.hidden ? 'Réafficher cette catégorie' : 'Masquer cette catégorie'}">${c.hidden ? '👁️‍🗨️' : '👁️'}</button>
       <button class="admin-icon-btn danger" data-delcat="${c.id}">🗑</button>
     </div>
     <div class="bulk-pricing-box">
@@ -1080,6 +1092,9 @@ function renderAdminCatList() {
         showToast('Catégorie mise à jour');
       }
     });
+  });
+  list.querySelectorAll('[data-hidecat]').forEach(btn => {
+    btn.addEventListener('click', () => toggleHideCategory(btn.dataset.hidecat));
   });
   list.querySelectorAll('[data-delcat]').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -1141,6 +1156,47 @@ function renderAdminCatList() {
     btn.addEventListener('click', () => bulkSetUnitStepForCategory(btn.dataset.bulklotCat, parseInt(btn.dataset.bulklotQty, 10)));
   });
 }
+
+/* Bascule l'état masqué/visible d'une catégorie entière. Masquer une
+   catégorie cache TOUS ses produits de la boutique publique, qu'ils
+   soient masqués individuellement ou non. Réafficher la catégorie fait
+   réapparaître tous ses produits, y compris ceux qui avaient été
+   masqués individuellement avant le masquage de la catégorie. */
+async function toggleHideCategory(categoryId) {
+  const cat = categories.find(c => c.id === categoryId);
+  if (!cat) return;
+  const newHidden = !cat.hidden;
+  const catProducts = products.filter(p => p.categoryId === categoryId);
+
+  try {
+    const { error: catError } = await supabaseClient.from('categories').update({ hidden: newHidden }).eq('id', categoryId);
+    if (catError) throw catError;
+    cat.hidden = newHidden;
+
+    if (!newHidden && catProducts.length > 0) {
+      // Réaffichage de la catégorie : on réaffiche aussi tous ses produits
+      const { error: prodError } = await supabaseClient
+        .from('products')
+        .update({ hidden: false })
+        .eq('category_id', categoryId);
+      if (prodError) throw prodError;
+      catProducts.forEach(p => { p.hidden = false; });
+    }
+
+    showToast(newHidden
+      ? `✓ Catégorie « ${cat.name} » masquée (${catProducts.length} produit${catProducts.length > 1 ? 's' : ''})`
+      : `✓ Catégorie « ${cat.name} » de nouveau visible`);
+    renderAdminCatList();
+    renderAdminProductList();
+    renderCategoryStrip();
+    renderGrid();
+    renderHomeTiles();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠️ Erreur lors de la mise à jour de la catégorie');
+  }
+}
+
 
 async function bulkSetUnitStepForCategory(categoryId, qty) {
   const cat = categories.find(c => c.id === categoryId);
