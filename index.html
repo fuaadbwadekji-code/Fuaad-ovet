@@ -166,6 +166,19 @@ button{font-family:inherit;cursor:pointer;}
 }
 @keyframes spin{to{transform:rotate(360deg);}}
 
+/* ===== État de chargement des images (lazy loading) =====
+   Affiché tant que l'image d'un produit n'a pas encore été récupérée
+   depuis Supabase (évite un cadre vide/blanc disgracieux). */
+img.img-loading{
+  background:linear-gradient(110deg, #e8ddc4 8%, #f4ecd9 18%, #e8ddc4 33%);
+  background-size:200% 100%;
+  animation:img-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes img-shimmer{
+  0%{background-position:200% 0;}
+  100%{background-position:-200% 0;}
+}
+
 .home-tiles{
   display:grid;grid-template-columns:repeat(2,1fr);gap:14px;
 }

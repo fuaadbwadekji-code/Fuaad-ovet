@@ -13,6 +13,10 @@ if (typeof emailjs !== 'undefined' && EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.
 /* ---------- Constantes ---------- */
 const TVA_RATE = 0.20; // 20% — appliqué uniquement au moment de la confirmation de commande
 
+/* Colonnes légères chargées immédiatement (sans l'image, trop lourde
+   pour 900+ produits en une seule requête → provoque des timeouts). */
+const PRODUCT_LIGHT_COLUMNS = 'id, ref, name, price, category_id, unit_step, unit_label, out_of_stock, featured, hidden, sort_order';
+
 /* ---------- État ---------- */
 let categories = [];
 let products = [];
@@ -24,6 +28,84 @@ let editingProductId = null;
 let adminUnlocked = false;
 let pendingImageData = null;
 let currentUnitMode = 'unit'; // 'unit' | 'bulk'
+
+/* ---------- Images à la demande (lazy loading) ----------
+   Les images ne sont jamais incluses dans le chargement initial des
+   produits. Chaque image est récupérée individuellement la première
+   fois qu'une carte produit devient visible à l'écran, puis mise en
+   cache en mémoire pour éviter de la redemander. */
+const imageCache = new Map(); // productId -> dataURL (ou '' si absente)
+const imagePending = new Set(); // productId en cours de chargement
+let imageObserver = null;
+
+async function fetchProductImage(productId) {
+  if (imageCache.has(productId)) return imageCache.get(productId);
+  if (imagePending.has(productId)) return null; // déjà en cours, l'observer redéclenchera l'affichage
+  imagePending.add(productId);
+  try {
+    const { data, error } = await supabaseClient
+      .from('products')
+      .select('image')
+      .eq('id', productId)
+      .single();
+    if (error) throw error;
+    const img = (data && data.image) || '';
+    imageCache.set(productId, img);
+    return img;
+  } catch (e) {
+    console.warn('Image indisponible pour', productId, e);
+    imageCache.set(productId, '');
+    return '';
+  } finally {
+    imagePending.delete(productId);
+  }
+}
+
+function applyImageToElement(el, dataUrl) {
+  if (!el) return;
+  if (dataUrl) {
+    el.src = dataUrl;
+    el.classList.remove('img-loading');
+  }
+}
+
+/* Observe tous les éléments [data-lazy-img] visibles dans le conteneur
+   donné (par défaut tout le document) et charge leur image dès qu'ils
+   entrent dans le viewport. */
+function setupLazyImageObserver() {
+  if (imageObserver) return imageObserver;
+  imageObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const el = entry.target;
+      const id = el.dataset.lazyImg;
+      imageObserver.unobserve(el);
+      if (!id) return;
+      if (imageCache.has(id)) {
+        applyImageToElement(el, imageCache.get(id));
+        return;
+      }
+      fetchProductImage(id).then(dataUrl => {
+        // L'élément peut avoir été retiré du DOM (re-render) entre temps ;
+        // on revérifie qu'il est toujours dans le document avant de l'utiliser.
+        applyImageToElement(el, dataUrl);
+      });
+    });
+  }, { root: null, rootMargin: '200px 0px', threshold: 0.01 });
+  return imageObserver;
+}
+
+function observeLazyImages(container) {
+  const observer = setupLazyImageObserver();
+  (container || document).querySelectorAll('[data-lazy-img]').forEach(el => {
+    const id = el.dataset.lazyImg;
+    if (imageCache.has(id)) {
+      applyImageToElement(el, imageCache.get(id));
+    } else {
+      observer.observe(el);
+    }
+  });
+}
 
 /* ---------- Toast ---------- */
 let toastTimer = null;
@@ -79,7 +161,7 @@ async function loadAllData() {
   try {
     const [catRes, prodRes, settRes] = await Promise.all([
       supabaseClient.from('categories').select('*').order('sort_order'),
-      supabaseClient.from('products').select('*').order('sort_order'),
+      supabaseClient.from('products').select(PRODUCT_LIGHT_COLUMNS).order('sort_order'),
       supabaseClient.from('settings').select('*').eq('id', 1).single()
     ]);
     if (catRes.error) throw catRes.error;
@@ -95,7 +177,7 @@ async function loadAllData() {
     }));
     products = (prodRes.data || []).map(p => ({
       id: p.id, ref: p.ref, name: p.name, price: Number(p.price),
-      categoryId: p.category_id, image: p.image,
+      categoryId: p.category_id, image: null, // chargée à la demande (lazy)
       unitStep: p.unit_step || 1, unitLabel: p.unit_label || '',
       outOfStock: !!p.out_of_stock, featured: !!p.featured,
       hidden: !!p.hidden
@@ -108,11 +190,23 @@ async function loadAllData() {
     renderGrid();
     renderHomeTiles();
     startOrderPolling();
+
+    // Ouvre directement le tiroir "Catalogue par catégorie" à l'arrivée
+    // sur le site, plutôt que d'afficher "Tout" (qui chargerait beaucoup
+    // d'images d'un coup).
+    openDrawer('catalogueDrawer');
   } catch (e) {
     console.error('Erreur de chargement', e);
     document.getElementById('loadingState').innerHTML =
       `<div style="opacity:0.85;">⚠️ Impossible de charger le catalogue.<br><small>${escapeHtml(e.message || '')}</small></div>`;
   }
+}
+
+/* Récupère l'image d'un produit (cache si déjà connue) pour les vues qui
+   ne passent pas par l'observer (ex. tuiles du tiroir Catalogue, panier). */
+async function getProductImageOrFetch(productId) {
+  if (imageCache.has(productId)) return imageCache.get(productId);
+  return fetchProductImage(productId);
 }
 
 /* =========================================================
@@ -246,7 +340,7 @@ function renderHomeTiles() {
     const sample = visibleProducts.find(p => p.featured);
     html += `
     <div class="home-tile featured-tile" data-cat="featured">
-      <img src="${sample.image || ''}" alt="">
+      <img data-lazy-img="${sample.id}" class="img-loading" alt="">
       <div class="tile-label">⭐ Meilleures ventes<span class="tile-count">${featuredCount} article${featuredCount > 1 ? 's' : ''}</span></div>
     </div>`;
   }
@@ -256,7 +350,7 @@ function renderHomeTiles() {
     const sample = items[0];
     html += `
     <div class="home-tile" data-cat="${cat.id}">
-      <img src="${sample.image || ''}" alt="">
+      <img data-lazy-img="${sample.id}" class="img-loading" alt="">
       <div class="tile-label">${escapeHtml(cat.name)}<span class="tile-count">${items.length} article${items.length > 1 ? 's' : ''}</span></div>
     </div>`;
   });
@@ -269,6 +363,9 @@ function renderHomeTiles() {
       closeDrawer('catalogueDrawer');
     });
   });
+  // Les tuiles du tiroir Catalogue sont peu nombreuses (une par catégorie) :
+  // on charge leurs images dès l'ouverture plutôt que d'attendre un scroll.
+  observeLazyImages(container);
 }
 
 /* =========================================================
@@ -334,12 +431,12 @@ function renderGrid() {
 
   container.innerHTML = html;
   attachCardListeners();
+  observeLazyImages(container);
 }
 
 function productCardHtml(p) {
   const qty = cart[p.id] || 0; // en unités réelles
   const lots = p.unitStep > 1 ? Math.round(qty / p.unitStep) : qty;
-  const img = p.image || '';
   const unitTag = p.unitStep > 1 ? `<span class="t-unit">📦 Lot de ${p.unitStep}</span>` : '';
   const bulkEligible = getBulkEligibleCategories();
   const effectivePrice = getEffectivePrice(p, bulkEligible);
@@ -353,7 +450,7 @@ function productCardHtml(p) {
     <div class="ticket out-of-stock" data-id="${p.id}">
       <div class="ticket-main">
         <div class="ticket-img-wrap">
-          <img src="${img}" alt="${escapeHtml(p.name)}" loading="lazy">
+          <img data-lazy-img="${p.id}" class="img-loading" alt="${escapeHtml(p.name)}" loading="lazy">
           <span class="stamp">RÉF<br>${escapeHtml(p.ref)}</span>
           <div class="stock-banner">Rupture de stock</div>
         </div>
@@ -375,7 +472,7 @@ function productCardHtml(p) {
   <div class="ticket" data-id="${p.id}">
     <div class="ticket-main">
       <div class="ticket-img-wrap">
-        <img src="${img}" alt="${escapeHtml(p.name)}" loading="lazy">
+        <img data-lazy-img="${p.id}" class="img-loading" alt="${escapeHtml(p.name)}" loading="lazy">
         <span class="stamp">RÉF<br>${escapeHtml(p.ref)}</span>
       </div>
       <div class="ticket-body">
@@ -562,7 +659,7 @@ function renderCartDrawer() {
     const isBulk = effectivePrice !== p.price;
     html += `
     <div class="cart-line" data-id="${id}">
-      <img src="${p.image || ''}" alt="">
+      <img data-lazy-img="${p.id}" class="img-loading" alt="">
       <div class="cart-line-info">
         <div class="nm">${escapeHtml(p.name)}</div>
         <div class="rf">Réf. ${escapeHtml(p.ref)} ${step > 1 ? '· ' + lotLabel : ''}</div>
@@ -581,6 +678,9 @@ function renderCartDrawer() {
 
   body.querySelectorAll('.cl-plus').forEach(b => b.addEventListener('click', () => addToCart(b.dataset.id, 1)));
   body.querySelectorAll('.cl-minus').forEach(b => b.addEventListener('click', () => addToCart(b.dataset.id, -1)));
+  // Le panier contient peu d'articles à la fois : on charge leurs images
+  // tout de suite plutôt que d'attendre un défilement dans le tiroir.
+  observeLazyImages(body);
 
   const { total, count } = cartTotal();
   document.getElementById('sumCount').textContent = count;
@@ -863,7 +963,7 @@ function renderAdminProductList() {
     html += `
     <div class="admin-product-row-wrap">
       <div class="admin-product-row${p.hidden ? ' hidden-product-row' : ''}">
-        <img src="${p.image || ''}" alt="">
+        <img data-lazy-img="${p.id}" class="img-loading" alt="">
         <div class="info">
           <div class="nm">${escapeHtml(p.name)}</div>
           <div class="meta">Réf. ${escapeHtml(p.ref)} · ${fmtPrice(p.price)} · ${cat ? escapeHtml(cat.name) : '—'}${unitInfo}${badges}</div>
@@ -913,6 +1013,9 @@ function renderAdminProductList() {
     await quickSetUnitStep(id, qty);
   }));
   list.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => deleteProduct(b.dataset.del)));
+  // La liste admin peut afficher beaucoup de produits ; on garde le
+  // comportement lazy (chargement au scroll) plutôt que tout charger.
+  observeLazyImages(list);
 }
 
 /* Bascule l'état masqué/visible d'un produit. Un produit masqué reste
@@ -969,6 +1072,7 @@ function quickSetProductImage(productId, file) {
         const { error } = await supabaseClient.from('products').update({ image: newImageData }).eq('id', productId);
         if (error) throw error;
         p.image = newImageData;
+        imageCache.set(productId, newImageData);
         showToast(`✓ Photo de ${p.ref} mise à jour`);
         renderAdminProductList();
         renderGrid();
@@ -1298,7 +1402,7 @@ function setupUnitToggle() {
   });
 }
 
-function openProductForm(productId) {
+async function openProductForm(productId) {
   editingProductId = productId || null;
   populateCategorySelect();
   pendingImageData = null;
@@ -1318,12 +1422,14 @@ function openProductForm(productId) {
     document.getElementById('formCategory').value = p.categoryId;
     document.getElementById('outOfStockToggle').checked = !!p.outOfStock;
     document.getElementById('featuredToggle').checked = !!p.featured;
-    imgPreview.src = p.image || '';
-    imgPreview.style.display = 'block';
-    imgPlaceholder.style.display = 'none';
-    pendingImageData = p.image;
     delBtn.style.display = 'block';
-    cropBtn.style.display = p.image ? 'block' : 'none';
+
+    // L'image n'est pas chargée d'office (lazy) : on l'affiche dès
+    // qu'elle est disponible, en montrant un état de chargement entre temps.
+    imgPreview.style.display = 'none';
+    imgPlaceholder.style.display = 'block';
+    imgPlaceholder.innerHTML = `<div class="ph">⏳</div><div class="lb">Chargement de la photo…</div>`;
+    cropBtn.style.display = 'none';
 
     if (p.unitStep > 1) {
       currentUnitMode = 'bulk';
@@ -1338,6 +1444,26 @@ function openProductForm(productId) {
       document.getElementById('bulkSizeWrap').style.display = 'none';
       document.getElementById('formUnitStep').value = '';
     }
+
+    openDrawer('productFormDrawer');
+
+    const imgData = await getProductImageOrFetch(editingProductId);
+    // Vérifie qu'on édite toujours le même produit (l'utilisateur a pu
+    // changer d'avis entre temps) avant d'afficher l'image récupérée.
+    if (editingProductId === productId) {
+      pendingImageData = imgData || null;
+      imgPlaceholder.innerHTML = `<div class="ph">📷</div><div class="lb">Touchez pour ajouter une photo</div>`;
+      if (pendingImageData) {
+        imgPreview.src = pendingImageData;
+        imgPreview.style.display = 'block';
+        imgPlaceholder.style.display = 'none';
+        cropBtn.style.display = 'block';
+      } else {
+        imgPreview.style.display = 'none';
+        imgPlaceholder.style.display = 'block';
+      }
+    }
+    return;
   } else {
     title.textContent = 'Nouveau produit';
     document.getElementById('formName').value = '';
@@ -1347,6 +1473,7 @@ function openProductForm(productId) {
     document.getElementById('outOfStockToggle').checked = false;
     document.getElementById('featuredToggle').checked = false;
     imgPreview.style.display = 'none';
+    imgPlaceholder.innerHTML = `<div class="ph">📷</div><div class="lb">Touchez pour ajouter une photo</div>`;
     imgPlaceholder.style.display = 'block';
     delBtn.style.display = 'none';
     cropBtn.style.display = 'none';
@@ -1553,8 +1680,9 @@ function setupProductFormSave() {
         if (error) throw error;
         const p = products.find(x => x.id === editingProductId);
         p.name = name; p.ref = ref; p.price = price; p.categoryId = categoryId;
-        p.image = pendingImageData; p.unitStep = unitStep; p.unitLabel = unitLabel;
+        p.unitStep = unitStep; p.unitLabel = unitLabel;
         p.outOfStock = outOfStock; p.featured = featured;
+        imageCache.set(editingProductId, pendingImageData);
         showToast('Produit mis à jour');
       } else {
         const newId = uid('prod');
@@ -1564,7 +1692,8 @@ function setupProductFormSave() {
           out_of_stock: outOfStock, featured: featured
         });
         if (error) throw error;
-        products.push({ id: newId, ref, name, price, categoryId, image: pendingImageData, unitStep, unitLabel, outOfStock, featured, hidden: false });
+        products.push({ id: newId, ref, name, price, categoryId, image: null, unitStep, unitLabel, outOfStock, featured, hidden: false });
+        imageCache.set(newId, pendingImageData);
         showToast('Produit ajouté');
       }
       closeDrawer('productFormDrawer');
