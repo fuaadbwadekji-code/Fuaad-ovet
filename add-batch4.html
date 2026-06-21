@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ajout — Lot 4 (7 sections, sans images)</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:20px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:10px 14px;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.row .name{font-size:14px;}
+.status{font-size:13px;white-space:nowrap;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+.wait{color:#999;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;width:100%;}
+button:disabled{background:#666;}
+#summary{margin-top:20px;font-size:15px;font-weight:bold;padding:14px;border-radius:8px;background:#243652;}
+</style>
+</head>
+<body>
+<h1>📦 Ajout Lot 4 — 7 sections (sans images)</h1>
+<p>يضيف Porte-clés G-series, Miroirs Ronds/Rectangle, Magnets Métal/Rectangles/Résine, Drapeaux, Sacs Toile/Shopping, Dessous de Verre, Briquets Clipper. بدون صور. يُستخدم مرة واحدة فقط.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="summary" style="display:none;"></div>
+<div id="results" style="margin-top:16px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_X95sZEaadGOpz9b4PkJvAA_Wq1K_aN9';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORIES = [
+  { id: 'cat-portes-cles-g', name: 'Porte-clés G-series', sort_order: 50 },
+  { id: 'cat-miroirs-ronds-pm', name: 'Miroirs Ronds PM', sort_order: 51 },
+  { id: 'cat-miroirs-rect-strass', name: 'Miroirs Rectangle Strass', sort_order: 52 },
+  { id: 'cat-magnets-metal', name: 'Magnets Métal', sort_order: 53 },
+  { id: 'cat-magnets-rectangles', name: 'Magnets Rectangles', sort_order: 54 },
+  { id: 'cat-magnets-resine-2', name: 'Magnets Résine', sort_order: 55 },
+  { id: 'cat-drapeaux', name: 'Drapeaux', sort_order: 56 },
+  { id: 'cat-sacs-toile-2', name: 'Sacs Toile', sort_order: 57 },
+  { id: 'cat-sacs-shopping', name: 'Sacs Shopping', sort_order: 58 },
+  { id: 'cat-dessous-verre', name: 'Dessous de Verre', sort_order: 59 },
+  { id: 'cat-briquets', name: 'Briquets Clipper', sort_order: 60 }
+];
+
+/* ===================== PORTE-CLÉS G-SERIES (pages 23-28) — 1.10€ sauf G140-150 ===================== */
+const PORTE_CLES_G = [
+  { ref: 'G709', name: 'Porte-clé Tour Eiffel — drapeaux/Paris', price: 1.10 },
+  { ref: 'G710', name: 'Porte-clé Tour Eiffel — macarons/Paris', price: 1.10 },
+  { ref: 'G711', name: 'Porte-clé Tour Eiffel — fleur rose/Paris', price: 1.10 },
+  { ref: 'G712', name: 'Porte-clé Tour Eiffel — fleurs roses/Paris', price: 1.10 },
+  { ref: 'G713', name: 'Porte-clé Tour Eiffel — carte/Paris', price: 1.10 },
+  { ref: 'G714', name: 'Porte-clé Tour Eiffel — Moulin Rouge/Paris', price: 1.10 },
+  { ref: 'G715', name: 'Porte-clé Tour Eiffel — Arc Triomphe/Paris', price: 1.10 },
+  { ref: 'G716', name: 'Porte-clé Tour Eiffel — monument/Paris', price: 1.10 },
+  { ref: 'G718', name: 'Porte-clé Tour Eiffel — monument/Paris', price: 1.10 },
+  { ref: 'G719', name: 'Porte-clé Tour Eiffel — pyramide/Paris', price: 1.10 },
+  { ref: 'G726', name: 'Porte-clé Tour Eiffel — macaron/Paris', price: 1.10 },
+  { ref: 'G101', name: 'Porte-clé Tour Eiffel — Sacré-Cœur/Arc Triomphe', price: 1.10 },
+  { ref: 'G102', name: 'Porte-clé Tour Eiffel — drapeau/moulin', price: 1.10 },
+  { ref: 'G103', name: 'Porte-clé Tour Eiffel — métro/France', price: 1.10 },
+  { ref: 'G104', name: 'Porte-clé Tour Eiffel — Joconde/cœur Paris', price: 1.10 },
+  { ref: 'G105', name: 'Porte-clé Tour Eiffel — béret/baguette', price: 1.10 },
+  { ref: 'G106', name: 'Porte-clé Tour Eiffel — baguette/croissant', price: 1.10 },
+  { ref: 'G107', name: 'Porte-clé Tour Eiffel — drapeau/moulin', price: 1.10 },
+  { ref: 'G108', name: 'Porte-clé Tour Eiffel — vélos/Arc Triomphe', price: 1.10 },
+  { ref: 'G109', name: 'Porte-clé Tour Eiffel — Arc/chat noir', price: 1.10 },
+  { ref: 'G110', name: 'Porte-clé Tour Eiffel — talon/machine à coudre', price: 1.10 },
+  { ref: 'G111', name: 'Porte-clé Tour Eiffel — Sacré-Cœur/moulin', price: 1.10 },
+  { ref: 'G112', name: 'Porte-clé Tour Eiffel — Champs Élysées/Concorde', price: 1.10 },
+  { ref: 'G113', name: 'Porte-clé Tour Eiffel — lettres Paris', price: 1.10 },
+  { ref: 'G114', name: 'Porte-clé Tour Eiffel — béret/café', price: 1.10 },
+  { ref: 'G115', name: 'Porte-clé Tour Eiffel — baguette/macarons', price: 1.10 },
+  { ref: 'G116', name: 'Porte-clé Tour Eiffel — croissant/fromage', price: 1.10 },
+  { ref: 'G117', name: 'Porte-clé Tour Eiffel — Paris/béret rouge', price: 1.10 },
+  { ref: 'G119', name: 'Porte-clé Tour Eiffel — vélo/drapeau', price: 1.10 },
+  { ref: 'G121', name: 'Porte-clé Tour Eiffel — robe/chaussures/machine', price: 1.10 },
+  { ref: 'G122', name: 'Porte-clé Tour Eiffel — baguette/scooter/portrait', price: 1.10 },
+  { ref: 'G123', name: 'Porte-clé Tour Eiffel — moulin/roue', price: 1.10 },
+  { ref: 'G124', name: 'Porte-clé Tour Eiffel — moulin/Arc/pyramide', price: 1.10 },
+  { ref: 'G125', name: 'Porte-clé Tour Eiffel — Notre-Dame/moulin', price: 1.10 },
+  { ref: 'G126', name: 'Porte-clé Tour Eiffel — scooter/métro/roue', price: 1.10 },
+  { ref: 'G127', name: 'Porte-clé Tour Eiffel — drapeau/Sacré-Cœur', price: 1.10 },
+  { ref: 'G128', name: 'Porte-clé Tour Eiffel — chat/macaron', price: 1.10 },
+  { ref: 'G129', name: 'Porte-clé Tour Eiffel — France/chat/Notre-Dame', price: 1.10 },
+  { ref: 'G130', name: 'Porte-clé Tour Eiffel — scooter/lèvres', price: 1.10 },
+  { ref: 'G131', name: 'Porte-clé Tour Eiffel — Sacré-Cœur/Notre-Dame', price: 1.10 },
+  { ref: 'G132', name: 'Porte-clé Tour Eiffel — moulin/Arc Triomphe', price: 1.10 },
+  { ref: 'G133', name: 'Porte-clé Tour Eiffel — calèche/drapeau', price: 1.10 },
+  { ref: 'G134', name: 'Porte-clé Tour Eiffel — café/croissant', price: 1.10 },
+  { ref: 'G135', name: 'Porte-clé Tour Eiffel — accordéon/métro', price: 1.10 },
+  { ref: 'G136', name: 'Porte-clé Tour Eiffel — carte/monument', price: 1.10 },
+  { ref: 'G137', name: 'Porte-clé Tour Eiffel — Notre-Dame/France', price: 1.10 },
+  { ref: 'G138', name: 'Porte-clé Tour Eiffel — toque/baguette', price: 1.10 },
+  { ref: 'G139', name: 'Porte-clé Tour Eiffel — robe rose/scooter', price: 1.10 },
+  { ref: 'G140', name: 'Porte-clé Tour Eiffel — cœur Paris/papillon', price: 1.10 },
+  { ref: 'G141', name: 'Porte-clé Tour Eiffel — pilier/vélo', price: 1.10 },
+  { ref: 'G142', name: 'Porte-clé Tour Eiffel — cœur Paris/monument', price: 1.10 },
+  { ref: 'G143', name: 'Porte-clé Tour Eiffel — Arc/coq', price: 1.10 },
+  { ref: 'G144', name: 'Porte-clé Tour Eiffel — plaque avenue/métro', price: 1.10 },
+  { ref: 'G145', name: 'Porte-clé Tour Eiffel — Arc/calèche', price: 1.10 },
+  { ref: 'G146', name: 'Porte-clé Tour Eiffel — baguette/croissant doré', price: 1.10 },
+  { ref: 'G147', name: 'Porte-clé Tour Eiffel — robe/Paris', price: 1.10 },
+  { ref: 'G148', name: 'Porte-clé Tour Eiffel — pain/baguette', price: 1.10 },
+  { ref: 'G149', name: 'Porte-clé Tour Eiffel — café/toque', price: 1.10 },
+  { ref: 'G150', name: 'Porte-clé Tour Eiffel — moulin/roue vélo', price: 1.10 }
+];
+
+/* ===================== MIROIRS RONDS PM (page 77) — 1.10€ ===================== */
+const MIROIRS_RONDS = [
+  { ref: 'MIR33321', name: 'Miroir rond PM — parfum doré/Paris', price: 1.10 },
+  { ref: 'MIR33322', name: 'Miroir rond PM — parfum bleu/Paris', price: 1.10 },
+  { ref: 'MIR33323', name: 'Miroir rond PM — Tour Eiffel/fleurs', price: 1.10 },
+  { ref: 'MIR33325', name: 'Miroir rond PM — parfum/fleurs jaunes', price: 1.10 },
+  { ref: 'MIR33326', name: 'Miroir rond PM — Tour Eiffel/vélo', price: 1.10 },
+  { ref: 'MIE33327', name: 'Miroir rond PM — bouquet fleurs/Paris', price: 1.10 },
+  { ref: 'MIR33328', name: 'Miroir rond PM — Tour Eiffel/ballons', price: 1.10 },
+  { ref: 'MIR33329', name: 'Miroir rond PM — vélo/panier fleurs', price: 1.10 },
+  { ref: 'MIR33330', name: 'Miroir rond PM — parfum noir/Paris', price: 1.10 },
+  { ref: 'MIR33331', name: 'Miroir rond PM — parfum/fleurs colorées', price: 1.10 },
+  { ref: 'MIR33333', name: 'Miroir rond PM — vélo/panier Tour Eiffel', price: 1.10 },
+  { ref: 'MIR33334', name: 'Miroir rond PM — parfum rose/fleurs', price: 1.10 },
+  { ref: 'MIR33335', name: 'Miroir rond PM — parfum bleu/rouge', price: 1.10 },
+  { ref: 'MIR33336', name: 'Miroir rond PM — parfum/bouquet', price: 1.10 },
+  { ref: 'MIR33337', name: 'Miroir rond PM — Tour Eiffel/vélo orange', price: 1.10 },
+  { ref: 'MIR33338', name: 'Miroir rond PM — Tour Eiffel/plumes', price: 1.10 },
+  { ref: 'MIR33340', name: 'Miroir rond PM — parfum orange/Paris', price: 1.10 },
+  { ref: 'MIR33341', name: 'Miroir rond PM — Paris/chats noirs', price: 1.10 },
+  { ref: 'MIR33342', name: 'Miroir rond PM — Paris/Arc Triomphe couleur', price: 1.10 },
+  { ref: 'MIR33343', name: 'Miroir rond PM — Paris/monuments dessin', price: 1.10 }
+];
+
+/* ===================== MIROIR RECTANGLE STRASS (page 78) — 1.10€ ===================== */
+const MIROIRS_RECT = [
+  { ref: 'MIRE3332', name: 'Miroir rectangle strass — parfum/Paris', price: 1.10 },
+  { ref: 'MIRE3333', name: 'Miroir rectangle strass — Tour Eiffel/fleurs', price: 1.10 },
+  { ref: 'MIRE3335', name: 'Miroir rectangle strass — parfum/fleurs automne', price: 1.10 },
+  { ref: 'MIRE3336', name: 'Miroir rectangle strass — Tour Eiffel/vélo', price: 1.10 },
+  { ref: 'MIRE3337', name: 'Miroir rectangle strass — parfum rouge/fleurs', price: 1.10 },
+  { ref: 'MIRE3338', name: 'Miroir rectangle strass — Tour Eiffel/ballons', price: 1.10 },
+  { ref: 'MIRE3339', name: 'Miroir rectangle strass — vélo/panier fleurs', price: 1.10 },
+  { ref: 'MIRE33313', name: 'Miroir rectangle strass — vélo/Tour Eiffel bleu', price: 1.10 },
+  { ref: 'MIRE33314', name: 'Miroir rectangle strass — parfum/fleurs rouges', price: 1.10 },
+  { ref: 'MIRE33316', name: 'Miroir rectangle strass — parfum/Paris noir', price: 1.10 },
+  { ref: 'MIRE33317', name: 'Miroir rectangle strass — vélo orange/Tour Eiffel', price: 1.10 },
+  { ref: 'MIRE33318', name: 'Miroir rectangle strass — Tour Eiffel/plumes', price: 1.10 },
+  { ref: 'MIRE33319', name: 'Miroir rectangle strass — parfum/fleurs colorées', price: 1.10 },
+  { ref: 'MIRE33320', name: 'Miroir rectangle strass — parfum rouge/Paris', price: 1.10 },
+  { ref: 'MIRE33321', name: 'Miroir rectangle strass — Paris/Tour Eiffel fleurs', price: 1.10 }
+];
+
+/* ===================== MAGNETS MÉTAL (page 41) — 0.70€ ===================== */
+const MAGNETS_METAL = [
+  { ref: 'MA11504', name: 'Magnet métal — Tournée du Chat Noir', price: 0.70 },
+  { ref: 'MA11506', name: 'Magnet métal — Paris immatriculation F75', price: 0.70 },
+  { ref: 'MA11507', name: 'Magnet métal — Paris drapeau/skyline', price: 0.70 },
+  { ref: 'MA11509', name: 'Magnet métal — Avenue des Champs Élysées', price: 0.70 },
+  { ref: 'MA11510', name: 'Magnet métal — Tour Eiffel Paris (7e Arr.)', price: 0.70 },
+  { ref: 'MA11511', name: 'Magnet métal — Montmartre (18e Arr.)', price: 0.70 },
+  { ref: 'MA11512', name: 'Magnet métal — Notre-Dame (4e Arr.)', price: 0.70 },
+  { ref: 'MA11513', name: 'Magnet métal — Paris capitale vintage', price: 0.70 },
+  { ref: 'MA11514', name: 'Magnet métal — Paris Ville Lumière', price: 0.70 },
+  { ref: 'MA11515', name: 'Magnet métal — Paris collage couleur', price: 0.70 },
+  { ref: 'MA11516', name: 'Magnet métal — I left my heart in Paris', price: 0.70 },
+  { ref: 'MA11519', name: 'Magnet métal — I love Paris', price: 0.70 },
+  { ref: 'MA11521', name: 'Magnet métal — Cabarets rouge', price: 0.70 },
+  { ref: 'MA11522', name: 'Magnet métal — Cabarets jaune', price: 0.70 },
+  { ref: 'MA11523', name: 'Magnet métal — Paris collage monuments', price: 0.70 },
+  { ref: 'MA11524', name: 'Magnet métal — Paris peinture pont', price: 0.70 }
+];
+
+/* ===================== MAGNETS RECTANGLES (pages 46-47) — 0.40€ ===================== */
+const MAGNETS_RECTANGLES = [
+  { ref: 'MAR124', name: 'Magnet rectangle — Notre-Dame croquis', price: 0.40 },
+  { ref: 'MAR125', name: 'Magnet rectangle — Tour Eiffel croquis', price: 0.40 },
+  { ref: 'MAR126', name: 'Magnet rectangle — Tour Eiffel/Notre-Dame croquis', price: 0.40 },
+  { ref: 'MAR128', name: 'Magnet rectangle — Sacré-Cœur croquis', price: 0.40 },
+  { ref: 'MAR130', name: 'Magnet rectangle — Notre-Dame/Seine couleur', price: 0.40 },
+  { ref: 'MAR132', name: 'Magnet rectangle — moulin/Paris couleur', price: 0.40 },
+  { ref: 'MAR133', name: 'Magnet rectangle — pont croquis', price: 0.40 },
+  { ref: 'MAR134', name: 'Magnet rectangle — Notre-Dame automne', price: 0.40 },
+  { ref: 'MAR145', name: 'Magnet rectangle — Arc Triomphe/cœur Paris', price: 0.40 },
+  { ref: 'MARAMOUR', name: 'Magnet rectangle — Paris mon amour monuments', price: 0.40 },
+  { ref: 'MAR16', name: 'Magnet rectangle — chat/Paris je t\'aime', price: 0.40 },
+  { ref: 'MAR19', name: 'Magnet rectangle — Paris mode/Tour Eiffel', price: 0.40 },
+  { ref: 'MAR21', name: 'Magnet rectangle — Paris mode rose', price: 0.40 },
+  { ref: 'MAR25', name: 'Magnet rectangle — Sacré-Cœur vintage', price: 0.40 },
+  { ref: 'MAR26', name: 'Magnet rectangle — Tour Eiffel carte postale', price: 0.40 },
+  { ref: 'MAR27', name: 'Magnet rectangle — Moulin Rouge vintage', price: 0.40 },
+  { ref: 'MAR28', name: 'Magnet rectangle — Tour Eiffel sépia vintage', price: 0.40 },
+  { ref: 'MAR29', name: 'Magnet rectangle — Tour Eiffel noir/blanc', price: 0.40 },
+  { ref: 'MAR30', name: 'Magnet rectangle — La Joconde', price: 0.40 },
+  { ref: 'MAR31', name: 'Magnet rectangle — Tour Eiffel blanc', price: 0.40 },
+  { ref: 'MAR32', name: 'Magnet rectangle — Tour Eiffel ciel bleu', price: 0.40 },
+  { ref: 'MAR46', name: 'Magnet rectangle — Paris collage bus rouge', price: 0.40 },
+  { ref: 'MAR51', name: 'Magnet rectangle — Tournée du Chat Noir', price: 0.40 },
+  { ref: 'MAR60', name: 'Magnet rectangle — Arc Triomphe peinture', price: 0.40 },
+  { ref: 'MAR61', name: 'Magnet rectangle — Tour Eiffel/pont peinture', price: 0.40 },
+  { ref: 'MAR62', name: 'Magnet rectangle — Tour Eiffel/pont peinture 2', price: 0.40 },
+  { ref: 'MAR63', name: 'Magnet rectangle — café terrasse peinture', price: 0.40 },
+  { ref: 'MAR64', name: 'Magnet rectangle — pont/monuments peinture', price: 0.40 },
+  { ref: 'MAR65', name: 'Magnet rectangle — Sacré-Cœur marché peinture', price: 0.40 },
+  { ref: 'MAR66', name: 'Magnet rectangle — Paris rue peinture', price: 0.40 },
+  { ref: 'MAR67', name: 'Magnet rectangle — Moulin Rouge peinture', price: 0.40 },
+  { ref: 'MAR68', name: 'Magnet rectangle — Notre-Dame peinture nuit', price: 0.40 },
+  { ref: 'MAR69', name: 'Magnet rectangle — Arc Triomphe peinture nuit', price: 0.40 },
+  { ref: 'MAR71', name: 'Magnet rectangle — Notre-Dame peinture automne', price: 0.40 },
+  { ref: 'MAR72', name: 'Magnet rectangle — Paris collage 4 photos', price: 0.40 },
+  { ref: 'MAR73', name: 'Magnet rectangle — Paris collage 4 photos 2', price: 0.40 },
+  { ref: 'MAR74', name: 'Magnet rectangle — Paris collage 4 photos 3', price: 0.40 },
+  { ref: 'MAR79', name: 'Magnet rectangle — pont peinture bleu', price: 0.40 },
+  { ref: 'MAR80', name: 'Magnet rectangle — pont peinture couleur', price: 0.40 },
+  { ref: 'MAR81', name: 'Magnet rectangle — Sacré-Cœur marché couleur', price: 0.40 },
+  { ref: 'MAR108', name: 'Magnet rectangle — Notre-Dame photo bleu', price: 0.40 },
+  { ref: 'MAR109', name: 'Magnet rectangle — Sacré-Cœur photo automne', price: 0.40 },
+  { ref: 'MAR112', name: 'Magnet rectangle — Arc Triomphe peinture rue', price: 0.40 },
+  { ref: 'MAR113', name: 'Magnet rectangle — Notre-Dame peinture marché', price: 0.40 },
+  { ref: 'MAR114', name: 'Magnet rectangle — Paris mode/Tour Eiffel collage', price: 0.40 },
+  { ref: 'MAR115', name: 'Magnet rectangle — Tour Eiffel nuit photo', price: 0.40 },
+  { ref: 'MAR116', name: 'Magnet rectangle — Notre-Dame nuit photo', price: 0.40 },
+  { ref: 'MAR117', name: 'Magnet rectangle — Tour Eiffel/Seine photo gris', price: 0.40 },
+  { ref: 'MAR118', name: 'Magnet rectangle — Tour Eiffel ciel bleu photo', price: 0.40 },
+  { ref: 'MAR119', name: 'Magnet rectangle — Paris vintage carte', price: 0.40 },
+  { ref: 'MAR120', name: 'Magnet rectangle — Tour Eiffel fontaine', price: 0.40 },
+  { ref: 'MAR121', name: 'Magnet rectangle — Paris arbres croquis', price: 0.40 },
+  { ref: 'MAR122', name: 'Magnet rectangle — Sacré-Cœur croquis Paris', price: 0.40 },
+  { ref: 'MAR123', name: 'Magnet rectangle — Sacré-Cœur croquis couleur', price: 0.40 }
+];
+
+/* ===================== MAGNETS RÉSINE (pages 48-50) — 1.00€ ===================== */
+const MAGNETS_RESINE_2 = [
+  { ref: 'MAT200', name: 'Magnet résine — panier pique-nique fleurs', price: 1.00 },
+  { ref: 'MAT201', name: 'Magnet résine — panier pique-nique fromage', price: 1.00 },
+  { ref: 'MAT202', name: 'Magnet résine — chien béret Paris', price: 1.00 },
+  { ref: 'MAT203', name: 'Magnet résine — café terrasse Bonjour', price: 1.00 },
+  { ref: 'MAT204', name: 'Magnet résine — ourson I love Paris', price: 1.00 },
+  { ref: 'MAT206', name: 'Magnet résine — Joconde/vin', price: 1.00 },
+  { ref: 'MAT207', name: 'Magnet résine — Tour Eiffel/pont doré', price: 1.00 },
+  { ref: 'MAT208', name: 'Magnet résine — timbre Paris chats noirs', price: 1.00 },
+  { ref: 'MAT209', name: 'Magnet résine — Paris nuit lampadaire', price: 1.00 },
+  { ref: 'MAT210', name: 'Magnet résine — monuments Paris bannière', price: 1.00 },
+  { ref: 'MAT211', name: 'Magnet résine — panier pique-nique Tour Eiffel', price: 1.00 },
+  { ref: 'MAT52', name: 'Magnet résine — miroir ovale Tour Eiffel', price: 1.00 },
+  { ref: 'MAT62', name: 'Magnet résine — rond monuments Paris', price: 1.00 },
+  { ref: 'MAT63', name: 'Magnet résine — cadre monuments Paris', price: 1.00 },
+  { ref: 'MAT77', name: 'Magnet résine — Tour Eiffel/pont rose', price: 1.00 },
+  { ref: 'MAT78', name: 'Magnet résine — Tour Eiffel/pont bleu', price: 1.00 },
+  { ref: 'MAT79', name: 'Magnet résine — Sacré-Cœur/Moulin Rouge', price: 1.00 },
+  { ref: 'MAT80', name: 'Magnet résine — rond monuments doré', price: 1.00 },
+  { ref: 'MAT86', name: 'Magnet résine — Tour Eiffel/Arc Triomphe', price: 1.00 },
+  { ref: 'MAT87', name: 'Magnet résine — rond Tour Eiffel/Arc', price: 1.00 },
+  { ref: 'MAT89', name: 'Magnet résine — carrousel monuments', price: 1.00 },
+  { ref: 'MAT91', name: 'Magnet résine — timbre coq France', price: 1.00 },
+  { ref: 'MAT92', name: 'Magnet résine — macarons/roses Paris', price: 1.00 },
+  { ref: 'MAT93', name: 'Magnet résine — Tour Eiffel/Notre-Dame figurine', price: 1.00 },
+  { ref: 'MAT94', name: 'Magnet résine — colonne Morris Paris', price: 1.00 },
+  { ref: 'MAT95', name: 'Magnet résine — Paris monuments/macarons', price: 1.00 },
+  { ref: 'MAT96A', name: 'Magnet résine — macarons empilés vert/orange', price: 1.00 },
+  { ref: 'MAT96B', name: 'Magnet résine — macarons empilés rose/bleu', price: 1.00 },
+  { ref: 'MAT96C', name: 'Magnet résine — macarons empilés jaune/rose', price: 1.00 },
+  { ref: 'MAT97', name: 'Magnet résine — cadre Tour Eiffel/macarons', price: 1.00 },
+  { ref: 'MAT99', name: 'Magnet résine — cadre Tour Eiffel/couple', price: 1.00 },
+  { ref: 'MAT100', name: 'Magnet résine — lettres DARIS monuments', price: 1.00 },
+  { ref: 'MAT1', name: 'Magnet résine — Paris monuments doré', price: 1.00 },
+  { ref: 'MAT2-BL', name: 'Magnet résine — rond monuments bleu', price: 1.00 },
+  { ref: 'MAT2-RS', name: 'Magnet résine — rond monuments rose', price: 1.00 },
+  { ref: 'MAT3', name: 'Magnet résine — lettres PARIS colorées', price: 1.00 },
+  { ref: 'MAT4A', name: 'Magnet résine — rond bois monuments', price: 1.00 },
+  { ref: 'MAT5A', name: 'Magnet résine — lettres Paris monuments', price: 1.00 },
+  { ref: 'MAT6', name: 'Magnet résine — rond doré ange/monuments', price: 1.00 },
+  { ref: 'MAT8', name: 'Magnet résine — cœur monuments Paris', price: 1.00 },
+  { ref: 'MAT15', name: 'Magnet résine — bouquet roses/monuments', price: 1.00 },
+  { ref: 'MAT17', name: 'Magnet résine — rond bleu monuments lampadaire', price: 1.00 },
+  { ref: 'MAT18', name: 'Magnet résine — Tour Eiffel/pont peinture', price: 1.00 },
+  { ref: 'MAT19', name: 'Magnet résine — monuments crème peinture', price: 1.00 },
+  { ref: 'MAT20', name: 'Magnet résine — Notre-Dame peinture', price: 1.00 },
+  { ref: 'MAT22', name: 'Magnet résine — Tour Eiffel drapeau France', price: 1.00 },
+  { ref: 'MAT23', name: 'Magnet résine — monuments/vin collage', price: 1.00 },
+  { ref: 'MAT24', name: 'Magnet résine — valise Paris monuments', price: 1.00 },
+  { ref: 'MAT26', name: 'Magnet résine — monuments roses/France', price: 1.00 },
+  { ref: 'MAT28', name: 'Magnet résine — monuments cartes postales', price: 1.00 },
+  { ref: 'MAT31', name: 'Magnet résine — panier baguettes Paris', price: 1.00 },
+  { ref: 'MAT33', name: 'Magnet résine — rond monuments moulin', price: 1.00 },
+  { ref: 'MAT35', name: 'Magnet résine — rond bois monuments moulin', price: 1.00 },
+  { ref: 'MAT50', name: 'Magnet résine — cadre ovale noir Tour Eiffel', price: 1.00 },
+  { ref: 'MAT51', name: 'Magnet résine — cadre doré ovale Tour Eiffel', price: 1.00 }
+];
+
+/* ===================== DRAPEAUX (page 72) ===================== */
+const DRAPEAUX = [
+  { ref: 'OA0067-FR-M', name: 'Drapeau moyen France (20x30cm)', price: 0.80 },
+  { ref: 'OA0067-ES-M', name: 'Drapeau moyen Espagne (20x30cm)', price: 0.80 },
+  { ref: 'OA0067-IT-M', name: 'Drapeau moyen Italie (20x30cm)', price: 0.80 },
+  { ref: 'OA0067-DE-M', name: 'Drapeau moyen Allemagne (20x30cm)', price: 0.80 },
+  { ref: 'OA0067-EN-M', name: 'Drapeau moyen Angleterre (20x30cm)', price: 0.80 },
+  { ref: 'OA0067-FR-G', name: 'Drapeau grand France (90x150cm)', price: 1.50 },
+  { ref: 'OA0067-ES-G', name: 'Drapeau grand Espagne (90x150cm)', price: 1.50 },
+  { ref: 'OA0067-IT-G', name: 'Drapeau grand Italie (90x150cm)', price: 1.50 },
+  { ref: 'OA0067-DE-G', name: 'Drapeau grand Allemagne (90x150cm)', price: 1.50 },
+  { ref: 'OA0067-EN-G', name: 'Drapeau grand Angleterre (90x150cm)', price: 1.50 }
+];
+
+/* ===================== SACS TOILE nouveaux (page 80) — 2.00€ ===================== */
+const SACS_TOILE_2 = [
+  { ref: 'SAC22-10', name: 'Sac toile — Paris collage moulin/bus', price: 2.00 },
+  { ref: 'SAC22-11N', name: 'Sac toile — I love Paris noir', price: 2.00 },
+  { ref: 'SAC22-11G', name: 'Sac toile — I love Paris gris', price: 2.00 },
+  { ref: 'SAC22-12B', name: 'Sac toile — PARIS écriture blanc', price: 2.00 },
+  { ref: 'SAC22-12G', name: 'Sac toile — PARIS écriture gris', price: 2.00 },
+  { ref: 'SAC22-13', name: 'Sac toile — Tour Eiffel écriture blanc', price: 2.00 },
+  { ref: 'SAC22-13G', name: 'Sac toile — Tour Eiffel écriture gris', price: 2.00 },
+  { ref: 'SAC22-16', name: 'Sac toile — femme mode Paris', price: 2.00 },
+  { ref: 'SAC22-17', name: 'Sac toile — I love Paris skyline blanc', price: 2.00 },
+  { ref: 'SAC22-18', name: 'Sac toile — I love Paris skyline noir vertical', price: 2.00 },
+  { ref: 'SAC22-21', name: 'Sac toile — I love Paris saumon', price: 2.00 },
+  { ref: 'SAC22-22B', name: 'Sac toile — Arc Triomphe collage blanc', price: 2.00 },
+  { ref: 'SAC22-22N', name: 'Sac toile — Arc Triomphe collage noir', price: 2.00 },
+  { ref: 'SAC22-22G', name: 'Sac toile — Arc Triomphe collage gris', price: 2.00 }
+];
+
+/* ===================== SACS SHOPPING (page 81) — 2.90€ ===================== */
+const SACS_SHOPPING = [
+  { ref: 'SAC2210', name: 'Sac shopping — I love Paris collage', price: 2.90 },
+  { ref: 'SAC2211B', name: 'Sac shopping — I love Paris blanc', price: 2.90 },
+  { ref: 'SAC2211N', name: 'Sac shopping — I love Paris noir', price: 2.90 },
+  { ref: 'SAC2211G', name: 'Sac shopping — I love Paris gris', price: 2.90 },
+  { ref: 'SAC2212B', name: 'Sac shopping — Tour Eiffel écriture blanc', price: 2.90 },
+  { ref: 'SAC2212G', name: 'Sac shopping — Tour Eiffel écriture gris', price: 2.90 },
+  { ref: 'SAC2213', name: 'Sac shopping — Tour Eiffel écriture clair', price: 2.90 },
+  { ref: 'SAC2213G', name: 'Sac shopping — Tour Eiffel écriture gris foncé', price: 2.90 },
+  { ref: 'SAC2222B', name: 'Sac shopping — Arc Triomphe collage blanc', price: 2.90 },
+  { ref: 'SAC2222N', name: 'Sac shopping — Arc Triomphe collage noir', price: 2.90 },
+  { ref: 'SAC2222G', name: 'Sac shopping — Arc Triomphe collage gris', price: 2.90 }
+];
+
+/* ===================== TOTE BAG (manquant) ===================== */
+const TOTE_BAG_MISSING = [
+  { ref: 'TB2136', name: 'Tote bag — ciel/colline vert (double face)', price: 2.00 }
+];
+
+/* ===================== DESSOUS DE VERRE (page 90) — lot de 6, 1€ ===================== */
+const DESSOUS_VERRE = [
+  { ref: 'DV03', name: 'Dessous de verre — lot 6 monuments Paris', price: 1.00 },
+  { ref: 'DV18', name: 'Dessous de verre — lot 6 marché/fontaine Paris', price: 1.00 },
+  { ref: 'DV21', name: 'Dessous de verre — lot 6 noir et blanc Paris', price: 1.00 },
+  { ref: 'DV30', name: 'Dessous de verre — lot 6 peinture Paris', price: 1.00 },
+  { ref: 'DV32', name: 'Dessous de verre — lot 6 mode vintage Paris', price: 1.00 },
+  { ref: 'DV02', name: 'Dessous de verre — lot 6 monuments nuit Paris', price: 1.00 },
+  { ref: 'DV06', name: 'Dessous de verre — lot 6 affiches cabaret', price: 1.00 },
+  { ref: 'DV20', name: 'Dessous de verre — lot 6 noir et blanc Paris 2', price: 1.00 },
+  { ref: 'DV26', name: 'Dessous de verre — lot 6 peinture Paris 2', price: 1.00 }
+];
+
+/* ===================== BRIQUETS CLIPPER (page 91) — présentoir 48, 1.00€ ===================== */
+const BRIQUETS = [
+  { ref: 'CL01', name: 'Briquet Clipper — I love Paris noir (présentoir 48)', price: 1.00 },
+  { ref: 'CL02', name: 'Briquet Clipper — I love Paris blanc (présentoir 48)', price: 1.00 },
+  { ref: 'CL03', name: 'Briquet Clipper — Tour Eiffel noir (présentoir 48)', price: 1.00 },
+  { ref: 'CL05', name: 'Briquet Clipper — Tour Eiffel blanc (présentoir 48)', price: 1.00 }
+];
+
+function logRow(name) {
+  const results = document.getElementById('results');
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div class="name">${name}</div><div class="status wait">…</div>`;
+  results.appendChild(row);
+  return row.querySelector('.status');
+}
+
+async function addGroup(title, items, categoryId) {
+  const results = document.getElementById('results');
+  const header = document.createElement('h2');
+  header.textContent = title + ' (' + items.length + ')';
+  results.appendChild(header);
+
+  let okCount = 0, errCount = 0;
+
+  for (const item of items) {
+    const statusEl = logRow(item.name);
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: item.ref,
+        ref: item.ref,
+        name: item.name,
+        price: item.price,
+        category_id: categoryId,
+        image: null,
+        unit_step: 1,
+        unit_label: '',
+        sort_order: 100,
+        out_of_stock: item.outOfStock || false
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓';
+      statusEl.className = 'status ok';
+      okCount++;
+    } catch (e) {
+      statusEl.textContent = '✗ ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+      errCount++;
+    }
+  }
+  return { okCount, errCount };
+}
+
+document.getElementById('runBtn').addEventListener('click', async function() {
+  const btn = this;
+  btn.disabled = true;
+  btn.textContent = 'جاري الإضافة...';
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  const catHeader = document.createElement('h2');
+  catHeader.textContent = 'Catégories';
+  results.appendChild(catHeader);
+
+  let catErrors = 0;
+  for (const cat of NEW_CATEGORIES) {
+    const statusEl = logRow(cat.name);
+    try {
+      const { error } = await supabaseClient.from('categories').upsert({ id: cat.id, name: cat.name, sort_order: cat.sort_order });
+      if (error) throw error;
+      statusEl.textContent = '✓';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+      catErrors++;
+    }
+  }
+
+  let totalOk = 0, totalErr = catErrors;
+
+  const groups = [
+    ['Porte-clés G-series', PORTE_CLES_G, 'cat-portes-cles-g'],
+    ['Miroirs Ronds PM', MIROIRS_RONDS, 'cat-miroirs-ronds-pm'],
+    ['Miroirs Rectangle Strass', MIROIRS_RECT, 'cat-miroirs-rect-strass'],
+    ['Magnets Métal', MAGNETS_METAL, 'cat-magnets-metal'],
+    ['Magnets Rectangles', MAGNETS_RECTANGLES, 'cat-magnets-rectangles'],
+    ['Magnets Résine', MAGNETS_RESINE_2, 'cat-magnets-resine-2'],
+    ['Drapeaux', DRAPEAUX, 'cat-drapeaux'],
+    ['Sacs Toile (nouveaux)', SACS_TOILE_2, 'cat-sacs-toile-2'],
+    ['Sacs Shopping', SACS_SHOPPING, 'cat-sacs-shopping'],
+    ['Tote Bag (manquant)', TOTE_BAG_MISSING, 'cat-tote-bag-2'],
+    ['Dessous de Verre', DESSOUS_VERRE, 'cat-dessous-verre'],
+    ['Briquets Clipper', BRIQUETS, 'cat-briquets']
+  ];
+
+  for (const [title, items, catId] of groups) {
+    const r = await addGroup(title, items, catId);
+    totalOk += r.okCount;
+    totalErr += r.errCount;
+  }
+
+  const summary = document.getElementById('summary');
+  summary.style.display = 'block';
+  summary.textContent = `— انتهى — ✓ ${totalOk} منتج تمت إضافته بنجاح | ✗ ${totalErr} خطأ`;
+  summary.style.background = totalErr > 0 ? '#B23B2E' : '#2d5a2d';
+
+  btn.textContent = 'تمت العملية ✓';
+});
+</script>
+</body>
+</html>
