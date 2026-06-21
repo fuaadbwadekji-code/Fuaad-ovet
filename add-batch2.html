@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — Lot 2 (Casquettes, Parapluies, Noël, etc.)</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>📦 Ajout Lot 2 — Casquettes, Parapluies, Noël, Tirelires, Ponchos, Chaussettes</h1>
+<p>Cette page ajoute 47 nouveaux produits répartis sur 6 catégories. À utiliser une seule fois.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="batch2_part1.js"></script>
+<script src="batch2_part2.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORIES = [
+  { id: 'cat-casquettes', name: 'Casquettes Baseball', sort_order: 21 },
+  { id: 'cat-parapluies', name: 'Parapluies & Imperméables', sort_order: 30 },
+  { id: 'cat-chaussettes-bebe', name: 'Chaussettes Bébé', sort_order: 31 },
+  { id: 'cat-suspension-noel', name: 'Suspension de Noël', sort_order: 32 },
+  { id: 'cat-tirelire', name: 'Tirelire Cochon Céramique', sort_order: 33 },
+  { id: 'cat-ponchos', name: 'Ponchos', sort_order: 34 }
+];
+
+// Caps go into existing cat-casquettes category
+const CAPS = [
+  { ref: 'CAS340BG', name: 'Casquette Paris brodée — beige', price: 2.90 },
+  { ref: 'CAS340N', name: 'Casquette Paris brodée — marine', price: 2.90 },
+  { ref: 'CAS340BR', name: 'Casquette Paris brodée — marron', price: 2.90 },
+  { ref: 'CAS340R', name: 'Casquette Paris brodée — rouge', price: 2.90 },
+  { ref: 'CAS340G', name: 'Casquette Paris brodée — grise', price: 2.90 },
+  { ref: 'CAS336BX', name: 'Casquette baseball jean — bordeaux', price: 2.90 },
+  { ref: 'CAS336G', name: 'Casquette baseball jean — gris', price: 2.90 },
+  { ref: 'CAS336M', name: 'Casquette baseball jean — bleu', price: 2.90 },
+  { ref: 'CAS336BC', name: 'Casquette baseball jean — blanc', price: 2.90 },
+  { ref: 'CAS336MB', name: 'Casquette baseball jean — marron', price: 2.90 },
+  { ref: 'CAS336V', name: 'Casquette baseball jean — vert', price: 2.90 },
+  { ref: 'CAS172VC', name: 'Casquette tissu — vert clair', price: 2.90 },
+  { ref: 'CAS172V', name: 'Casquette tissu — vert', price: 2.90 },
+  { ref: 'CAS172RS', name: 'Casquette tissu — rose', price: 2.90 },
+  { ref: 'CAS172BL', name: 'Casquette tissu — bleu', price: 2.90 },
+  { ref: 'CAS172BC', name: 'Casquette tissu — bleu clair', price: 2.90 }
+];
+
+const UMBRELLAS = [
+  { ref: 'PAR184', name: 'Parapluie GM transparent I love Paris', price: 3.50 },
+  { ref: 'PAR195', name: 'Parapluie GM transparent', price: 3.50 },
+  { ref: 'PAR5002', name: 'Parapluie manuel I love Paris', price: 2.20 },
+  { ref: 'PAR500U', name: 'Parapluie PM noir manuel sans logo', price: 2.10 },
+  { ref: 'PAR501U', name: 'Parapluie PM noir automatique double bouton', price: 2.90, outOfStock: true },
+  { ref: 'IMP270V', name: 'Manteau vinyl Paris — vert', price: 1.90 },
+  { ref: 'IMP270BL', name: 'Manteau vinyl Paris — bleu', price: 1.90 }
+];
+
+const SOCKS = [
+  { ref: 'CH175M6', name: 'Chaussettes bébé Paris — bleu marine', price: 1.50 },
+  { ref: 'CH175RS6', name: 'Chaussettes bébé Paris — rose', price: 1.50 }
+];
+
+const ORNAMENTS = [
+  { ref: 'SUP9', name: 'Suspension de Noël — couronne Paris', price: 0.90 },
+  { ref: 'SUP10', name: 'Suspension de Noël — sapin Paris', price: 0.90 },
+  { ref: 'SUP11', name: 'Suspension de Noël — tasse bonhomme de neige', price: 0.90 },
+  { ref: 'SUP12', name: 'Suspension de Noël — chaussette Paris', price: 0.90 },
+  { ref: 'SUP13', name: 'Suspension de Noël — Père Noël sac', price: 0.90 },
+  { ref: 'SUP14', name: 'Suspension de Noël — bonhomme de neige monuments', price: 0.90 },
+  { ref: 'SUP15', name: 'Suspension de Noël — Père Noël Paris', price: 0.90 },
+  { ref: 'SUP16', name: 'Suspension de Noël — visage Père Noël', price: 0.90 },
+  { ref: 'SUP17', name: 'Suspension de Noël — bonhomme de neige sac cadeaux', price: 0.90 },
+  { ref: 'SUP18', name: 'Suspension de Noël — feuille de houx Paris', price: 0.90 }
+];
+
+const PIGGYBANKS = [
+  { ref: 'TCBBL', name: 'Tirelire cochon céramique — bleu', price: 1.80 },
+  { ref: 'TCBB', name: 'Tirelire cochon céramique — blanc', price: 1.80 },
+  { ref: 'TCBVL', name: 'Tirelire cochon céramique — violet', price: 1.80 },
+  { ref: 'TCBR', name: 'Tirelire cochon céramique — rouge', price: 1.80 },
+  { ref: 'TCBOR', name: 'Tirelire cochon céramique — orange', price: 1.80 },
+  { ref: 'TCBVT', name: 'Tirelire cochon céramique — vert', price: 1.80 }
+];
+
+const PONCHOS = [
+  { ref: 'PONB', name: 'Poncho adulte Paris — blanc', price: 2.00 },
+  { ref: 'PONBL', name: 'Poncho adulte Paris — bleu', price: 2.00 },
+  { ref: 'PON', name: 'Poncho adulte Paris — noir', price: 2.00 },
+  { ref: 'PONBLCL', name: 'Poncho adulte Paris — bleu ciel', price: 2.00 },
+  { ref: 'PONENF', name: 'Poncho enfant Paris — rouge', price: 1.80 },
+  { ref: 'PONENFBL', name: 'Poncho enfant Paris — bleu', price: 1.80 }
+];
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof BATCH2_PART1_IMAGES === 'undefined' || typeof BATCH2_PART2_IMAGES === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : fichiers images non chargés.</div></div>';
+    return;
+  }
+  const IMAGES = Object.assign({}, BATCH2_PART1_IMAGES, BATCH2_PART2_IMAGES);
+
+  const catHeader = document.createElement('h2');
+  catHeader.textContent = 'Catégories';
+  results.appendChild(catHeader);
+  for (const cat of NEW_CATEGORIES) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<div><div>${cat.name}</div><div class="status">Création…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector('.status');
+    try {
+      const { error } = await supabaseClient.from('categories').upsert({ id: cat.id, name: cat.name, sort_order: cat.sort_order });
+      if (error) throw error;
+      statusEl.textContent = '✓ Créée';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ Erreur : ' + e.message;
+      statusEl.className = 'status err';
+    }
+  }
+
+  async function addGroup(title, items, categoryId) {
+    const header = document.createElement('h2');
+    header.textContent = title + ' (' + items.length + ')';
+    results.appendChild(header);
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const img = IMAGES[item.ref] || '';
+      row.innerHTML = `<img src="${img}"><div><div>${item.name}</div><div class="status">Envoi…</div></div>`;
+      results.appendChild(row);
+      const statusEl = row.querySelector('.status');
+      try {
+        const { error } = await supabaseClient.from('products').upsert({
+          id: item.ref, ref: item.ref, name: item.name, price: item.price,
+          category_id: categoryId, image: img,
+          unit_step: 1, unit_label: '', sort_order: 100,
+          out_of_stock: item.outOfStock || false
+        });
+        if (error) throw error;
+        statusEl.textContent = '✓ Ajouté';
+        statusEl.className = 'status ok';
+      } catch (e) {
+        statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+        statusEl.className = 'status err';
+      }
+    }
+  }
+
+  await addGroup('Casquettes (nouvelles)', CAPS, 'cat-casquettes');
+  await addGroup('Parapluies & Imperméables', UMBRELLAS, 'cat-parapluies');
+  await addGroup('Chaussettes Bébé', SOCKS, 'cat-chaussettes-bebe');
+  await addGroup('Suspension de Noël', ORNAMENTS, 'cat-suspension-noel');
+  await addGroup('Tirelire Cochon Céramique', PIGGYBANKS, 'cat-tirelire');
+  await addGroup('Ponchos', PONCHOS, 'cat-ponchos');
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>
