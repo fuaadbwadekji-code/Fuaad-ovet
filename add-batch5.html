@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ajout — Lot 5 (Catalogue PARIS 2026, sans images)</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:20px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:10px 14px;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.row .name{font-size:14px;}
+.status{font-size:13px;white-space:nowrap;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+.wait{color:#999;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;width:100%;}
+button:disabled{background:#666;}
+#summary{margin-top:20px;font-size:15px;font-weight:bold;padding:14px;border-radius:8px;background:#243652;}
+</style>
+</head>
+<body>
+<h1>📦 Ajout Lot 5 — Catalogue PARIS 2026 (sans images)</h1>
+<p>يضيف Magnets Résine Timbre, Casquettes nouvelles, Portes Clés PC20, Tote Bag manquants, Magnets Résine Époxy, Gants de Cuisine, Magnets Rectangle XL. بدون صور. يُستخدم مرة واحدة فقط.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="summary" style="display:none;"></div>
+<div id="results" style="margin-top:16px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_X95sZEaadGOpz9b4PkJvAA_Wq1K_aN9';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORIES = [
+  { id: 'cat-magnets-resine-timbre', name: 'Magnets Résine Timbre', sort_order: 70 },
+  { id: 'cat-magnets-resine-epoxy', name: 'Magnets Résine Époxy', sort_order: 71 },
+  { id: 'cat-magnets-rectangle-xl', name: 'Magnets Rectangle XL', sort_order: 72 },
+  { id: 'cat-gants-cuisine', name: 'Gants de Cuisine et Maniches', sort_order: 73 },
+  { id: 'cat-portes-cles-pc20', name: 'Portes Clés PC20', sort_order: 74 }
+];
+
+/* ===================== MAGNETS RÉSINE TIMBRE — 0.70€ ===================== */
+const MAGNETS_RESINE_TIMBRE = [
+  { ref: 'MAT212', name: 'Magnet résine timbre — Notre-Dame', price: 0.70 },
+  { ref: 'MAT213', name: 'Magnet résine timbre — Sacré-Cœur', price: 0.70 },
+  { ref: 'MAT214', name: 'Magnet résine timbre — Arc de Triomphe', price: 0.70 },
+  { ref: 'MAT215', name: 'Magnet résine timbre — Tour Eiffel nuit', price: 0.70 },
+  { ref: 'MAT216', name: 'Magnet résine timbre — Tour Eiffel ciel bleu', price: 0.70 },
+  { ref: 'MAT217', name: 'Magnet résine timbre — Tour Eiffel jardin', price: 0.70 }
+];
+
+/* ===================== CASQUETTES BASEBALL (nouvelles) — 2.90€ ===================== */
+const CASQUETTES_NOUVELLES = [
+  { ref: 'CAS173BL', name: 'Casquette baseball — bleu marine fleurs', price: 2.90 },
+  { ref: 'CAS173CL', name: 'Casquette baseball — bleu clair fleurs', price: 2.90 },
+  { ref: 'CAS173N', name: 'Casquette baseball — noir fleurs', price: 2.90 },
+  { ref: 'CAS173RS', name: 'Casquette baseball — rose fleurs', price: 2.90 },
+  { ref: 'CAS174BC', name: 'Casquette baseball — blanc/marron', price: 2.90 },
+  { ref: 'CAS174M', name: 'Casquette baseball — marine/marron', price: 2.90 },
+  { ref: 'CAS239BL', name: 'Casquette baseball — bleu/jaune', price: 2.90 },
+  { ref: 'CAS239CL', name: 'Casquette baseball — bleu clair/jaune', price: 2.90 },
+  { ref: 'CAS200BG', name: 'Casquette baseball — beige logo blason', price: 2.90 },
+  { ref: 'CAS200M', name: 'Casquette baseball — marine logo Paris', price: 2.90 },
+  { ref: 'CAS200N', name: 'Casquette baseball — noir logo Paris', price: 2.90 }
+];
+
+/* ===================== PORTES CLÉS PC20 — 0.08€ / PC20BBR 0.15€ ===================== */
+const PORTES_CLES_PC20 = [
+  { ref: 'PC20RS', name: 'Porte-clé Tour Eiffel — rose', price: 0.08 },
+  { ref: 'PC20CL', name: 'Porte-clé Tour Eiffel — bleu clair', price: 0.08 },
+  { ref: 'PC20R', name: 'Porte-clé Tour Eiffel — rouge', price: 0.08 },
+  { ref: 'PC20FS', name: 'Porte-clé Tour Eiffel — fuchsia', price: 0.08 },
+  { ref: 'PC20V', name: 'Porte-clé Tour Eiffel — vert', price: 0.08 },
+  { ref: 'PC20VL', name: 'Porte-clé Tour Eiffel — violet', price: 0.08 },
+  { ref: 'PC20OR', name: 'Porte-clé Tour Eiffel — or', price: 0.08 },
+  { ref: 'PC20A', name: 'Porte-clé Tour Eiffel — argent', price: 0.08 },
+  { ref: 'PC20BZ', name: 'Porte-clé Tour Eiffel — bronze', price: 0.08 },
+  { ref: 'PC20BL', name: 'Porte-clé Tour Eiffel — bleu', price: 0.08 },
+  { ref: 'PC20BBR', name: 'Porte-clé Tour Eiffel — bleu/blanc/rouge moulin', price: 0.15 }
+];
+
+/* ===================== TOTE BAG manquants (double face + autres) — 2.00€ ===================== */
+const TOTE_BAG_NOUVEAUX = [
+  { ref: 'TB2111', name: 'Tote bag double face — fleurs Paris', price: 2.00 },
+  { ref: 'TB2112', name: 'Tote bag double face — Paris bike town', price: 2.00 },
+  { ref: 'TB2113', name: 'Tote bag double face — I love Paris monuments', price: 2.00 },
+  { ref: 'TB2114', name: 'Tote bag double face — plaque Avenue Champs Élysées', price: 2.00 },
+  { ref: 'TB2114M', name: 'Tote bag double face — plaque Champs Élysées beige', price: 2.00 },
+  { ref: 'TB2115', name: 'Tote bag double face — croquis Tour Eiffel/Notre-Dame', price: 2.00 },
+  { ref: 'TB2116', name: 'Tote bag double face — croquis Tour Eiffel/pont', price: 2.00 },
+  { ref: 'TB2118', name: 'Tote bag double face — collage Paris bleu', price: 2.00 },
+  { ref: 'TB2119', name: 'Tote bag double face — Notre-Dame la renaissance', price: 2.00 },
+  { ref: 'TB2122', name: 'Tote bag — chats toits Paris', price: 2.00 },
+  { ref: 'TB2133', name: 'Tote bag — café croquis Paris', price: 2.00 },
+  { ref: 'TB2135', name: 'Tote bag — fleurs rouges PARIS France', price: 2.00 },
+  { ref: 'TB2140', name: 'Tote bag — collage bleu monuments', price: 2.00 },
+  { ref: 'TB2141', name: 'Tote bag — collage bordeaux monuments', price: 2.00 },
+  { ref: 'TB2143', name: 'Tote bag — macarons Paris', price: 2.00 },
+  { ref: 'TB2145', name: 'Tote bag — Tournée du Chat Noir jaune', price: 2.00 },
+  { ref: 'TB2147', name: 'Tote bag — rue Montmartre peinture', price: 2.00 }
+];
+
+/* ===================== MAGNETS RÉSINE ÉPOXY — 0.70€ ===================== */
+const MAGNETS_RESINE_EPOXY = [
+  { ref: 'MA601', name: 'Magnet résine épox — panneau Notre-Dame', price: 0.70 },
+  { ref: 'MA602', name: 'Magnet résine épox — panneau Tour Eiffel', price: 0.70 },
+  { ref: 'MA603', name: 'Magnet résine épox — panneau Tour Eiffel automne', price: 0.70 },
+  { ref: 'MA604', name: 'Magnet résine épox — panneau Sacré-Cœur', price: 0.70 },
+  { ref: 'MA605', name: 'Magnet résine épox — panneau Arc de Triomphe', price: 0.70 },
+  { ref: 'MA606', name: 'Magnet résine épox — panneau Tour Eiffel/Arc', price: 0.70 }
+];
+
+/* ===================== GANTS DE CUISINE ET MANICHES — 1.90€ ===================== */
+const GANTS_CUISINE = [
+  { ref: 'GM2601', name: 'Gant cuisine et manique — vert Paris café', price: 1.90 },
+  { ref: 'GM2602', name: 'Gant cuisine et manique — rouge Sacré-Cœur', price: 1.90 },
+  { ref: 'GM2603', name: 'Gant cuisine et manique — kaki Welcome to Paris', price: 1.90 },
+  { ref: 'GM2604', name: 'Gant cuisine et manique — noir/blanc Notre-Dame', price: 1.90 },
+  { ref: 'GM2605', name: 'Gant cuisine et manique — bleu nuit chats', price: 1.90 },
+  { ref: 'GM2606', name: 'Gant cuisine et manique — bleu Paris moulin', price: 1.90 },
+  { ref: 'GM2607', name: 'Gant cuisine et manique — rose Take me to Paris', price: 1.90 },
+  { ref: 'GM2608', name: 'Gant cuisine et manique — noir/blanc chats Paris', price: 1.90 },
+  { ref: 'GM2609', name: 'Gant cuisine et manique — rose/violet femme Paris', price: 1.90 },
+  { ref: 'GM26010', name: 'Gant cuisine et manique — violet femme/chapeau', price: 1.90 },
+  { ref: 'GM26011', name: 'Gant cuisine et manique — marron café Paris', price: 1.90 },
+  { ref: 'GM26012', name: 'Gant cuisine et manique — kaki café monuments', price: 1.90 },
+  { ref: 'GM26013', name: 'Gant cuisine et manique — rouge monuments chats', price: 1.90 },
+  { ref: 'GM26014', name: 'Gant cuisine et manique — bordeaux carreaux café', price: 1.90 },
+  { ref: 'GM26015', name: 'Gant cuisine et manique — noir monuments cœur', price: 1.90 }
+];
+
+/* ===================== MAGNETS RECTANGLE XL — 0.70€ ===================== */
+const MAGNETS_RECTANGLE_XL = [
+  { ref: 'MA1401', name: 'Magnet rectangle XL — Arc/Sacré-Cœur/femme chapeau', price: 0.70 },
+  { ref: 'MA1402', name: 'Magnet rectangle XL — café/croissant/moulin', price: 0.70 },
+  { ref: 'MA1403', name: 'Magnet rectangle XL — pont coucher de soleil collage', price: 0.70 },
+  { ref: 'MA1404', name: 'Magnet rectangle XL — Sacré-Cœur/bateau Seine', price: 0.70 },
+  { ref: 'MA1405', name: 'Magnet rectangle XL — pont/Tour Eiffel/Arc violet', price: 0.70 },
+  { ref: 'MA1406', name: 'Magnet rectangle XL — Tour Eiffel/Arc/Sacré-Cœur rose', price: 0.70 },
+  { ref: 'MA1407', name: 'Magnet rectangle XL — Arc/Sacré-Cœur/Louvre fleurs', price: 0.70 },
+  { ref: 'MA1408', name: 'Magnet rectangle XL — Arc/Tour Eiffel/macarons', price: 0.70 },
+  { ref: 'MA1409', name: 'Magnet rectangle XL — Notre-Dame/Tour Eiffel violet', price: 0.70 },
+  { ref: 'MA14010', name: 'Magnet rectangle XL — lampadaire/chat noir coucher soleil', price: 0.70 },
+  { ref: 'MA14011', name: 'Magnet rectangle XL — Notre-Dame/Arc/café automne', price: 0.70 },
+  { ref: 'MA14012', name: 'Magnet rectangle XL — Arc/Sacré-Cœur meilleure destination', price: 0.70 }
+];
+
+function logRow(name) {
+  const results = document.getElementById('results');
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div class="name">${name}</div><div class="status wait">…</div>`;
+  results.appendChild(row);
+  return row.querySelector('.status');
+}
+
+async function addGroup(title, items, categoryId) {
+  const results = document.getElementById('results');
+  const header = document.createElement('h2');
+  header.textContent = title + ' (' + items.length + ')';
+  results.appendChild(header);
+
+  let okCount = 0, errCount = 0;
+
+  for (const item of items) {
+    const statusEl = logRow(item.name);
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: item.ref,
+        ref: item.ref,
+        name: item.name,
+        price: item.price,
+        category_id: categoryId,
+        image: null,
+        unit_step: 1,
+        unit_label: '',
+        sort_order: 100,
+        out_of_stock: item.outOfStock || false
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓';
+      statusEl.className = 'status ok';
+      okCount++;
+    } catch (e) {
+      statusEl.textContent = '✗ ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+      errCount++;
+    }
+  }
+  return { okCount, errCount };
+}
+
+document.getElementById('runBtn').addEventListener('click', async function() {
+  const btn = this;
+  btn.disabled = true;
+  btn.textContent = 'جاري الإضافة...';
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  const catHeader = document.createElement('h2');
+  catHeader.textContent = 'Catégories';
+  results.appendChild(catHeader);
+
+  let catErrors = 0;
+  for (const cat of NEW_CATEGORIES) {
+    const statusEl = logRow(cat.name);
+    try {
+      const { error } = await supabaseClient.from('categories').upsert({ id: cat.id, name: cat.name, sort_order: cat.sort_order });
+      if (error) throw error;
+      statusEl.textContent = '✓';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+      catErrors++;
+    }
+  }
+
+  let totalOk = 0, totalErr = catErrors;
+
+  const groups = [
+    ['Magnets Résine Timbre', MAGNETS_RESINE_TIMBRE, 'cat-magnets-resine-timbre'],
+    ['Casquettes Baseball (nouvelles)', CASQUETTES_NOUVELLES, 'cat-casquettes'],
+    ['Portes Clés PC20', PORTES_CLES_PC20, 'cat-portes-cles-pc20'],
+    ['Tote Bag (nouveaux)', TOTE_BAG_NOUVEAUX, 'cat-tote-bag-2'],
+    ['Magnets Résine Époxy', MAGNETS_RESINE_EPOXY, 'cat-magnets-resine-epoxy'],
+    ['Gants de Cuisine et Maniches', GANTS_CUISINE, 'cat-gants-cuisine'],
+    ['Magnets Rectangle XL', MAGNETS_RECTANGLE_XL, 'cat-magnets-rectangle-xl']
+  ];
+
+  for (const [title, items, catId] of groups) {
+    const r = await addGroup(title, items, catId);
+    totalOk += r.okCount;
+    totalErr += r.errCount;
+  }
+
+  const summary = document.getElementById('summary');
+  summary.style.display = 'block';
+  summary.textContent = `— انتهى — ✓ ${totalOk} منتج تمت إضافته بنجاح | ✗ ${totalErr} خطأ`;
+  summary.style.background = totalErr > 0 ? '#B23B2E' : '#2d5a2d';
+
+  btn.textContent = 'تمت العملية ✓';
+});
+</script>
+</body>
+</html>
