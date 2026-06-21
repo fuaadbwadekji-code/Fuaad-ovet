@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ajout — Porte-clés &amp; Magnets (lot 3)</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:30px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:14px;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.row img{width:50px;height:50px;object-fit:contain;background:#fff;border-radius:4px;}
+.status{font-size:13px;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>🔑🧲 Ajout — Porte-clés &amp; Magnets (lot 3)</h1>
+<p>Cette page ajoute 28 produits : 4 porte-clés, 9 magnets métal, 15 magnets Tour Eiffel couleurs. À utiliser une seule fois.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="results" style="margin-top:20px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="session3_images.js"></script>
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const PC_ITEMS = [
+  { ref: 'PC136CH', name: 'Porte-clés Tour Eiffel + plaque Champs-Élysées', price: 1.00 },
+  { ref: 'PC136ND', name: 'Porte-clés Tour Eiffel + plaque Notre-Dame', price: 1.00 },
+  { ref: 'PC136TE', name: 'Porte-clés Tour Eiffel + plaque Tour Eiffel', price: 1.00 },
+  { ref: 'PC162A', name: 'Porte-clés Arc de Triomphe métal argenté', price: 1.00 }
+];
+
+const MA_METAL_ITEMS = [
+  { ref: 'MA1164', name: 'Magnet métal rectangle — Paris rose vintage', price: 0.65 },
+  { ref: 'MA1163', name: 'Magnet métal rectangle — chats Paris noir et blanc', price: 0.65 },
+  { ref: 'MA1162', name: 'Magnet métal rectangle — chats monuments noir et blanc', price: 0.65 },
+  { ref: 'MA1167', name: 'Magnet métal rectangle — Paris croquis sépia', price: 0.65 },
+  { ref: 'MA1166', name: 'Magnet métal rectangle — Paris carte rose', price: 0.65 },
+  { ref: 'MA1165', name: 'Magnet métal rectangle — Paris élégante rouge', price: 0.65 },
+  { ref: 'MA1169', name: 'Magnet métal rectangle — Paris nuit chats', price: 0.65 },
+  { ref: 'MA1168', name: 'Magnet métal rectangle — Paris mode vintage', price: 0.65 },
+  { ref: 'MA200MIX', name: 'Magnet métal Paris 4 monuments — lot de 10 couleurs', price: 1.00 }
+];
+
+const MAGT_COLOR_ITEMS = [
+  { ref: 'MAGT1AF', name: 'Magnet Tour Eiffel panneaux — argent foncé', price: 1.00 },
+  { ref: 'MAGT1B', name: 'Magnet Tour Eiffel panneaux — bronze', price: 1.00 },
+  { ref: 'MAGT1C', name: 'Magnet Tour Eiffel panneaux — cuivre', price: 1.00 },
+  { ref: 'MAGT2AF', name: 'Magnet Tour Eiffel PARIS vertical — argent foncé', price: 1.00 },
+  { ref: 'MAGT2B', name: 'Magnet Tour Eiffel PARIS vertical — bronze', price: 1.00 },
+  { ref: 'MAGT2C', name: 'Magnet Tour Eiffel PARIS vertical — cuivre', price: 1.00 },
+  { ref: 'MAGT3AF', name: 'Magnet Tour Eiffel PARIS tricolore — argent foncé', price: 1.00 },
+  { ref: 'MAGT3B', name: 'Magnet Tour Eiffel PARIS tricolore — bronze', price: 1.00 },
+  { ref: 'MAGT3C', name: 'Magnet Tour Eiffel PARIS tricolore — cuivre', price: 1.00 },
+  { ref: 'MAGT5AF', name: 'Magnet Tour Eiffel I Love Paris — argent foncé', price: 1.00 },
+  { ref: 'MAGT5B', name: 'Magnet Tour Eiffel I Love Paris — bronze', price: 1.00 },
+  { ref: 'MAGT5C', name: 'Magnet Tour Eiffel I Love Paris — cuivre', price: 1.00 },
+  { ref: 'MAGT6AF', name: 'Magnet Tour Eiffel étiquette I Love Paris — argent foncé', price: 1.00 },
+  { ref: 'MAGT6B', name: 'Magnet Tour Eiffel étiquette I Love Paris — bronze', price: 1.00 },
+  { ref: 'MAGT6C', name: 'Magnet Tour Eiffel étiquette I Love Paris — cuivre', price: 1.00 }
+];
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (typeof SESSION3_IMAGES === 'undefined') {
+    results.innerHTML = '<div class="row"><div class="status err">✗ Erreur : fichier images non chargé.</div></div>';
+    return;
+  }
+
+  async function addGroup(title, items, categoryId) {
+    const header = document.createElement('h2');
+    header.textContent = title + ' (' + items.length + ')';
+    results.appendChild(header);
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const img = SESSION3_IMAGES[item.ref] || '';
+      row.innerHTML = `<img src="${img}"><div><div>${item.name}</div><div class="status">Envoi…</div></div>`;
+      results.appendChild(row);
+      const statusEl = row.querySelector('.status');
+      try {
+        const { error } = await supabaseClient.from('products').upsert({
+          id: item.ref, ref: item.ref, name: item.name, price: item.price,
+          category_id: categoryId, image: img,
+          unit_step: 1, unit_label: '', sort_order: 100
+        });
+        if (error) throw error;
+        statusEl.textContent = '✓ Ajouté';
+        statusEl.className = 'status ok';
+      } catch (e) {
+        statusEl.textContent = '✗ Erreur : ' + (e.message || JSON.stringify(e));
+        statusEl.className = 'status err';
+      }
+    }
+  }
+
+  await addGroup('Portes-Clés', PC_ITEMS, 'cat-portes-cles');
+  await addGroup('Magnets Métal', MA_METAL_ITEMS, 'cat-magnets-illustres');
+  await addGroup('Magnets Tour Eiffel couleurs', MAGT_COLOR_ITEMS, 'cat-magnets-illustres');
+
+  const doneMsg = document.createElement('div');
+  doneMsg.style.marginTop = '14px';
+  doneMsg.style.fontWeight = 'bold';
+  doneMsg.textContent = '— Terminé —';
+  results.appendChild(doneMsg);
+});
+</script>
+</body>
+</html>
