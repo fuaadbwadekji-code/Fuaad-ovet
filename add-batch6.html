@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ajout — Lot 6 (Verre à Shot nouveaux, sans images)</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:20px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:10px 14px;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.row .name{font-size:14px;}
+.status{font-size:13px;white-space:nowrap;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+.wait{color:#999;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;width:100%;}
+button:disabled{background:#666;}
+#summary{margin-top:20px;font-size:15px;font-weight:bold;padding:14px;border-radius:8px;background:#243652;}
+</style>
+</head>
+<body>
+<h1>📦 Ajout Lot 6 — Verre à Shot nouveaux (sans images)</h1>
+<p>يضيف 8 منتجات Verre à Shot (S.Gorge, Torse-Paris, Mat) للفئة الموجودة "Verre à Shot". بدون صور. يُستخدم مرة واحدة فقط.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="summary" style="display:none;"></div>
+<div id="results" style="margin-top:16px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_X95sZEaadGOpz9b4PkJvAA_Wq1K_aN9';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* Catégorie existante "VERRE A SHOT" — id confirmé via list-all-products */
+const VERRE_SHOT_CATEGORY_ID = 'b80862e4-80a5-4325-86d2-c56f3fe41e2f';
+
+/* ===================== VERRE À SHOT NOUVEAUX — 1.00€ ===================== */
+const VERRE_SHOT_NOUVEAUX = [
+  { ref: 'VE1101', name: 'Verre à shot S.Gorge — I love Paris drapeau', price: 1.00 },
+  { ref: 'VE1102', name: 'Verre à shot S.Gorge — Paris monuments noir', price: 1.00 },
+  { ref: 'VE1103', name: 'Verre à shot S.Gorge — Paris bleu dégradé', price: 1.00 },
+  { ref: 'VE1104', name: 'Verre à shot S.Gorge — Paris collage rouge', price: 1.00 },
+  { ref: 'VE1105', name: 'Verre à shot Torse Paris — drapeau France', price: 1.00 },
+  { ref: 'VE2105', name: 'Verre à shot mat — Paris France noir', price: 1.00 },
+  { ref: 'VE2106', name: 'Verre à shot mat — Paris France doré', price: 1.00 },
+  { ref: 'VE2107', name: 'Verre à shot mat — Paris carte France rouge', price: 1.00 }
+];
+
+function logRow(name) {
+  const results = document.getElementById('results');
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div class="name">${name}</div><div class="status wait">…</div>`;
+  results.appendChild(row);
+  return row.querySelector('.status');
+}
+
+async function addGroup(title, items, categoryId) {
+  const results = document.getElementById('results');
+  const header = document.createElement('h2');
+  header.textContent = title + ' (' + items.length + ')';
+  results.appendChild(header);
+
+  let okCount = 0, errCount = 0;
+
+  for (const item of items) {
+    const statusEl = logRow(item.name);
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: item.ref,
+        ref: item.ref,
+        name: item.name,
+        price: item.price,
+        category_id: categoryId,
+        image: null,
+        unit_step: 1,
+        unit_label: '',
+        sort_order: 100,
+        out_of_stock: item.outOfStock || false
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓';
+      statusEl.className = 'status ok';
+      okCount++;
+    } catch (e) {
+      statusEl.textContent = '✗ ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+      errCount++;
+    }
+  }
+  return { okCount, errCount };
+}
+
+document.getElementById('runBtn').addEventListener('click', async function() {
+  const btn = this;
+  btn.disabled = true;
+  btn.textContent = 'جاري الإضافة...';
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  let totalOk = 0, totalErr = 0;
+
+  const r = await addGroup('Verre à Shot (nouveaux)', VERRE_SHOT_NOUVEAUX, VERRE_SHOT_CATEGORY_ID);
+  totalOk += r.okCount;
+  totalErr += r.errCount;
+
+  const summary = document.getElementById('summary');
+  summary.style.display = 'block';
+  summary.textContent = `— انتهى — ✓ ${totalOk} منتج تمت إضافته بنجاح | ✗ ${totalErr} خطأ`;
+  summary.style.background = totalErr > 0 ? '#B23B2E' : '#2d5a2d';
+
+  btn.textContent = 'تمت العملية ✓';
+});
+</script>
+</body>
+</html>
