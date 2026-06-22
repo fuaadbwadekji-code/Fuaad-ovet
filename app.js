@@ -89,18 +89,31 @@ async function loadAllData() {
     // certaines avec des images encodées en base64 assez lourdes).
     let allProducts = [];
     let from = 0;
-    const pageSize = 100;
+    let pageSize = 40;
     while (true) {
-      const { data, error } = await supabaseClient
-        .from('products')
-        .select('*')
-        .order('sort_order')
-        .range(from, from + pageSize - 1);
-      if (error) throw error;
+      let data, error;
+      try {
+        const res = await supabaseClient
+          .from('products')
+          .select('*')
+          .order('sort_order')
+          .range(from, from + pageSize - 1);
+        data = res.data; error = res.error;
+      } catch (e) {
+        error = e;
+      }
+      if (error) {
+        // Si même un petit lot échoue (ligne très lourde), on réduit encore
+        if (pageSize > 10) {
+          pageSize = Math.max(10, Math.floor(pageSize / 2));
+          continue;
+        }
+        throw error;
+      }
       if (!data || data.length === 0) break;
       allProducts = allProducts.concat(data);
       if (data.length < pageSize) break;
-      from += pageSize;
+      from += data.length;
     }
 
     categories = (catRes.data || []).map(c => ({
