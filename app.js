@@ -96,7 +96,6 @@ async function loadAllData() {
         const res = await supabaseClient
           .from('products')
           .select('*')
-          .order('sort_order')
           .range(from, from + pageSize - 1);
         data = res.data; error = res.error;
       } catch (e) {
@@ -115,6 +114,9 @@ async function loadAllData() {
       if (data.length < pageSize) break;
       from += data.length;
     }
+    // Tri effectué côté client (JS) plutôt que dans la requête, pour éviter
+    // un tri coûteux sur toute la table avant la pagination côté serveur.
+    allProducts.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
     categories = (catRes.data || []).map(c => ({
       id: c.id, name: c.name, sort_order: c.sort_order,
