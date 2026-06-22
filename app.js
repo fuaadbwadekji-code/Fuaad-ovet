@@ -77,14 +77,31 @@ function closeAllDrawers() {
    ========================================================= */
 async function loadAllData() {
   try {
-    const [catRes, prodRes, settRes] = await Promise.all([
+    const [catRes, settRes] = await Promise.all([
       supabaseClient.from('categories').select('*').order('sort_order'),
-      supabaseClient.from('products').select('*').order('sort_order'),
       supabaseClient.from('settings').select('*').eq('id', 1).single()
     ]);
     if (catRes.error) throw catRes.error;
-    if (prodRes.error) throw prodRes.error;
     if (settRes.error) throw settRes.error;
+
+    // Récupération des produits par petits lots pour éviter un timeout
+    // côté base de données (la table contient maintenant 900+ lignes,
+    // certaines avec des images encodées en base64 assez lourdes).
+    let allProducts = [];
+    let from = 0;
+    const pageSize = 100;
+    while (true) {
+      const { data, error } = await supabaseClient
+        .from('products')
+        .select('*')
+        .order('sort_order')
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      allProducts = allProducts.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
 
     categories = (catRes.data || []).map(c => ({
       id: c.id, name: c.name, sort_order: c.sort_order,
@@ -93,7 +110,7 @@ async function loadAllData() {
       bulkPrice: c.bulk_price != null ? Number(c.bulk_price) : null,
       hidden: !!c.hidden
     }));
-    products = (prodRes.data || []).map(p => ({
+    products = allProducts.map(p => ({
       id: p.id, ref: p.ref, name: p.name, price: Number(p.price),
       categoryId: p.category_id, image: p.image,
       unitStep: p.unit_step || 1, unitLabel: p.unit_label || '',
