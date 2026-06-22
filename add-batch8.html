@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ajout — Lot 8 (sans images)</title>
+<style>
+body{font-family:sans-serif;background:#1B2A45;color:#F2E9D8;padding:20px;max-width:600px;margin:0 auto;}
+h1{font-size:18px;}
+h2{font-size:13px;color:#D89A2C;text-transform:uppercase;letter-spacing:1px;margin-top:24px;}
+.row{background:#243652;padding:10px 14px;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.row .name{font-size:14px;}
+.status{font-size:13px;white-space:nowrap;}
+.ok{color:#7C8F6E;}
+.err{color:#B23B2E;}
+.wait{color:#999;}
+button{background:#D89A2C;color:#10192C;border:none;padding:14px 24px;border-radius:20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;width:100%;}
+button:disabled{background:#666;}
+#summary{margin-top:20px;font-size:15px;font-weight:bold;padding:14px;border-radius:8px;background:#243652;}
+</style>
+</head>
+<body>
+<h1>📦 Ajout Lot 8 (sans images)</h1>
+<p>يضيف Tote Bag (TB2124), Carnets Photos GM, Assiette Résine, Jeu de Cartes à Jouer. بدون صور. يُستخدم مرة واحدة فقط.</p>
+<button id="runBtn">Lancer l'ajout</button>
+<div id="summary" style="display:none;"></div>
+<div id="results" style="margin-top:16px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_X95sZEaadGOpz9b4PkJvAA_Wq1K_aN9';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const NEW_CATEGORIES = [
+  { id: 'cat-assiette-resine', name: 'Assiette Résine', sort_order: 94 },
+  { id: 'cat-cartes-jouer', name: 'Jeu de Cartes à Jouer', sort_order: 95 }
+];
+
+/* ===================== TOTE BAG nouveau — 2.00€ ===================== */
+const TOTE_BAG_NOUVEAU = [
+  { ref: 'TB2124', name: 'Tote bag — France Paris femme robe noire', price: 2.00 }
+];
+
+/* ===================== CARNETS PHOTOS GM — 2.00€ ===================== */
+const CARNETS_GM = [
+  { ref: 'CAR290-2', name: 'Carnet photo GM — Paris/Seine automne (14x21cm)', price: 2.00 },
+  { ref: 'CAR290-7', name: 'Carnet photo GM — Paris/métro (14x21cm)', price: 2.00 },
+  { ref: 'CAR290-9', name: 'Carnet photo GM — Paris/Arc Triomphe (14x21cm)', price: 2.00 },
+  { ref: 'CAR290-TO', name: 'Carnet photo GM — Tour Eiffel noir/blanc (14x21cm)', price: 2.00 }
+];
+
+/* ===================== ASSIETTE RÉSINE ===================== */
+const ASSIETTE_RESINE = [
+  { ref: 'AST2', name: 'Assiette résine 4 monuments (24cm)', price: 4.00 },
+  { ref: 'AST1', name: 'Assiette résine 4 monuments (16cm)', price: 2.50 }
+];
+
+/* ===================== JEU DE 54 CARTES À JOUER — 0.95€ ===================== */
+const CARTES_JOUER = [
+  { ref: 'CART01', name: 'Jeu de cartes — pont Seine Paris', price: 0.95 },
+  { ref: 'CART02', name: 'Jeu de cartes — Paris monuments collage', price: 0.95 },
+  { ref: 'CART03', name: 'Jeu de cartes — Tour Eiffel vintage doré', price: 0.95 },
+  { ref: 'CART04', name: 'Jeu de cartes — métro/Arc Triomphe vintage doré', price: 0.95 },
+  { ref: 'CART05', name: 'Jeu de cartes — Tour Eiffel/Sacré-Cœur vintage doré', price: 0.95 },
+  { ref: 'CART06', name: 'Jeu de cartes — Montmartre cocktail macarons', price: 0.95 }
+];
+
+/* ===================== CASQUETTES TISSU — 2.90€ ===================== */
+const CASQUETTES_TISSU = [
+  { ref: 'CAS198N', name: 'Casquette tissu Paris France — noir', price: 2.90 },
+  { ref: 'CAS198M', name: 'Casquette tissu Paris France — marine', price: 2.90 },
+  { ref: 'CAS198BG', name: 'Casquette tissu Paris France — beige', price: 2.90 },
+  { ref: 'CAS198K', name: 'Casquette tissu Paris France — kaki', price: 2.90 },
+  { ref: 'CAS198B', name: 'Casquette tissu Paris France — blanc', price: 2.90 },
+  { ref: 'CAS198R', name: 'Casquette tissu Paris France — rouge', price: 2.90 },
+  { ref: 'CAS199BG', name: 'Casquette tissu Original the Paris — beige', price: 2.90 },
+  { ref: 'CAS199B', name: 'Casquette tissu Original the Paris — blanc', price: 2.90 },
+  { ref: 'CAS199N', name: 'Casquette tissu Original the Paris — noir', price: 2.90 },
+  { ref: 'CAS199G', name: 'Casquette tissu Original the Paris — gris', price: 2.90 },
+  { ref: 'CAS199R', name: 'Casquette tissu Original the Paris — bordeaux', price: 2.90 },
+  { ref: 'CAS199MB', name: 'Casquette tissu Original the Paris — marron', price: 2.90 }
+];
+
+function logRow(name) {
+  const results = document.getElementById('results');
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div class="name">${name}</div><div class="status wait">…</div>`;
+  results.appendChild(row);
+  return row.querySelector('.status');
+}
+
+async function addGroup(title, items, categoryId) {
+  const results = document.getElementById('results');
+  const header = document.createElement('h2');
+  header.textContent = title + ' (' + items.length + ')';
+  results.appendChild(header);
+
+  let okCount = 0, errCount = 0;
+
+  for (const item of items) {
+    const statusEl = logRow(item.name);
+    try {
+      const { error } = await supabaseClient.from('products').upsert({
+        id: item.ref,
+        ref: item.ref,
+        name: item.name,
+        price: item.price,
+        category_id: categoryId,
+        image: null,
+        unit_step: 1,
+        unit_label: '',
+        sort_order: 100,
+        out_of_stock: item.outOfStock || false
+      });
+      if (error) throw error;
+      statusEl.textContent = '✓';
+      statusEl.className = 'status ok';
+      okCount++;
+    } catch (e) {
+      statusEl.textContent = '✗ ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+      errCount++;
+    }
+  }
+  return { okCount, errCount };
+}
+
+document.getElementById('runBtn').addEventListener('click', async function() {
+  const btn = this;
+  btn.disabled = true;
+  btn.textContent = 'جاري الإضافة...';
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  const catHeader = document.createElement('h2');
+  catHeader.textContent = 'Catégories';
+  results.appendChild(catHeader);
+
+  let catErrors = 0;
+  for (const cat of NEW_CATEGORIES) {
+    const statusEl = logRow(cat.name);
+    try {
+      const { error } = await supabaseClient.from('categories').upsert({ id: cat.id, name: cat.name, sort_order: cat.sort_order });
+      if (error) throw error;
+      statusEl.textContent = '✓';
+      statusEl.className = 'status ok';
+    } catch (e) {
+      statusEl.textContent = '✗ ' + (e.message || JSON.stringify(e));
+      statusEl.className = 'status err';
+      catErrors++;
+    }
+  }
+
+  let totalOk = 0, totalErr = catErrors;
+
+  const groups = [
+    ['Tote Bag (nouveau)', TOTE_BAG_NOUVEAU, 'cat-tote-bag-2'],
+    ['Carnets Photos GM', CARNETS_GM, 'cat-carnets'],
+    ['Assiette Résine', ASSIETTE_RESINE, 'cat-assiette-resine'],
+    ['Jeu de Cartes à Jouer', CARTES_JOUER, 'cat-cartes-jouer'],
+    ['Casquettes Tissu', CASQUETTES_TISSU, 'cat-casquettes']
+  ];
+
+  for (const [title, items, catId] of groups) {
+    const r = await addGroup(title, items, catId);
+    totalOk += r.okCount;
+    totalErr += r.errCount;
+  }
+
+  const summary = document.getElementById('summary');
+  summary.style.display = 'block';
+  summary.textContent = `— انتهى — ✓ ${totalOk} منتج تمت إضافته بنجاح | ✗ ${totalErr} خطأ`;
+  summary.style.background = totalErr > 0 ? '#B23B2E' : '#2d5a2d';
+
+  btn.textContent = 'تمت العملية ✓';
+});
+</script>
+</body>
+</html>
