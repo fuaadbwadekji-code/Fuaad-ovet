@@ -47,20 +47,23 @@ document.getElementById('runBtn').addEventListener('click', async function() {
     const { data: categories, error: catErr } = await client.from('categories').select('id, name, sort_order').order('sort_order');
     if (catErr) throw catErr;
 
-    // جلب كل المنتجات (قد نحتاج صفحات إذا أكتر من 1000)
+    // جلب كل المنتجات (بصفحات صغيرة لتجنب انتهاء وقت الاستعلام)
     let allProducts = [];
     let from = 0;
-    const pageSize = 1000;
+    const pageSize = 200;
     while (true) {
+      statsEl.textContent = `⏳ جاري التحميل... (${allProducts.length} منتج لحد الآن)`;
       const { data, error } = await client
         .from('products')
         .select('id, ref, name, price, category_id, image, out_of_stock')
-        .range(from, from + pageSize - 1);
+        .range(from, from + pageSize - 1)
+        .order('id');
       if (error) throw error;
       if (!data || data.length === 0) break;
       allProducts = allProducts.concat(data);
       if (data.length < pageSize) break;
       from += pageSize;
+      await new Promise(r => setTimeout(r, 150)); // فترة راحة قصيرة بين الطلبات
     }
 
     statsEl.textContent = `📦 إجمالي المنتجات: ${allProducts.length} | 🗂️ إجمالي الفئات: ${categories.length}`;
