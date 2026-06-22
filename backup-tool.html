@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>نسخة احتياطية كاملة</title>
+<style>
+body{font-family:sans-serif;background:#111;color:#eee;padding:16px;}
+h2{font-size:18px;}
+button{padding:16px 22px;font-size:18px;width:100%;border-radius:10px;border:none;background:#2563eb;color:#fff;font-weight:bold;margin-bottom:14px;}
+button:disabled{background:#555;}
+#status{font-size:16px;font-weight:bold;background:#243652;padding:12px;border-radius:8px;margin-bottom:14px;white-space:pre-wrap;}
+.ok{color:#7C8F6E;}
+.err{color:#f55;background:#311;padding:10px;border-radius:6px;}
+#downloadBtn{display:none;background:#2d5a2d;}
+</style>
+</head>
+<body>
+<h2>💾 نسخة احتياطية كاملة من الموقع</h2>
+<p>هاد بيحمّل كل المنتجات (مع صورهم)، الفئات، والإعدادات بملف واحد تقدري تحفظيه. خزّنيه بمكان آمن (مثل Google Drive) قبل أي تعديل كبير على الموقع.</p>
+<button id="runBtn">ابدأ النسخ الاحتياطي</button>
+<div id="status"></div>
+<button id="downloadBtn">⬇️ تحميل الملف الاحتياطي</button>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_X95sZEaadGOpz9b4PkJvAA_Wq1K_aN9';
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let backupData = null;
+
+document.getElementById('runBtn').addEventListener('click', async function() {
+  const btn = this;
+  btn.disabled = true;
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = '⏳ جاري النسخ...';
+
+  try {
+    // الفئات
+    statusEl.textContent = '⏳ جاري نسخ الفئات...';
+    const { data: categories, error: catErr } = await client.from('categories').select('*');
+    if (catErr) throw catErr;
+
+    // الإعدادات
+    statusEl.textContent = '⏳ جاري نسخ الإعدادات...';
+    const { data: settings, error: setErr } = await client.from('settings').select('*');
+    if (setErr) throw setErr;
+
+    // المنتجات (بدفعات صغيرة لتجنب timeout)
+    let allProducts = [];
+    let from = 0;
+    let pageSize = 40;
+    while (true) {
+      statusEl.textContent = `⏳ جاري نسخ المنتجات... (${allProducts.length} لحد الآن)`;
+      let data, error;
+      try {
+        const res = await client.from('products').select('*').range(from, from + pageSize - 1);
+        data = res.data; error = res.error;
+      } catch (e) {
+        error = e;
+      }
+      if (error) {
+        if (pageSize > 10) {
+          pageSize = Math.max(10, Math.floor(pageSize / 2));
+          continue;
+        }
+        throw error;
+      }
+      if (!data || data.length === 0) break;
+      allProducts = allProducts.concat(data);
+      if (data.length < pageSize) break;
+      from += data.length;
+    }
+
+    backupData = {
+      backup_date: new Date().toISOString(),
+      categories: categories,
+      settings: settings,
+      products: allProducts
+    };
+
+    statusEl.innerHTML = `✅ النسخ الاحتياطي جاهز!\n📦 ${allProducts.length} منتج\n🗂️ ${categories.length} فئة\n\nدوسي الزر تحت لتحميل الملف.`;
+    statusEl.className = 'ok';
+    document.getElementById('downloadBtn').style.display = 'block';
+
+  } catch (e) {
+    statusEl.innerHTML = '';
+    statusEl.className = '';
+    const errDiv = document.createElement('div');
+    errDiv.className = 'err';
+    errDiv.textContent = 'خطأ: ' + (e.message || JSON.stringify(e));
+    statusEl.appendChild(errDiv);
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'إعادة النسخ';
+});
+
+document.getElementById('downloadBtn').addEventListener('click', function() {
+  if (!backupData) return;
+  const json = JSON.stringify(backupData, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `backup-souvenirs-paris-${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
