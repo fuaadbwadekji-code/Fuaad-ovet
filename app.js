@@ -18,6 +18,30 @@ let categories = [];
 let products = [];
 let settings = { shop_name: 'Souvenirs de Paris', whatsapp: '', email: '', admin_pin: '1234', next_order_number: 1 };
 let cart = {}; // { productId: qty }  (qty déjà en unités réelles, multiples de unit_step)
+
+/* Persistance locale du panier : permet de retrouver le panier tel qu'il
+   était si la page se recharge (perte de connexion, fermeture accidentelle
+   de l'onglet, etc.). Le panier n'est jamais perdu tant que le client
+   utilise le même navigateur sur le même appareil. */
+const CART_STORAGE_KEY = 'souvenirs_paris_cart_v1';
+function saveCartToStorage() {
+  try {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+  } catch (e) {
+    console.warn('Impossible de sauvegarder le panier localement', e);
+  }
+}
+function loadCartFromStorage() {
+  try {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') cart = parsed;
+    }
+  } catch (e) {
+    console.warn('Impossible de charger le panier sauvegardé', e);
+  }
+}
 let activeCategory = 'all';
 let searchTerm = '';
 let editingProductId = null;
@@ -134,11 +158,17 @@ async function loadAllData() {
     }));
     settings = settRes.data || settings;
 
+    loadCartFromStorage();
+    if (wasAdminPreviouslyUnlocked()) {
+      unlockAdminPanel();
+    }
+
     document.getElementById('shopNameDisplay').textContent = settings.shop_name || 'Souvenirs de Paris';
     document.getElementById('loadingState').style.display = 'none';
     renderCategoryStrip();
     renderGrid();
     renderHomeTiles();
+    updateCartUI();
     startOrderPolling();
   } catch (e) {
     console.error('Erreur de chargement', e);
@@ -422,7 +452,7 @@ function productCardHtml(p) {
       ${lots > 0 ? `
         <div class="qty-control">
           <button class="qty-minus" data-id="${p.id}">−</button>
-          <input type="number" class="qty-input" data-id="${p.id}" value="${lots}" min="0" inputmode="numeric">
+          <input type="number" class="qty-input" data-id="${p.id}" value="${qty}" min="0" inputmode="numeric">
           <button class="qty-plus" data-id="${p.id}">+</button>
         </div>
       ` : `
@@ -474,21 +504,23 @@ function addToCart(id, deltaLots) {
    de quantité (au lieu de cliquer +/- plusieurs fois). La valeur saisie
    reste exprimée en lots ; elle est convertie en unités réelles via
    unitStep, comme pour les boutons +/-. */
-function setCartQtyLots(id, typedLotsValue) {
+/* Permet à l'admin de taper directement le nombre d'unités RÉELLES
+   souhaité dans le champ de quantité (ex. 57 = exactement 57 unités),
+   même pour un produit vendu par lot. Le chiffre tapé n'est PAS
+   multiplié par la taille du lot. */
+function setCartQtyLots(id, typedValue) {
   const p = products.find(x => x.id === id);
   if (!p) return;
-  let lots = parseInt(typedLotsValue, 10);
-  if (isNaN(lots) || lots < 0) lots = 0;
-  if (p.outOfStock && lots > 0) {
+  let units = parseInt(typedValue, 10);
+  if (isNaN(units) || units < 0) units = 0;
+  if (p.outOfStock && units > 0) {
     showToast('Ce produit est en rupture de stock');
-    lots = 0;
+    units = 0;
   }
-  const step = p.unitStep || 1;
-  const newQty = lots * step;
-  if (newQty <= 0) {
+  if (units <= 0) {
     delete cart[id];
   } else {
-    cart[id] = newQty;
+    cart[id] = units;
   }
   updateCartUI();
   renderGrid();
@@ -546,6 +578,7 @@ function cartTotal() {
 }
 
 function updateCartUI() {
+  saveCartToStorage();
   const { total, count } = cartTotal();
   const badge = document.getElementById('cartBadge');
   const fab = document.getElementById('cartFab');
@@ -623,7 +656,7 @@ function renderCartDrawer() {
         <div class="cart-line-bottom">
           <div class="qty-control">
             <button class="cl-minus" data-id="${id}">−</button>
-            <input type="number" class="qty-input cl-input" data-id="${id}" value="${lots}" min="0" inputmode="numeric">
+            <input type="number" class="qty-input cl-input" data-id="${id}" value="${qty}" min="0" inputmode="numeric">
             <button class="cl-plus" data-id="${id}">+</button>
           </div>
           <span class="cart-line-price">${isBulk ? `<span class="old-price">${fmtPrice(p.price * qty)}</span> ` : ''}${fmtPrice(effectivePrice * qty)}</span>
@@ -782,6 +815,36 @@ async function submitOrder(clientName, shopName) {
 /* =========================================================
    ADMIN — PIN
    ========================================================= */
+/* Persistance du déverrouillage admin : une fois le code entré
+   correctement, l'accès reste ouvert même après un rechargement de la
+   page, jusqu'à ce que l'utilisateur clique sur "Verrouiller". */
+const ADMIN_UNLOCK_KEY = 'souvenirs_paris_admin_unlocked_v1';
+function saveAdminUnlockState(unlocked) {
+  try {
+    if (unlocked) localStorage.setItem(ADMIN_UNLOCK_KEY, '1');
+    else localStorage.removeItem(ADMIN_UNLOCK_KEY);
+  } catch (e) {
+    console.warn('Impossible de sauvegarder l\'état admin', e);
+  }
+}
+function wasAdminPreviouslyUnlocked() {
+  try {
+    return localStorage.getItem(ADMIN_UNLOCK_KEY) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+function unlockAdminPanel() {
+  adminUnlocked = true;
+  saveAdminUnlockState(true);
+  document.getElementById('adminLockScreen').style.display = 'none';
+  document.getElementById('adminPanel').style.display = 'block';
+  renderAdminProductList();
+  renderAdminCatList();
+  renderAdminOrderList();
+  prefillSettings();
+}
+
 function setupAdminLock() {
   const inputs = Array.from(document.querySelectorAll('.pin-input input'));
   inputs.forEach((inp, idx) => {
@@ -800,15 +863,9 @@ function setupAdminLock() {
       return;
     }
     if (code === (settings.admin_pin || '1234')) {
-      adminUnlocked = true;
       document.getElementById('pinError').textContent = '';
       inputs.forEach(i => i.value = '');
-      document.getElementById('adminLockScreen').style.display = 'none';
-      document.getElementById('adminPanel').style.display = 'block';
-      renderAdminProductList();
-      renderAdminCatList();
-      renderAdminOrderList();
-      prefillSettings();
+      unlockAdminPanel();
     } else {
       document.getElementById('pinError').textContent = 'Code incorrect, réessayez.';
       inputs.forEach(i => i.value = '');
@@ -872,10 +929,24 @@ async function renderAdminOrderList() {
             <option value="terminee" ${o.status === 'terminee' ? 'selected' : ''}>Terminée</option>
           </select>
         </div>
+        <button class="copy-order-btn" data-copyitems='${escapeHtml(JSON.stringify(o.items || []))}'>📋 Copier (réf. × qté)</button>
         <button class="delete-order-btn" data-delorder="${o.id}">🗑 Supprimer cette commande</button>
       </div>`;
     });
     list.innerHTML = html;
+    list.querySelectorAll('.copy-order-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        let items = [];
+        try { items = JSON.parse(btn.dataset.copyitems); } catch (e) { items = []; }
+        const text = items.map(it => `${it.ref} x${it.qty}`).join('\n');
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast('✓ Copié dans le presse-papiers');
+        } catch (e) {
+          showToast('⚠️ Copie impossible sur cet appareil');
+        }
+      });
+    });
     list.querySelectorAll('.status-select').forEach(sel => {
       sel.addEventListener('change', async () => {
         const { error } = await supabaseClient.from('orders').update({ status: sel.value }).eq('id', sel.dataset.orderId);
@@ -1673,6 +1744,7 @@ function setupGeneralUI() {
 
   document.getElementById('adminLogoutBtn').addEventListener('click', () => {
     adminUnlocked = false;
+    saveAdminUnlockState(false);
     document.getElementById('adminLockScreen').style.display = 'flex';
     document.getElementById('adminPanel').style.display = 'none';
     closeDrawer('adminDrawer');
