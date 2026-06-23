@@ -1188,6 +1188,45 @@ async function deleteProduct(id) {
 /* =========================================================
    ADMIN — Catégories
    ========================================================= */
+/* Réordonne les catégories (haut/bas/début/fin), met à jour sort_order
+   pour TOUTES les catégories en conséquence, et sauvegarde le nouvel
+   ordre dans Supabase. Le catalogue public et la liste admin sont
+   redessinés immédiatement après. */
+async function moveCategory(categoryId, action) {
+  const idx = categories.findIndex(c => c.id === categoryId);
+  if (idx === -1) return;
+
+  let newIdx = idx;
+  if (action === 'up') newIdx = Math.max(0, idx - 1);
+  else if (action === 'down') newIdx = Math.min(categories.length - 1, idx + 1);
+  else if (action === 'totop') newIdx = 0;
+  else if (action === 'tobottom') newIdx = categories.length - 1;
+
+  if (newIdx === idx) return;
+
+  const [moved] = categories.splice(idx, 1);
+  categories.splice(newIdx, 0, moved);
+
+  // Réassigne un sort_order séquentiel propre à toutes les catégories
+  categories.forEach((c, i) => { c.sort_order = i + 1; });
+
+  renderAdminCatList();
+  renderCategoryStrip();
+  renderGrid();
+  renderHomeTiles();
+
+  try {
+    const updates = categories.map(c => supabaseClient.from('categories').update({ sort_order: c.sort_order }).eq('id', c.id));
+    const results = await Promise.all(updates);
+    const failed = results.find(r => r.error);
+    if (failed) throw failed.error;
+    showToast('✓ Ordre des catégories mis à jour');
+  } catch (e) {
+    console.error(e);
+    showToast('⚠️ Erreur lors de l\'enregistrement de l\'ordre');
+  }
+}
+
 function renderAdminCatList() {
   const list = document.getElementById('adminCatList');
   if (categories.length === 0) {
@@ -1195,11 +1234,19 @@ function renderAdminCatList() {
     return;
   }
   let html = '';
-  categories.forEach(c => {
+  categories.forEach((c, idx) => {
     const count = products.filter(p => p.categoryId === c.id).length;
     const hasBulk = c.bulkThresholdQty && c.bulkPrice != null;
+    const isFirst = idx === 0;
+    const isLast = idx === categories.length - 1;
     html += `
     <div class="cat-manage-row${c.hidden ? ' hidden-product-row' : ''}">
+      <div class="cat-reorder-buttons">
+        <button class="admin-icon-btn" data-movecat="totop" data-cat-id="${c.id}" ${isFirst ? 'disabled' : ''} title="Déplacer en premier">⏫</button>
+        <button class="admin-icon-btn" data-movecat="up" data-cat-id="${c.id}" ${isFirst ? 'disabled' : ''} title="Monter">⬆️</button>
+        <button class="admin-icon-btn" data-movecat="down" data-cat-id="${c.id}" ${isLast ? 'disabled' : ''} title="Descendre">⬇️</button>
+        <button class="admin-icon-btn" data-movecat="tobottom" data-cat-id="${c.id}" ${isLast ? 'disabled' : ''} title="Déplacer en dernier">⏬</button>
+      </div>
       <input type="text" value="${escapeHtml(c.name)}" data-cat-id="${c.id}">
       <span style="font-size:11px;color:var(--brass);flex-shrink:0;">${count} art.</span>
       <button class="admin-icon-btn ${c.hidden ? 'active-hide' : ''}" data-hidecat="${c.id}" title="${c.hidden ? 'Réafficher cette catégorie' : 'Masquer cette catégorie'}">${c.hidden ? '👁️‍🗨️' : '👁️'}</button>
@@ -1259,6 +1306,9 @@ function renderAdminCatList() {
   });
   list.querySelectorAll('[data-hidecat]').forEach(btn => {
     btn.addEventListener('click', () => toggleHideCategory(btn.dataset.hidecat));
+  });
+  list.querySelectorAll('[data-movecat]').forEach(btn => {
+    btn.addEventListener('click', () => moveCategory(btn.dataset.catId, btn.dataset.movecat));
   });
   list.querySelectorAll('[data-delcat]').forEach(btn => {
     btn.addEventListener('click', async () => {
