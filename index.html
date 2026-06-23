@@ -50,8 +50,10 @@ button{font-family:inherit;cursor:pointer;}
     var(--navy);
 }
 
-.topbar{
+.sticky-header-wrap{
   position:sticky;top:0;z-index:40;
+}
+.topbar{
   background:var(--navy-deep);
   padding:16px 16px 14px;
   box-shadow:0 6px 18px rgba(0,0,0,0.3);
@@ -124,9 +126,7 @@ button{font-family:inherit;cursor:pointer;}
 .cat-strip{
   display:flex;gap:8px;overflow-x:auto;padding:14px 16px 4px;
   scrollbar-width:none;
-  position:sticky;top:0;z-index:39;
   background:var(--navy-deep);
-  box-shadow:0 6px 12px rgba(0,0,0,0.2);
 }
 .cat-strip::-webkit-scrollbar{display:none;}
 .cat-chip{
@@ -632,6 +632,7 @@ button{font-family:inherit;cursor:pointer;}
 <body>
 <div class="bg-texture"></div>
 
+<div class="sticky-header-wrap">
 <div class="topbar">
   <div class="topbar-row">
     <div class="brand">
@@ -691,6 +692,7 @@ button{font-family:inherit;cursor:pointer;}
 </div>
 
 <div class="cat-strip" id="catStrip"></div>
+</div>
 
 <div class="catalogue">
   <div class="loading-state" id="loadingState">
@@ -953,6 +955,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=20260623c"></script>
 </body>
 </html>
