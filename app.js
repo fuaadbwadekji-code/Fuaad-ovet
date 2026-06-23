@@ -99,6 +99,51 @@ function closeAllDrawers() {
 /* =========================================================
    CHARGEMENT DES DONNÉES (Supabase)
    ========================================================= */
+/* Récupère tous les produits depuis Supabase, par petits lots, pour
+   éviter un timeout côté base de données (la table contient 900+ lignes,
+   certaines avec des images encodées en base64 assez lourdes). Réutilisée
+   au chargement initial et lors du rafraîchissement manuel de l'admin. */
+async function fetchAllProductsFromDB() {
+  let allProducts = [];
+  let from = 0;
+  let pageSize = 40;
+  while (true) {
+    let data, error;
+    try {
+      const res = await supabaseClient
+        .from('products')
+        .select('*')
+        .range(from, from + pageSize - 1);
+      data = res.data; error = res.error;
+    } catch (e) {
+      error = e;
+    }
+    if (error) {
+      if (pageSize > 10) {
+        pageSize = Math.max(10, Math.floor(pageSize / 2));
+        continue;
+      }
+      throw error;
+    }
+    if (!data || data.length === 0) break;
+    allProducts = allProducts.concat(data);
+    if (data.length < pageSize) break;
+    from += data.length;
+  }
+  allProducts.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  return allProducts;
+}
+
+function mapDbProductToLocal(p) {
+  return {
+    id: p.id, ref: p.ref, name: p.name, price: Number(p.price),
+    categoryId: p.category_id, image: p.image,
+    unitStep: p.unit_step || 1, unitLabel: p.unit_label || '',
+    outOfStock: !!p.out_of_stock, featured: !!p.featured,
+    hidden: !!p.hidden
+  };
+}
+
 async function loadAllData() {
   try {
     const [catRes, settRes] = await Promise.all([
@@ -108,39 +153,7 @@ async function loadAllData() {
     if (catRes.error) throw catRes.error;
     if (settRes.error) throw settRes.error;
 
-    // Récupération des produits par petits lots pour éviter un timeout
-    // côté base de données (la table contient maintenant 900+ lignes,
-    // certaines avec des images encodées en base64 assez lourdes).
-    let allProducts = [];
-    let from = 0;
-    let pageSize = 40;
-    while (true) {
-      let data, error;
-      try {
-        const res = await supabaseClient
-          .from('products')
-          .select('*')
-          .range(from, from + pageSize - 1);
-        data = res.data; error = res.error;
-      } catch (e) {
-        error = e;
-      }
-      if (error) {
-        // Si même un petit lot échoue (ligne très lourde), on réduit encore
-        if (pageSize > 10) {
-          pageSize = Math.max(10, Math.floor(pageSize / 2));
-          continue;
-        }
-        throw error;
-      }
-      if (!data || data.length === 0) break;
-      allProducts = allProducts.concat(data);
-      if (data.length < pageSize) break;
-      from += data.length;
-    }
-    // Tri effectué côté client (JS) plutôt que dans la requête, pour éviter
-    // un tri coûteux sur toute la table avant la pagination côté serveur.
-    allProducts.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    const allProducts = await fetchAllProductsFromDB();
 
     categories = (catRes.data || []).map(c => ({
       id: c.id, name: c.name, sort_order: c.sort_order,
@@ -149,13 +162,7 @@ async function loadAllData() {
       bulkPrice: c.bulk_price != null ? Number(c.bulk_price) : null,
       hidden: !!c.hidden
     }));
-    products = allProducts.map(p => ({
-      id: p.id, ref: p.ref, name: p.name, price: Number(p.price),
-      categoryId: p.category_id, image: p.image,
-      unitStep: p.unit_step || 1, unitLabel: p.unit_label || '',
-      outOfStock: !!p.out_of_stock, featured: !!p.featured,
-      hidden: !!p.hidden
-    }));
+    products = allProducts.map(mapDbProductToLocal);
     settings = settRes.data || settings;
 
     loadCartFromStorage();
@@ -876,16 +883,44 @@ function setupAdminLock() {
 
 function setupAdminTabs() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       ['orders', 'products', 'categories', 'settings'].forEach(t => {
         document.getElementById('tab' + capitalize(t)).style.display = (t === btn.dataset.tab) ? 'block' : 'none';
       });
+      // Toujours repartir des données les plus récentes de la base avant
+      // d'afficher la liste des produits : évite qu'un autre appareil
+      // resté ouvert (tablette, téléphone) n'écrase un changement récent
+      // avec une copie locale obsolète.
+      if (btn.dataset.tab === 'products') {
+        await refreshAdminProducts();
+      }
     });
   });
 }
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+/* Recharge uniquement les produits depuis la base (sans toucher au
+   panier ni aux catégories) et redessine la liste admin + le catalogue
+   public, pour que l'admin voie toujours l'état réel le plus récent. */
+async function refreshAdminProducts() {
+  const list = document.getElementById('adminProductList');
+  const previousHtml = list.innerHTML;
+  list.innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
+  try {
+    const allProducts = await fetchAllProductsFromDB();
+    products = allProducts.map(mapDbProductToLocal);
+    renderAdminProductList();
+    renderGrid();
+    renderHomeTiles();
+    renderCategoryStrip();
+  } catch (e) {
+    console.error('Erreur de rafraîchissement des produits', e);
+    list.innerHTML = previousHtml;
+    showToast('⚠️ Impossible de rafraîchir les produits');
+  }
+}
 
 /* =========================================================
    ADMIN — Commandes
@@ -1664,7 +1699,11 @@ function setupProductFormSave() {
       showToast('Merci de remplir tous les champs correctement');
       return;
     }
-    if (!pendingImageData) {
+    // La photo n'est obligatoire que pour un NOUVEAU produit. Modifier un
+    // produit existant (même sans photo) — par ex. juste cocher "Rupture
+    // de stock" — doit toujours fonctionner, sinon la mise à jour est
+    // silencieusement bloquée et semble "revenir en arrière" plus tard.
+    if (!editingProductId && !pendingImageData) {
       showToast('Ajoutez une photo du produit');
       return;
     }
