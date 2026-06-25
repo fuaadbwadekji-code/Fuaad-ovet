@@ -46,6 +46,33 @@ let activeCategory = 'all';
 let searchTerm = '';
 let editingProductId = null;
 let adminUnlocked = false;
+
+/* Logo SVG par défaut (Tour Eiffel dessinée), utilisé tant qu'aucun
+   logo personnalisé n'a été téléchargé, et pour le bouton "revenir au
+   logo par défaut". */
+const DEFAULT_LOGO_SVG = `<svg viewBox="0 0 100 130" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="50" cy="64" r="46" fill="none" stroke="#D89A2C" stroke-width="2" opacity="0.55"/>
+  <g fill="#1B2A45">
+    <rect x="49.3" y="2" width="1.4" height="12"/>
+    <path d="M47.5 14 L52.5 14 L51.3 24 L48.7 24 Z"/>
+    <path d="M48.7 24 L51.3 24 L52.5 34 L47.5 34 Z"/>
+    <path d="M48.2 26.5 L51.8 26.5 L50 30 Z" fill="#D89A2C" opacity="0.5"/>
+    <rect x="46.5" y="34" width="7" height="1.6" fill="#D89A2C"/>
+    <path d="M46.5 35.6 L53.5 35.6 L56.5 54 L43.5 54 Z"/>
+    <path d="M45.5 39 L54.5 39 L48 46 Z" fill="#D89A2C" opacity="0.45"/>
+    <path d="M54.5 39 L45.5 39 L52 46 Z" fill="#D89A2C" opacity="0.45"/>
+    <path d="M44.7 47.5 L55.3 47.5 L50 53 Z" fill="#D89A2C" opacity="0.45"/>
+    <rect x="41" y="54" width="18" height="2.2" fill="#D89A2C"/>
+    <path d="M41.5 56.2 L58.5 56.2 L63 80 L37 80 Z"/>
+    <path d="M40 62 L60 62 L52 70 L48 70 Z" fill="#D89A2C" opacity="0.4"/>
+    <path d="M38.5 70 L61.5 70 L54 78 L46 78 Z" fill="#D89A2C" opacity="0.4"/>
+    <rect x="35" y="80" width="30" height="2.4" fill="#D89A2C"/>
+    <path d="M37 82.4 L43 82.4 L34 122 L25 122 Z"/>
+    <path d="M63 82.4 L57 82.4 L66 122 L75 122 Z"/>
+    <path d="M34 122 L25 122 L25 118 Q25 104 50 104 Q75 104 75 118 L75 122 L66 122 L66 119 Q66 110 50 110 Q34 110 34 119 Z"/>
+    <rect x="20" y="122" width="60" height="2" fill="#D89A2C"/>
+  </g>
+</svg>`;
 let pendingImageData = null;
 let currentUnitMode = 'unit'; // 'unit' | 'bulk'
 
@@ -140,7 +167,7 @@ function mapDbProductToLocal(p) {
     categoryId: p.category_id, image: p.image,
     unitStep: p.unit_step || 1, unitLabel: p.unit_label || '',
     outOfStock: !!p.out_of_stock, featured: !!p.featured,
-    hidden: !!p.hidden
+    hidden: !!p.hidden, isNew: !!p.is_new
   };
 }
 
@@ -170,7 +197,7 @@ async function loadAllData() {
       unlockAdminPanel();
     }
 
-    document.getElementById('shopNameDisplay').textContent = settings.shop_name || 'Souvenirs de Paris';
+    applyBrandingToPage();
     document.getElementById('loadingState').style.display = 'none';
     renderCategoryStrip();
     renderGrid();
@@ -196,6 +223,10 @@ function renderCategoryStrip() {
   const featuredCount = visibleProducts.filter(p => p.featured).length;
   if (featuredCount > 0) {
     html += `<button class="cat-chip featured-chip ${activeCategory === 'featured' ? 'active' : ''}" data-cat="featured">⭐ Meilleures ventes <span class="count">${featuredCount}</span></button>`;
+  }
+  const newCount = visibleProducts.filter(p => p.isNew).length;
+  if (newCount > 0) {
+    html += `<button class="cat-chip new-chip ${activeCategory === 'new' ? 'active' : ''}" data-cat="new">✨ Nouveauté <span class="count">${newCount}</span></button>`;
   }
   categories.filter(c => !c.hidden).forEach(c => {
     const count = visibleProducts.filter(p => p.categoryId === c.id).length;
@@ -347,6 +378,8 @@ function getFilteredProducts() {
   let list = products.filter(isProductVisible);
   if (activeCategory === 'featured') {
     list = list.filter(p => p.featured);
+  } else if (activeCategory === 'new') {
+    list = list.filter(p => p.isNew);
   } else if (activeCategory !== 'all') {
     list = list.filter(p => p.categoryId === activeCategory);
   }
@@ -376,6 +409,12 @@ function renderGrid() {
     if (featured.length) {
       html += `<div class="section-title featured-title">⭐ Meilleures ventes</div><div class="grid">`;
       featured.forEach(p => html += productCardHtml(p));
+      html += `</div>`;
+    }
+    const newOnes = visibleProducts.filter(p => p.isNew);
+    if (newOnes.length) {
+      html += `<div class="section-title new-title">✨ Nouveauté</div><div class="grid">`;
+      newOnes.forEach(p => html += productCardHtml(p));
       html += `</div>`;
     }
     categories.filter(cat => !cat.hidden).forEach(cat => {
@@ -421,7 +460,7 @@ function productCardHtml(p) {
     return `
     <div class="ticket out-of-stock" data-id="${p.id}">
       <div class="ticket-main">
-        <div class="ticket-img-wrap">
+        <div class="ticket-img-wrap" data-detailid="${p.id}">
           <img src="${img}" alt="${escapeHtml(p.name)}" loading="lazy">
           <span class="stamp">RÉF<br>${escapeHtml(p.ref)}</span>
           <div class="stock-banner">Rupture de stock</div>
@@ -443,7 +482,7 @@ function productCardHtml(p) {
   return `
   <div class="ticket" data-id="${p.id}">
     <div class="ticket-main">
-      <div class="ticket-img-wrap">
+      <div class="ticket-img-wrap" data-detailid="${p.id}">
         <img src="${img}" alt="${escapeHtml(p.name)}" loading="lazy">
         <span class="stamp">RÉF<br>${escapeHtml(p.ref)}</span>
       </div>
@@ -483,6 +522,61 @@ function attachCardListeners() {
     inp.addEventListener('change', () => setCartQtyLots(inp.dataset.id, inp.value));
     inp.addEventListener('click', (e) => e.target.select());
   });
+  document.querySelectorAll('.ticket-img-wrap[data-detailid]').forEach(el => {
+    el.addEventListener('click', () => openProductDetail(el.dataset.detailid));
+  });
+}
+
+/* =========================================================
+   DÉTAIL PRODUIT (drawer affiché au clic sur la photo d'un produit)
+   ========================================================= */
+function openProductDetail(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+
+  const qty = cart[p.id] || 0;
+  const lots = p.unitStep > 1 ? Math.round(qty / p.unitStep) : qty;
+  const bulkEligible = getBulkEligibleCategories();
+  const effectivePrice = getEffectivePrice(p, bulkEligible);
+  const isBulk = effectivePrice !== p.price;
+  const unitTag = p.unitStep > 1 ? `<span class="t-unit">📦 Lot de ${p.unitStep}</span>` : '';
+
+  const body = document.getElementById('productDetailBody');
+  body.innerHTML = `
+    <div class="ticket-img-wrap" style="aspect-ratio:1/1;border-radius:14px;margin-bottom:16px;">
+      <img src="${p.image || ''}" alt="${escapeHtml(p.name)}">
+    </div>
+    <div class="t-name" style="font-size:18px;-webkit-line-clamp:none;min-height:auto;margin-bottom:6px;">${escapeHtml(p.name)}</div>
+    <div class="t-ref" style="font-size:11px;">Réf. ${escapeHtml(p.ref)}</div>
+    ${unitTag}
+    <div style="margin-top:14px;font-family:'Fraunces',serif;font-weight:700;font-size:24px;color:var(--ink, #1A1814);">
+      ${isBulk ? `<span class="old-price">${fmtPrice(p.price)}</span> ` : ''}${fmtPrice(effectivePrice)}
+    </div>
+    ${p.outOfStock ? `<div class="stock-label" style="margin-top:8px;">Rupture de stock — indisponible</div>` : ''}
+  `;
+
+  const footer = document.getElementById('productDetailFooter');
+  if (p.outOfStock) {
+    footer.innerHTML = `<button class="btn-secondary" disabled style="opacity:0.5;">Indisponible</button>`;
+  } else {
+    footer.innerHTML = `
+      <div class="qty-control" style="justify-content:center;margin-bottom:12px;background:var(--paper-dim, #F7F4EE);">
+        <button class="qty-minus" data-id="${p.id}" style="width:38px;height:38px;font-size:18px;">−</button>
+        <input type="number" class="qty-input" data-id="${p.id}" value="${qty}" min="0" inputmode="numeric" style="width:50px;font-size:16px;">
+        <button class="qty-plus" data-id="${p.id}" style="width:38px;height:38px;font-size:18px;">+</button>
+      </div>
+      <button class="btn-primary" id="detailAddToCartBtn" data-id="${p.id}">Ajouter au panier</button>
+    `;
+    footer.querySelector('.qty-minus').addEventListener('click', () => { addToCart(p.id, -1); openProductDetail(p.id); });
+    footer.querySelector('.qty-plus').addEventListener('click', () => { addToCart(p.id, 1); openProductDetail(p.id); });
+    footer.querySelector('.qty-input').addEventListener('change', (e) => { setCartQtyLots(p.id, e.target.value); openProductDetail(p.id); });
+    footer.querySelector('#detailAddToCartBtn').addEventListener('click', () => {
+      addToCart(p.id, 1);
+      showToast(`✓ ${p.ref} ajouté au panier`);
+    });
+  }
+
+  openDrawer('productDetailDrawer');
 }
 
 /* =========================================================
@@ -929,7 +1023,12 @@ async function renderAdminOrderList() {
   const list = document.getElementById('adminOrderList');
   list.innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
   try {
-    const { data, error } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false }).limit(100);
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('*')
+      .eq('archived', false)
+      .order('created_at', { ascending: false })
+      .limit(100);
     if (error) throw error;
     if (!data || data.length === 0) {
       list.innerHTML = `<div class="empty-state"><span class="glyph">🎫</span><h3>Aucune commande</h3><p>Les commandes des clients apparaîtront ici.</p></div>`;
@@ -965,7 +1064,7 @@ async function renderAdminOrderList() {
           </select>
         </div>
         <button class="copy-order-btn" data-copyitems='${escapeHtml(JSON.stringify(o.items || []))}'>📋 Copier (réf. × qté)</button>
-        <button class="delete-order-btn" data-delorder="${o.id}">🗑 Supprimer cette commande</button>
+        <button class="delete-order-btn" data-archiveorder="${o.id}">🗂 Archiver cette commande</button>
       </div>`;
     });
     list.innerHTML = html;
@@ -989,13 +1088,81 @@ async function renderAdminOrderList() {
         else showToast('Statut mis à jour');
       });
     });
+    list.querySelectorAll('[data-archiveorder]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Archiver cette commande ? Elle disparaîtra de cette liste mais restera consultable dans l\'onglet "Archivées".')) return;
+        const { error } = await supabaseClient.from('orders').update({ archived: true }).eq('id', btn.dataset.archiveorder);
+        if (error) { showToast('⚠️ Erreur lors de l\'archivage'); return; }
+        showToast('Commande archivée');
+        renderAdminOrderList();
+      });
+    });
+  } catch (e) {
+    list.innerHTML = `<div class="empty-state"><span class="glyph">⚠️</span><h3>Erreur</h3><p>${escapeHtml(e.message || '')}</p></div>`;
+  }
+}
+
+/* Liste des commandes archivées : permet de les consulter, les
+   désarchiver (retour à la liste normale), ou de les supprimer
+   définitivement si besoin. */
+async function renderArchivedOrderList() {
+  const list = document.getElementById('adminArchivedOrderList');
+  if (!list) return;
+  list.innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
+  try {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('*')
+      .eq('archived', true)
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      list.innerHTML = `<div class="empty-state"><span class="glyph">🗂</span><h3>Aucune commande archivée</h3></div>`;
+      return;
+    }
+    let html = '';
+    data.forEach(o => {
+      const date = new Date(o.created_at);
+      const dateStr = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' + date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const itemsLines = (o.items || []).map(it => `<strong>${escapeHtml(it.ref)}</strong> x${it.qty} — ${escapeHtml(it.name)}`).join('<br>');
+      const clientLine = o.shop_name
+        ? `${escapeHtml(o.client_name || 'Client')} <span style="opacity:0.6;font-weight:500;">— ${escapeHtml(o.shop_name)}</span>`
+        : escapeHtml(o.client_name || 'Client');
+      const totalWithTva = o.total_with_tva != null ? Number(o.total_with_tva) : Number(o.total);
+      html += `
+      <div class="order-card" data-order-id="${o.id}">
+        <div class="oc-top">
+          <span class="oc-num">Commande n°${escapeHtml(o.order_number)}</span>
+          <span class="oc-date">${dateStr}</span>
+        </div>
+        <div class="oc-client">${clientLine}</div>
+        <div class="oc-items">${itemsLines}</div>
+        <div class="oc-bottom">
+          <span class="oc-total">${fmtPrice(totalWithTva)}</span>
+          <span class="status-pill ${o.status}">${o.status === 'nouvelle' ? 'Nouvelle' : o.status === 'en_cours' ? 'En cours' : 'Terminée'}</span>
+        </div>
+        <button class="copy-order-btn" data-unarchiveorder="${o.id}" style="background:var(--mustard-deep, var(--mustard));">↺ Désarchiver</button>
+        <button class="delete-order-btn" data-delorder="${o.id}">🗑 Supprimer définitivement</button>
+      </div>`;
+    });
+    list.innerHTML = html;
+    list.querySelectorAll('[data-unarchiveorder]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const { error } = await supabaseClient.from('orders').update({ archived: false }).eq('id', btn.dataset.unarchiveorder);
+        if (error) { showToast('⚠️ Erreur'); return; }
+        showToast('✓ Commande désarchivée');
+        renderArchivedOrderList();
+        renderAdminOrderList();
+      });
+    });
     list.querySelectorAll('[data-delorder]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Supprimer définitivement cette commande ?')) return;
+        if (!confirm('Supprimer DÉFINITIVEMENT cette commande ? Cette action est irréversible.')) return;
         const { error } = await supabaseClient.from('orders').delete().eq('id', btn.dataset.delorder);
         if (error) { showToast('⚠️ Erreur lors de la suppression'); return; }
-        showToast('Commande supprimée');
-        renderAdminOrderList();
+        showToast('Commande supprimée définitivement');
+        renderArchivedOrderList();
       });
     });
   } catch (e) {
@@ -1240,53 +1407,58 @@ function renderAdminCatList() {
     const isFirst = idx === 0;
     const isLast = idx === categories.length - 1;
     html += `
-    <div class="cat-manage-row${c.hidden ? ' hidden-product-row' : ''}">
-      <div class="cat-reorder-buttons">
-        <button class="admin-icon-btn" data-movecat="totop" data-cat-id="${c.id}" ${isFirst ? 'disabled' : ''} title="Déplacer en premier">⏫</button>
-        <button class="admin-icon-btn" data-movecat="up" data-cat-id="${c.id}" ${isFirst ? 'disabled' : ''} title="Monter">⬆️</button>
-        <button class="admin-icon-btn" data-movecat="down" data-cat-id="${c.id}" ${isLast ? 'disabled' : ''} title="Descendre">⬇️</button>
-        <button class="admin-icon-btn" data-movecat="tobottom" data-cat-id="${c.id}" ${isLast ? 'disabled' : ''} title="Déplacer en dernier">⏬</button>
-      </div>
-      <input type="text" value="${escapeHtml(c.name)}" data-cat-id="${c.id}">
-      <span style="font-size:11px;color:var(--brass);flex-shrink:0;">${count} art.</span>
-      <button class="admin-icon-btn ${c.hidden ? 'active-hide' : ''}" data-hidecat="${c.id}" title="${c.hidden ? 'Réafficher cette catégorie' : 'Masquer cette catégorie'}">${c.hidden ? '👁️‍🗨️' : '👁️'}</button>
-      <button class="admin-icon-btn danger" data-delcat="${c.id}">🗑</button>
-    </div>
-    <div class="bulk-pricing-box">
-      <div class="bg-remove-toggle" style="margin:0;">
-        <div class="lb">Tarif de gros par palier
-          <small>Ex. dès 200 articles (toutes catégories liées), prix réduit</small>
+    <div class="cat-manage-card${c.hidden ? ' hidden-product-row' : ''}">
+      <div class="cat-manage-row">
+        <div class="cat-reorder-buttons">
+          <button class="admin-icon-btn" data-movecat="totop" data-cat-id="${c.id}" ${isFirst ? 'disabled' : ''} title="Déplacer en premier">⏫</button>
+          <button class="admin-icon-btn" data-movecat="up" data-cat-id="${c.id}" ${isFirst ? 'disabled' : ''} title="Monter">⬆️</button>
+          <button class="admin-icon-btn" data-movecat="down" data-cat-id="${c.id}" ${isLast ? 'disabled' : ''} title="Descendre">⬇️</button>
+          <button class="admin-icon-btn" data-movecat="tobottom" data-cat-id="${c.id}" ${isLast ? 'disabled' : ''} title="Déplacer en dernier">⏬</button>
         </div>
-        <label class="switch">
-          <input type="checkbox" class="bulk-toggle" data-cat-id="${c.id}" ${hasBulk ? 'checked' : ''}>
-          <span class="track"></span>
-        </label>
+        <input type="text" value="${escapeHtml(c.name)}" data-cat-id="${c.id}">
+        <span style="font-size:11px;color:var(--brass);flex-shrink:0;">${count} art.</span>
+        <button class="admin-icon-btn ${c.hidden ? 'active-hide' : ''}" data-hidecat="${c.id}" title="${c.hidden ? 'Réafficher cette catégorie' : 'Masquer cette catégorie'}">${c.hidden ? '👁️‍🗨️' : '👁️'}</button>
+        <button class="admin-icon-btn danger" data-delcat="${c.id}">🗑</button>
       </div>
-      <div class="row bulk-fields" data-cat-id="${c.id}" style="display:${hasBulk ? 'flex' : 'none'};flex-wrap:wrap;">
-        <div class="form-group">
-          <label>Seuil (quantité)</label>
-          <input type="number" class="bulk-threshold" data-cat-id="${c.id}" value="${c.bulkThresholdQty || ''}" placeholder="200">
+      <details class="cat-advanced">
+        <summary>⚙️ Réglages avancés${hasBulk ? ' · tarif de gros actif' : ''}</summary>
+        <div class="bulk-pricing-box">
+          <div class="bg-remove-toggle" style="margin:0;">
+            <div class="lb">Tarif de gros par palier
+              <small>Ex. dès 200 articles (toutes catégories liées), prix réduit</small>
+            </div>
+            <label class="switch">
+              <input type="checkbox" class="bulk-toggle" data-cat-id="${c.id}" ${hasBulk ? 'checked' : ''}>
+              <span class="track"></span>
+            </label>
+          </div>
+          <div class="row bulk-fields" data-cat-id="${c.id}" style="display:${hasBulk ? 'flex' : 'none'};flex-wrap:wrap;">
+            <div class="form-group">
+              <label>Seuil (quantité)</label>
+              <input type="number" class="bulk-threshold" data-cat-id="${c.id}" value="${c.bulkThresholdQty || ''}" placeholder="200">
+            </div>
+            <div class="form-group">
+              <label>Prix de gros (€)</label>
+              <input type="number" step="0.01" class="bulk-price" data-cat-id="${c.id}" value="${c.bulkPrice != null ? c.bulkPrice : ''}" placeholder="2.50">
+            </div>
+            <div class="form-group" style="flex-basis:100%;">
+              <label>Groupe lié (optionnel)</label>
+              <input type="text" class="bulk-group" data-cat-id="${c.id}" value="${escapeHtml(c.bulkGroupId || '')}" placeholder="ex. tshirts">
+              <div class="form-hint">Donnez le même nom de groupe à plusieurs catégories (ex. "tshirts" pour Enfant et Adulte) pour que leurs quantités s'additionnent vers le même seuil.</div>
+            </div>
+          </div>
+          <button class="btn-secondary save-bulk-btn" data-cat-id="${c.id}" style="margin-top:10px;padding:9px;font-size:13px;">Enregistrer le tarif de gros</button>
         </div>
-        <div class="form-group">
-          <label>Prix de gros (€)</label>
-          <input type="number" step="0.01" class="bulk-price" data-cat-id="${c.id}" value="${c.bulkPrice != null ? c.bulkPrice : ''}" placeholder="2.50">
+        <div class="lot-bulk-box">
+          <div class="lqp-label" style="margin-bottom:8px;">📦 Définir le lot pour tous les produits de cette catégorie (${count} article${count > 1 ? 's' : ''})</div>
+          <div class="lot-bulk-buttons">
+            <button class="lqp-btn" data-bulklot-cat="${c.id}" data-bulklot-qty="6">6</button>
+            <button class="lqp-btn" data-bulklot-cat="${c.id}" data-bulklot-qty="10">10</button>
+            <button class="lqp-btn" data-bulklot-cat="${c.id}" data-bulklot-qty="12">12</button>
+            <button class="lqp-btn unit" data-bulklot-cat="${c.id}" data-bulklot-qty="1">À l'unité</button>
+          </div>
         </div>
-        <div class="form-group" style="flex-basis:100%;">
-          <label>Groupe lié (optionnel)</label>
-          <input type="text" class="bulk-group" data-cat-id="${c.id}" value="${escapeHtml(c.bulkGroupId || '')}" placeholder="ex. tshirts">
-          <div class="form-hint">Donnez le même nom de groupe à plusieurs catégories (ex. "tshirts" pour Enfant et Adulte) pour que leurs quantités s'additionnent vers le même seuil.</div>
-        </div>
-      </div>
-      <button class="btn-secondary save-bulk-btn" data-cat-id="${c.id}" style="margin-top:10px;padding:9px;font-size:13px;">Enregistrer le tarif de gros</button>
-    </div>
-    <div class="lot-bulk-box">
-      <div class="lqp-label" style="margin-bottom:8px;">📦 Définir le lot pour tous les produits de cette catégorie (${count} article${count > 1 ? 's' : ''})</div>
-      <div class="lot-bulk-buttons">
-        <button class="lqp-btn" data-bulklot-cat="${c.id}" data-bulklot-qty="6">6</button>
-        <button class="lqp-btn" data-bulklot-cat="${c.id}" data-bulklot-qty="10">10</button>
-        <button class="lqp-btn" data-bulklot-cat="${c.id}" data-bulklot-qty="12">12</button>
-        <button class="lqp-btn unit" data-bulklot-cat="${c.id}" data-bulklot-qty="1">À l'unité</button>
-      </div>
+      </details>
     </div>`;
   });
   list.innerHTML = html;
@@ -1458,20 +1630,50 @@ function setupAddCategory() {
 /* =========================================================
    ADMIN — Réglages
    ========================================================= */
+/* Applique le nom, le sous-titre et le logo de la boutique sur la page
+   publique. Si aucun logo personnalisé n'est défini, le logo SVG par
+   défaut (Tour Eiffel dessinée) reste affiché. */
+function applyBrandingToPage() {
+  document.getElementById('shopNameDisplay').textContent = settings.shop_name || 'Souvenirs de Paris';
+  const subtitleEl = document.getElementById('shopSubtitleDisplay');
+  if (subtitleEl) subtitleEl.textContent = settings.subtitle || 'Catalogue Boutique';
+
+  const markEl = document.getElementById('brandMark');
+  if (markEl) {
+    if (settings.logo_image) {
+      markEl.innerHTML = `<img src="${settings.logo_image}" alt="Logo">`;
+    } else {
+      markEl.innerHTML = DEFAULT_LOGO_SVG;
+    }
+  }
+}
+
 function prefillSettings() {
   document.getElementById('settingWhatsapp').value = settings.whatsapp || '';
   document.getElementById('settingEmail').value = settings.email || '';
   document.getElementById('settingShopName').value = settings.shop_name || '';
+  document.getElementById('settingSubtitle').value = settings.subtitle || '';
+  const logoPreview = document.getElementById('logoPreview');
+  const logoPlaceholder = document.getElementById('logoPlaceholder');
+  if (settings.logo_image) {
+    logoPreview.src = settings.logo_image;
+    logoPreview.style.display = 'block';
+    logoPlaceholder.style.display = 'none';
+  } else {
+    logoPreview.style.display = 'none';
+    logoPlaceholder.style.display = 'block';
+  }
 }
 function setupSettingsSave() {
   document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
     const shop_name = document.getElementById('settingShopName').value.trim() || 'Souvenirs de Paris';
+    const subtitle = document.getElementById('settingSubtitle').value.trim() || 'Catalogue Boutique';
     const whatsapp = document.getElementById('settingWhatsapp').value.trim();
     const email = document.getElementById('settingEmail').value.trim();
-    const { error } = await supabaseClient.from('settings').update({ shop_name, whatsapp, email }).eq('id', 1);
+    const { error } = await supabaseClient.from('settings').update({ shop_name, subtitle, whatsapp, email }).eq('id', 1);
     if (error) { showToast('⚠️ Erreur'); return; }
-    settings.shop_name = shop_name; settings.whatsapp = whatsapp; settings.email = email;
-    document.getElementById('shopNameDisplay').textContent = shop_name;
+    settings.shop_name = shop_name; settings.subtitle = subtitle; settings.whatsapp = whatsapp; settings.email = email;
+    applyBrandingToPage();
     showToast('Réglages enregistrés');
   });
   document.getElementById('savePinBtn').addEventListener('click', async () => {
@@ -1485,6 +1687,64 @@ function setupSettingsSave() {
     settings.admin_pin = val;
     document.getElementById('newPinInput').value = '';
     showToast('Code admin mis à jour');
+  });
+}
+
+/* Téléchargement et réinitialisation du logo de la boutique, stocké
+   directement (image légère redimensionnée) dans settings.logo_image,
+   comme pour les photos de produits. */
+function setupLogoUpload() {
+  const fileInput = document.getElementById('logoFileInput');
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      showToast('Image trop lourde (max 4 Mo)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = async () => {
+        const maxDim = 300;
+        let w = img.width, h = img.height;
+        if (w > h && w > maxDim) { h = h * maxDim / w; w = maxDim; }
+        else if (h > maxDim) { w = w * maxDim / h; h = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const logoData = canvas.toDataURL('image/png');
+
+        try {
+          const { error } = await supabaseClient.from('settings').update({ logo_image: logoData }).eq('id', 1);
+          if (error) throw error;
+          settings.logo_image = logoData;
+          applyBrandingToPage();
+          prefillSettings();
+          showToast('✓ Logo mis à jour');
+        } catch (err) {
+          console.error(err);
+          showToast('⚠️ Erreur lors de l\'enregistrement du logo');
+        }
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById('resetLogoBtn').addEventListener('click', async () => {
+    try {
+      const { error } = await supabaseClient.from('settings').update({ logo_image: null }).eq('id', 1);
+      if (error) throw error;
+      settings.logo_image = null;
+      applyBrandingToPage();
+      prefillSettings();
+      showToast('✓ Logo par défaut restauré');
+    } catch (err) {
+      console.error(err);
+      showToast('⚠️ Erreur lors de la réinitialisation');
+    }
   });
 }
 
@@ -1532,6 +1792,7 @@ function openProductForm(productId) {
     document.getElementById('formCategory').value = p.categoryId;
     document.getElementById('outOfStockToggle').checked = !!p.outOfStock;
     document.getElementById('featuredToggle').checked = !!p.featured;
+    document.getElementById('newToggle').checked = !!p.isNew;
     imgPreview.src = p.image || '';
     imgPreview.style.display = 'block';
     imgPlaceholder.style.display = 'none';
@@ -1560,6 +1821,7 @@ function openProductForm(productId) {
     if (categories.length) document.getElementById('formCategory').value = categories[0].id;
     document.getElementById('outOfStockToggle').checked = false;
     document.getElementById('featuredToggle').checked = false;
+    document.getElementById('newToggle').checked = false;
     imgPreview.style.display = 'none';
     imgPlaceholder.style.display = 'block';
     delBtn.style.display = 'none';
@@ -1735,6 +1997,7 @@ function setupProductFormSave() {
     const categoryId = document.getElementById('formCategory').value;
     const outOfStock = document.getElementById('outOfStockToggle').checked;
     const featured = document.getElementById('featuredToggle').checked;
+    const isNew = document.getElementById('newToggle').checked;
     let unitStep = 1, unitLabel = '';
     if (currentUnitMode === 'bulk') {
       unitStep = parseInt(document.getElementById('formUnitStep').value, 10);
@@ -1766,23 +2029,23 @@ function setupProductFormSave() {
         const { error } = await supabaseClient.from('products').update({
           name, ref, price, category_id: categoryId, image: pendingImageData,
           unit_step: unitStep, unit_label: unitLabel,
-          out_of_stock: outOfStock, featured: featured
+          out_of_stock: outOfStock, featured: featured, is_new: isNew
         }).eq('id', editingProductId);
         if (error) throw error;
         const p = products.find(x => x.id === editingProductId);
         p.name = name; p.ref = ref; p.price = price; p.categoryId = categoryId;
         p.image = pendingImageData; p.unitStep = unitStep; p.unitLabel = unitLabel;
-        p.outOfStock = outOfStock; p.featured = featured;
+        p.outOfStock = outOfStock; p.featured = featured; p.isNew = isNew;
         showToast('Produit mis à jour');
       } else {
         const newId = uid('prod');
         const { error } = await supabaseClient.from('products').insert({
           id: newId, ref, name, price, category_id: categoryId, image: pendingImageData,
           unit_step: unitStep, unit_label: unitLabel, sort_order: products.length + 1,
-          out_of_stock: outOfStock, featured: featured
+          out_of_stock: outOfStock, featured: featured, is_new: isNew
         });
         if (error) throw error;
-        products.push({ id: newId, ref, name, price, categoryId, image: pendingImageData, unitStep, unitLabel, outOfStock, featured, hidden: false });
+        products.push({ id: newId, ref, name, price, categoryId, image: pendingImageData, unitStep, unitLabel, outOfStock, featured, isNew, hidden: false });
         showToast('Produit ajouté');
       }
       closeDrawer('productFormDrawer');
@@ -1848,6 +2111,15 @@ function setupGeneralUI() {
     adminProductSearchTerm = e.target.value;
     renderAdminProductList();
   });
+
+  document.getElementById('toggleArchivedBtn').addEventListener('click', () => {
+    const section = document.getElementById('archivedOrdersSection');
+    const btn = document.getElementById('toggleArchivedBtn');
+    const isHidden = section.style.display === 'none';
+    section.style.display = isHidden ? 'block' : 'none';
+    btn.textContent = isHidden ? '🗂 Masquer les commandes archivées' : '🗂 Voir les commandes archivées';
+    if (isHidden) renderArchivedOrderList();
+  });
 }
 
 /* ---------- Init ---------- */
@@ -1857,6 +2129,7 @@ function init() {
   setupAdminTabs();
   setupAddCategory();
   setupSettingsSave();
+  setupLogoUpload();
   setupImageUpload();
   setupImageCropper();
   setupProductFormSave();
