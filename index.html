@@ -58,27 +58,30 @@ button{font-family:inherit;cursor:pointer;}
 ::selection{background:var(--mustard);color:var(--navy-deep);}
 
 .bg-texture{
-  position:fixed;top:-2px;right:-2px;bottom:-2px;left:-2px;z-index:-1;
+  position:fixed;top:-20px;right:-20px;bottom:-20px;left:-20px;z-index:-1;
   background:
     radial-gradient(ellipse 80% 50% at 50% -10%, rgba(216,154,44,0.12), transparent 60%),
-    radial-gradient(ellipse 70% 60% at 95% 95%, rgba(27,42,69,0.08), transparent 55%),
     linear-gradient(180deg, rgba(239,234,226,0.55) 0%, rgba(247,244,238,0.55) 40%, rgba(247,244,238,0.55) 100%),
     url('https://images.unsplash.com/photo-1699727813770-2435c9c7c4f5?fm=jpg&q=75&w=1600&auto=format&fit=crop&ixlib=rb-4.1.0');
-  background-size:auto,auto,auto,cover;
-  background-position:center,center,center,center top;
-  background-repeat:no-repeat,no-repeat,no-repeat,no-repeat;
-  background-attachment:scroll,scroll,scroll,scroll;
+  background-size:cover,cover,cover;
+  background-position:center,center,center top;
+  background-repeat:no-repeat,no-repeat,no-repeat;
+  background-attachment:scroll,scroll,scroll;
 }
 
 .sticky-header-wrap{
   position:sticky;top:0;z-index:40;
+  width:100%;max-width:100%;
   background:rgba(247,244,238,0.92);
   box-shadow:var(--glass-shadow);
+  overflow:hidden;
 }
 .topbar{
   background:transparent;
   padding:18px 16px 14px;
   border-bottom:1px solid var(--glass-border);
+  width:100%;
+  box-sizing:border-box;
 }
 .topbar-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
 .brand{display:flex;align-items:center;gap:10px;}
@@ -161,6 +164,8 @@ button{font-family:inherit;cursor:pointer;}
   display:flex;gap:9px;overflow-x:auto;padding:14px 16px 16px;
   scrollbar-width:none;
   background:transparent;
+  width:100%;
+  box-sizing:border-box;
 }
 .cat-strip::-webkit-scrollbar{display:none;}
 .cat-chip{
@@ -1165,6 +1170,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260626h"></script>
+<script src="app.js?v=20260626j"></script>
 </body>
 </html>
