@@ -510,7 +510,7 @@ function productCardHtml(p) {
 
 function attachCardListeners() {
   document.querySelectorAll('.add-btn').forEach(btn => {
-    btn.addEventListener('click', () => addToCart(btn.dataset.id, 1));
+    btn.addEventListener('click', () => addToCart(btn.dataset.id, 1, btn));
   });
   document.querySelectorAll('.qty-plus').forEach(btn => {
     btn.addEventListener('click', () => addToCart(btn.dataset.id, 1));
@@ -524,6 +524,80 @@ function attachCardListeners() {
   });
   document.querySelectorAll('.ticket-img-wrap[data-detailid]').forEach(el => {
     el.addEventListener('click', () => openProductDetail(el.dataset.detailid));
+  });
+}
+
+/* Construit uniquement le contenu du "ticket-stub" (prix + bouton/qty)
+   pour un produit donné, identique à ce que produit productCardHtml(). */
+function ticketStubInnerHtml(p) {
+  const qty = cart[p.id] || 0;
+  const lots = p.unitStep > 1 ? Math.round(qty / p.unitStep) : qty;
+  const bulkEligible = getBulkEligibleCategories();
+  const effectivePrice = getEffectivePrice(p, bulkEligible);
+  const isBulk = effectivePrice !== p.price;
+  const priceDisplay = isBulk
+    ? `<span class="price bulk">${fmtPrice(effectivePrice).replace(' €','').split(',')[0]}<span class="cents">,${fmtPrice(effectivePrice).split(',')[1]}</span></span>`
+    : `<span class="price">${fmtPrice(p.price).replace(' €','').split(',')[0]}<span class="cents">,${fmtPrice(p.price).split(',')[1]}</span></span>`;
+
+  if (p.outOfStock) {
+    return `${priceDisplay}<span class="stock-label">Indisponible</span>`;
+  }
+
+  return `
+    ${priceDisplay}
+    ${lots > 0 ? `
+      <div class="qty-control">
+        <button class="qty-minus" data-id="${p.id}">−</button>
+        <input type="number" class="qty-input" data-id="${p.id}" value="${qty}" min="0" inputmode="numeric">
+        <button class="qty-plus" data-id="${p.id}">+</button>
+      </div>
+    ` : `
+      <button class="add-btn" data-id="${p.id}">+</button>
+    `}`;
+}
+
+/* Met à jour, dans toute la page, uniquement les cartes correspondant à
+   ce produit (prix + zone quantité), sans reconstruire toute la grille.
+   C'est ce qui évite le ralentissement perceptible dans "Tout" : avant,
+   chaque clic +/- déclenchait un renderGrid() complet sur ~900 produits ;
+   maintenant, seules les quelques cartes de CE produit sont retouchées. */
+function patchProductCardsInPlace(productId) {
+  const p = products.find(x => x.id === productId);
+  if (!p) return;
+  document.querySelectorAll(`.ticket[data-id="${productId}"] .ticket-stub`).forEach(stub => {
+    stub.innerHTML = ticketStubInnerHtml(p);
+    attachStubListeners(stub);
+  });
+}
+
+/* Réattache les écouteurs +/- et l'input quantité juste après un patch
+   ciblé (le innerHTML précédent a été remplacé, donc les anciens
+   écouteurs ont disparu avec lui). */
+function attachStubListeners(stub) {
+  stub.querySelectorAll('.add-btn').forEach(btn => {
+    btn.addEventListener('click', () => addToCart(btn.dataset.id, 1, btn));
+  });
+  stub.querySelectorAll('.qty-plus').forEach(btn => {
+    btn.addEventListener('click', () => addToCart(btn.dataset.id, 1));
+  });
+  stub.querySelectorAll('.qty-minus').forEach(btn => {
+    btn.addEventListener('click', () => addToCart(btn.dataset.id, -1));
+  });
+  stub.querySelectorAll('.qty-input').forEach(inp => {
+    inp.addEventListener('change', () => setCartQtyLots(inp.dataset.id, inp.value));
+    inp.addEventListener('click', (e) => e.target.select());
+  });
+}
+
+/* Joue une petite animation de "pop" + halo sur le bouton +, pour un
+   retour visuel agréable à l'ajout (appelée juste après le patch ciblé,
+   donc sur le nouveau bouton qui vient d'être inséré). */
+function playAddPulse(productId) {
+  document.querySelectorAll(`.ticket[data-id="${productId}"] .add-btn, .ticket[data-id="${productId}"] .qty-plus`).forEach(btn => {
+    btn.classList.remove('pop');
+    // force un reflow pour pouvoir relancer l'animation si cliqué plusieurs fois vite
+    void btn.offsetWidth;
+    btn.classList.add('pop');
   });
 }
 
@@ -582,7 +656,7 @@ function openProductDetail(id) {
 /* =========================================================
    PANIER (les deltas sont en "lots", convertis en unités réelles)
    ========================================================= */
-function addToCart(id, deltaLots) {
+function addToCart(id, deltaLots, btnEl) {
   const p = products.find(x => x.id === id);
   if (!p) return;
   if (p.outOfStock && deltaLots > 0) {
@@ -598,7 +672,11 @@ function addToCart(id, deltaLots) {
     cart[id] = newQty;
   }
   updateCartUI();
-  renderGrid();
+  // Ne retouche QUE les cartes de ce produit (pas tout renderGrid()) :
+  // c'est ce qui élimine le ralentissement ressenti dans "Tout" où des
+  // centaines de cartes étaient reconstruites à chaque clic +/-.
+  patchProductCardsInPlace(id);
+  if (deltaLots > 0) playAddPulse(id);
 }
 
 /* Permet au client de taper directement un nombre de lots dans le champ
@@ -624,7 +702,7 @@ function setCartQtyLots(id, typedValue) {
     cart[id] = units;
   }
   updateCartUI();
-  renderGrid();
+  patchProductCardsInPlace(id);
 }
 function getBulkEligibleCategories() {
   const categoryQty = {};
