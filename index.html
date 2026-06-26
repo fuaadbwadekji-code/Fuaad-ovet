@@ -72,9 +72,7 @@ button{font-family:inherit;cursor:pointer;}
 
 .sticky-header-wrap{
   position:sticky;top:0;z-index:40;
-  background:var(--glass-bg-strong);
-  -webkit-backdrop-filter:var(--glass-blur);
-  backdrop-filter:var(--glass-blur);
+  background:rgba(247,244,238,0.92);
   box-shadow:var(--glass-shadow);
 }
 .topbar{
@@ -181,11 +179,11 @@ button{font-family:inherit;cursor:pointer;}
 }
 .cat-chip:active{transform:scale(0.95);}
 .cat-chip.active{
-  background:var(--navy);
-  color:#fff;
-  border-color:var(--navy);
+  background:rgba(27,42,69,0.16);
+  color:var(--navy-deep);
+  border-color:rgba(27,42,69,0.35);
   font-weight:700;
-  box-shadow:0 4px 14px rgba(27,42,69,0.4);
+  box-shadow:0 2px 10px rgba(27,42,69,0.12);
 }
 .cat-chip.catalogue-chip{
   background:var(--glass-bg);border:1.5px solid var(--mustard);color:var(--mustard-deep);font-weight:700;
@@ -193,7 +191,7 @@ button{font-family:inherit;cursor:pointer;}
 .cat-chip.featured-chip{
   background:var(--glass-bg);color:var(--mustard-deep);border:1px solid var(--glass-border);font-weight:600;
 }
-.cat-chip.featured-chip.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+.cat-chip.featured-chip.active{background:rgba(27,42,69,0.16);color:var(--navy-deep);border-color:rgba(27,42,69,0.35);}
 .section-title.featured-title{color:var(--mustard-deep);}
 .cat-chip .count{opacity:0.6;font-size:10.5px;margin-left:4px;font-weight:600;}
 
@@ -217,7 +215,7 @@ button{font-family:inherit;cursor:pointer;}
   background:var(--glass-bg);
   -webkit-backdrop-filter:var(--glass-blur-soft);
   backdrop-filter:var(--glass-blur-soft);
-  border:1px solid var(--glass-border-soft);
+  border:none;
   border-radius:12px;overflow:hidden;
   box-shadow:var(--glass-shadow);aspect-ratio:1/1;
   display:flex;align-items:flex-end;
@@ -252,7 +250,7 @@ button{font-family:inherit;cursor:pointer;}
 .ticket{
   position:relative;
   background:rgba(255,255,255,0.62);
-  border:1px solid var(--glass-border-soft);
+  border:none;
   border-radius:16px;
   box-shadow:var(--glass-shadow);
   display:flex;flex-direction:column;
@@ -300,9 +298,9 @@ button{font-family:inherit;cursor:pointer;}
   padding:2px 13px 13px;
 }
 .ticket-stub .price{
-  font-family:'Fraunces',serif;font-weight:700;font-size:17px;color:var(--ink);line-height:1;
+  font-family:'Fraunces',serif;font-weight:700;font-size:21px;color:var(--ink);line-height:1;
 }
-.ticket-stub .price .cents{font-size:11px;font-weight:600;opacity:0.75;}
+.ticket-stub .price .cents{font-size:13.5px;font-weight:600;opacity:0.75;}
 .qty-control{
   display:flex;align-items:center;gap:0;
   background:rgba(255,255,255,0.55);
@@ -583,10 +581,8 @@ button{font-family:inherit;cursor:pointer;}
 .admin-product-row-wrap{margin-bottom:8px;}
 .admin-product-row{
   display:flex;gap:10px;align-items:center;
-  background:var(--glass-bg);
-  -webkit-backdrop-filter:var(--glass-blur-soft);
-  backdrop-filter:var(--glass-blur-soft);
-  border:1px solid var(--glass-border-soft);
+  background:rgba(255,255,255,0.6);
+  border:none;
   border-radius:8px;padding:9px;
 }
 .admin-product-row img{width:44px;height:44px;object-fit:contain;background:#fff;border-radius:5px;flex-shrink:0;}
@@ -1134,6 +1130,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260626e"></script>
+<script src="app.js?v=20260626f"></script>
 </body>
 </html>
