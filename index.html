@@ -464,10 +464,13 @@ button{font-family:inherit;cursor:pointer;}
   z-index:61;
   transform:translateX(100%);
   will-change:transform;
-  transition:transform .3s cubic-bezier(.3,.9,.4,1);
+  transition:transform .3s cubic-bezier(.3,.9,.4,1), box-shadow .3s;
   display:flex;flex-direction:column;
-  box-shadow:-10px 0 40px rgba(20,20,30,0.25);
+  box-shadow:none;
   border-left:1px solid var(--glass-border-soft);
+}
+.drawer.show{
+  box-shadow:-10px 0 40px rgba(20,20,30,0.25);
 }
 .drawer.show{transform:translateX(0);}
 .drawer-header{
@@ -1170,6 +1173,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260626k"></script>
+<script src="app.js?v=20260627a"></script>
 </body>
 </html>
