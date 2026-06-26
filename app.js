@@ -749,7 +749,14 @@ function cartTotal() {
     const p = products.find(x => x.id === id);
     if (p) {
       const price = getEffectivePrice(p, bulkEligible);
-      total += price * qty; count += qty;
+      total += price * qty;
+      // Le compteur "articles" affiché au client compte le nombre de
+      // lots/sélections, pas les unités réelles à l'intérieur des lots.
+      // Ex. 1 lot de 12 ajouté = 1 article (pas 12), pour que le total
+      // affiché corresponde à "combien de produits différents tu as
+      // pris", et non à la quantité physique totale.
+      const step = p.unitStep || 1;
+      count += step > 1 ? Math.round(qty / step) : qty;
     }
   });
   return { total, count, bulkEligible };
@@ -1254,13 +1261,21 @@ let adminProductSearchTerm = '';
 
 function renderAdminProductList() {
   const list = document.getElementById('adminProductList');
-  let displayProducts = products;
-  if (adminProductSearchTerm.trim()) {
-    const q = adminProductSearchTerm.trim().toLowerCase();
-    displayProducts = products.filter(p => p.ref.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
+  const q = adminProductSearchTerm.trim().toLowerCase();
+
+  // Tant qu'aucune recherche n'est tapée, on n'affiche rien : avec ~900
+  // produits, construire toute la liste (des milliers d'éléments DOM)
+  // à chaque ouverture de l'onglet rendait le défilement de l'admin très
+  // lourd. La liste ne se construit donc plus qu'à partir des résultats
+  // de recherche réels, ce qui élimine ce poids inutile.
+  if (!q) {
+    list.innerHTML = `<div class="empty-state"><span class="glyph">🔎</span><h3>Tapez une référence ou un nom</h3><p>Les produits correspondants s'afficheront ici.</p></div>`;
+    return;
   }
+
+  const displayProducts = products.filter(p => p.ref.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
   if (displayProducts.length === 0) {
-    list.innerHTML = `<div class="empty-state"><span class="glyph">📦</span><h3>${adminProductSearchTerm ? 'Aucun résultat' : 'Aucun produit'}</h3><p>${adminProductSearchTerm ? 'Essayez une autre référence.' : 'Ajoutez votre premier produit.'}</p></div>`;
+    list.innerHTML = `<div class="empty-state"><span class="glyph">📦</span><h3>Aucun résultat</h3><p>Essayez une autre référence.</p></div>`;
     return;
   }
   let html = '';
@@ -1713,7 +1728,7 @@ function setupAddCategory() {
 function applyBrandingToPage() {
   document.getElementById('shopNameDisplay').textContent = settings.shop_name || 'Souvenirs de Paris';
   const subtitleEl = document.getElementById('shopSubtitleDisplay');
-  if (subtitleEl) subtitleEl.textContent = settings.subtitle || 'Catalogue Boutique';
+  if (subtitleEl) subtitleEl.textContent = settings.subtitle || 'Souvenirs de Paris';
 
   const markEl = document.getElementById('brandMark');
   if (markEl) {
@@ -1744,7 +1759,7 @@ function prefillSettings() {
 function setupSettingsSave() {
   document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
     const shop_name = document.getElementById('settingShopName').value.trim() || 'Souvenirs de Paris';
-    const subtitle = document.getElementById('settingSubtitle').value.trim() || 'Catalogue Boutique';
+    const subtitle = document.getElementById('settingSubtitle').value.trim() || 'Souvenirs de Paris';
     const whatsapp = document.getElementById('settingWhatsapp').value.trim();
     const email = document.getElementById('settingEmail').value.trim();
     const { error } = await supabaseClient.from('settings').update({ shop_name, subtitle, whatsapp, email }).eq('id', 1);
@@ -2184,9 +2199,13 @@ function setupGeneralUI() {
     if (adminUnlocked) renderAdminOrderList();
   });
 
+  let adminSearchDebounceTimer = null;
   document.getElementById('adminProductSearch').addEventListener('input', (e) => {
     adminProductSearchTerm = e.target.value;
-    renderAdminProductList();
+    clearTimeout(adminSearchDebounceTimer);
+    adminSearchDebounceTimer = setTimeout(() => {
+      renderAdminProductList();
+    }, 200);
   });
 
   document.getElementById('toggleArchivedBtn').addEventListener('click', () => {

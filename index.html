@@ -95,10 +95,12 @@ button{font-family:inherit;cursor:pointer;}
   font-style:italic;
   font-size:21px;font-weight:600;letter-spacing:0.2px;margin:0;color:var(--ink);
   line-height:1.15;
+  min-height:24px;
 }
 .brand .sub{
   font-size:8.5px;letter-spacing:2.5px;text-transform:uppercase;color:var(--mustard-deep);
   margin-top:2px;
+  min-height:11px;
 }
 .topbar-actions{display:flex;gap:8px;align-items:center;}
 .icon-btn{
@@ -803,8 +805,8 @@ button{font-family:inherit;cursor:pointer;}
         </svg>
       </span>
       <div>
-        <h1 id="shopNameDisplay">Souvenirs de Paris</h1>
-        <div class="sub" id="shopSubtitleDisplay">Catalogue Boutique</div>
+        <h1 id="shopNameDisplay"></h1>
+        <div class="sub" id="shopSubtitleDisplay"></div>
       </div>
     </div>
     <div class="topbar-actions">
@@ -971,7 +973,7 @@ button{font-family:inherit;cursor:pointer;}
           <label>Rechercher par référence ou nom</label>
           <input type="text" id="adminProductSearch" placeholder="Ex. MAT221">
         </div>
-        <div class="admin-section-label">Produits existants</div>
+        <div class="admin-section-label">Rechercher pour modifier un produit</div>
         <div id="adminProductList"></div>
       </div>
 
@@ -1005,7 +1007,7 @@ button{font-family:inherit;cursor:pointer;}
         </div>
         <div class="form-group">
           <label>Sous-titre (sous le nom)</label>
-          <input type="text" id="settingSubtitle" placeholder="Catalogue Boutique">
+          <input type="text" id="settingSubtitle" placeholder="Souvenirs de Paris">
         </div>
         <div class="form-group">
           <label>Numéro WhatsApp (optionnel)</label>
@@ -1130,6 +1132,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260626f"></script>
+<script src="app.js?v=20260626g"></script>
 </body>
 </html>
