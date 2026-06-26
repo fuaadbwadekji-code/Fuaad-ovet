@@ -522,9 +522,8 @@ function attachCardListeners() {
     inp.addEventListener('change', () => setCartQtyLots(inp.dataset.id, inp.value));
     inp.addEventListener('click', (e) => e.target.select());
   });
-  document.querySelectorAll('.ticket-img-wrap[data-detailid]').forEach(el => {
-    el.addEventListener('click', () => openProductDetail(el.dataset.detailid));
-  });
+  // Le clic sur la photo n'ouvre plus le tiroir de détail produit (retiré
+  // sur demande) : on reste simplement sur la grille du catalogue.
 }
 
 /* Construit uniquement le contenu du "ticket-stub" (prix + bouton/qty)

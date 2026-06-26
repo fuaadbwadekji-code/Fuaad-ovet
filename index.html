@@ -52,38 +52,34 @@ body{
   min-height:100vh;
 }
 
-/* Barre de défilement fine et discrète (au lieu de la barre grise par
-   défaut du navigateur, devenue très visible sur le fond translucide). */
-::-webkit-scrollbar{width:6px;height:6px;}
-::-webkit-scrollbar-track{background:transparent;}
-::-webkit-scrollbar-thumb{background:rgba(140,112,72,0.25);border-radius:10px;}
 html{scrollbar-width:thin;scrollbar-color:rgba(140,112,72,0.25) transparent;}
 .display{font-family:'Fraunces',serif;}
 button{font-family:inherit;cursor:pointer;}
 ::selection{background:var(--mustard);color:var(--navy-deep);}
 
 .bg-texture{
-  position:fixed;inset:0;z-index:-1;
+  position:fixed;top:-2px;right:-2px;bottom:-2px;left:-2px;z-index:-1;
   background:
     radial-gradient(ellipse 80% 50% at 50% -10%, rgba(216,154,44,0.12), transparent 60%),
-    radial-gradient(ellipse 70% 60% at 100% 100%, rgba(27,42,69,0.08), transparent 55%),
+    radial-gradient(ellipse 70% 60% at 95% 95%, rgba(27,42,69,0.08), transparent 55%),
     linear-gradient(180deg, rgba(239,234,226,0.55) 0%, rgba(247,244,238,0.55) 40%, rgba(247,244,238,0.55) 100%),
     url('https://images.unsplash.com/photo-1699727813770-2435c9c7c4f5?fm=jpg&q=75&w=1600&auto=format&fit=crop&ixlib=rb-4.1.0');
   background-size:auto,auto,auto,cover;
   background-position:center,center,center,center top;
   background-repeat:no-repeat,no-repeat,no-repeat,no-repeat;
-  background-attachment:fixed,fixed,fixed,fixed;
+  background-attachment:scroll,scroll,scroll,scroll;
 }
 
 .sticky-header-wrap{
   position:sticky;top:0;z-index:40;
-}
-.topbar{
   background:var(--glass-bg-strong);
   -webkit-backdrop-filter:var(--glass-blur);
   backdrop-filter:var(--glass-blur);
-  padding:18px 16px 14px;
   box-shadow:var(--glass-shadow);
+}
+.topbar{
+  background:transparent;
+  padding:18px 16px 14px;
   border-bottom:1px solid var(--glass-border);
 }
 .topbar-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
@@ -164,9 +160,7 @@ button{font-family:inherit;cursor:pointer;}
 .cat-strip{
   display:flex;gap:9px;overflow-x:auto;padding:14px 16px 16px;
   scrollbar-width:none;
-  background:var(--glass-bg-strong);
-  -webkit-backdrop-filter:var(--glass-blur);
-  backdrop-filter:var(--glass-blur);
+  background:transparent;
 }
 .cat-strip::-webkit-scrollbar{display:none;}
 .cat-chip{
@@ -436,7 +430,9 @@ button{font-family:inherit;cursor:pointer;}
   -webkit-backdrop-filter:var(--glass-blur);
   backdrop-filter:var(--glass-blur);
   z-index:61;
-  transform:translateX(100%);transition:transform .3s cubic-bezier(.3,.9,.4,1);
+  transform:translateX(100%);
+  will-change:transform;
+  transition:transform .3s cubic-bezier(.3,.9,.4,1);
   display:flex;flex-direction:column;
   box-shadow:-10px 0 40px rgba(20,20,30,0.25);
   border-left:1px solid var(--glass-border-soft);
@@ -1138,6 +1134,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260626b"></script>
+<script src="app.js?v=20260626e"></script>
 </body>
 </html>
