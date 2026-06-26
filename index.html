@@ -34,7 +34,7 @@
 
   /* ===== Glass (iOS Control Center style) ===== */
   --glass-bg:rgba(255,255,255,0.38);
-  --glass-bg-strong:rgba(255,255,255,0.5);
+  --glass-bg-strong:rgba(255,255,255,0.68);
   --glass-bg-navy:rgba(27,42,69,0.55);
   --glass-border:rgba(255,255,255,0.55);
   --glass-border-soft:rgba(255,255,255,0.35);
@@ -43,14 +43,21 @@
   --glass-shadow:0 8px 32px rgba(20,20,30,0.18);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html{margin:0;padding:0;overflow-x:hidden;}
-body{margin:0;padding:0;}
+html{margin:0;padding:0;overflow-x:hidden;width:100%;}
+body{margin:0;padding:0;overflow-x:hidden;width:100%;position:relative;}
 body{
   font-family:'Jost',sans-serif;
   background:transparent;
   color:var(--ink);
   min-height:100vh;
 }
+
+/* Barre de défilement fine et discrète (au lieu de la barre grise par
+   défaut du navigateur, devenue très visible sur le fond translucide). */
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(140,112,72,0.25);border-radius:10px;}
+html{scrollbar-width:thin;scrollbar-color:rgba(140,112,72,0.25) transparent;}
 .display{font-family:'Fraunces',serif;}
 button{font-family:inherit;cursor:pointer;}
 ::selection{background:var(--mustard);color:var(--navy-deep);}
@@ -250,9 +257,7 @@ button{font-family:inherit;cursor:pointer;}
 
 .ticket{
   position:relative;
-  background:var(--glass-bg);
-  -webkit-backdrop-filter:var(--glass-blur-soft);
-  backdrop-filter:var(--glass-blur-soft);
+  background:rgba(255,255,255,0.62);
   border:1px solid var(--glass-border-soft);
   border-radius:16px;
   box-shadow:var(--glass-shadow);
@@ -306,9 +311,7 @@ button{font-family:inherit;cursor:pointer;}
 .ticket-stub .price .cents{font-size:11px;font-weight:600;opacity:0.75;}
 .qty-control{
   display:flex;align-items:center;gap:0;
-  background:var(--glass-bg);
-  -webkit-backdrop-filter:var(--glass-blur-soft);
-  backdrop-filter:var(--glass-blur-soft);
+  background:rgba(255,255,255,0.55);
   border:1px solid var(--glass-border-soft);
   border-radius:14px;overflow:hidden;
 }
@@ -421,10 +424,10 @@ button{font-family:inherit;cursor:pointer;}
 .cart-fab.show ~ .fab-admin{display:none;}
 
 .overlay{
-  position:fixed;inset:0;background:rgba(10,15,26,0.35);z-index:60;
-  -webkit-backdrop-filter:blur(2px);
-  backdrop-filter:blur(2px);
-  opacity:0;visibility:hidden;transition:opacity .25s;
+  position:fixed;inset:0;background:rgba(8,12,22,0.55);z-index:60;
+  -webkit-backdrop-filter:blur(14px) saturate(120%);
+  backdrop-filter:blur(14px) saturate(120%);
+  opacity:0;visibility:hidden;transition:opacity .3s;
 }
 .overlay.show{opacity:1;visibility:visible;}
 .drawer{
@@ -1135,6 +1138,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260626a"></script>
+<script src="app.js?v=20260626b"></script>
 </body>
 </html>
