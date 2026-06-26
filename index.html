@@ -44,9 +44,9 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html{margin:0;padding:0;overflow-x:hidden;width:100%;background:#F7F4EE;}
-body{margin:0;padding:0;overflow-x:hidden;width:100%;position:relative;}
+body{margin:0;padding:0;width:100%;position:relative;}
 body{
-  font-family:'Jost',sans-serif;
+  font-family:var(--font-body, 'Jost', sans-serif);
   background:transparent;
   color:var(--ink);
   min-height:100vh;
@@ -176,7 +176,7 @@ button{font-family:inherit;cursor:pointer;}
   border:1px solid var(--glass-border);
   color:var(--ink);
   padding:9px 16px;
-  border-radius:18px;
+  border-radius:var(--chip-radius, 18px);
   font-size:12.5px;
   font-weight:600;
   letter-spacing:0.1px;
@@ -285,7 +285,7 @@ button{font-family:inherit;cursor:pointer;}
   position:relative;
   background:rgba(255,255,255,0.62);
   border:none;
-  border-radius:16px;
+  border-radius:var(--card-radius, 16px);
   box-shadow:var(--glass-shadow);
   display:flex;flex-direction:column;
   overflow:hidden;
@@ -332,7 +332,7 @@ button{font-family:inherit;cursor:pointer;}
   padding:2px 13px 13px;
 }
 .ticket-stub .price{
-  font-family:'Fraunces',serif;font-weight:700;font-size:21px;color:var(--ink);line-height:1;
+  font-family:'Fraunces',serif;font-weight:700;font-size:var(--price-size, 21px);color:var(--ink);line-height:1;
 }
 .ticket-stub .price .cents{font-size:13.5px;font-weight:600;opacity:0.75;}
 .qty-control{
@@ -395,6 +395,49 @@ button{font-family:inherit;cursor:pointer;}
 .empty-state .glyph{font-size:38px;margin-bottom:10px;display:block;}
 .empty-state h3{margin:0 0 6px;font-size:17px;font-family:'Fraunces';}
 .empty-state p{margin:0;font-size:13px;opacity:0.8;}
+
+.success-state{opacity:1;padding:50px 24px;}
+.success-check-wrap{
+  width:84px;height:84px;margin:0 auto 18px;
+}
+.success-check{width:100%;height:100%;}
+.success-check-circle{
+  stroke-dasharray:226;stroke-dashoffset:226;
+  animation:successCircleDraw .5s ease-out forwards;
+  transform-origin:center;
+}
+.success-check-mark{
+  stroke-dasharray:48;stroke-dashoffset:48;
+  animation:successMarkDraw .35s ease-out .45s forwards;
+}
+@keyframes successCircleDraw{
+  0%{stroke-dashoffset:226;}
+  100%{stroke-dashoffset:0;}
+}
+@keyframes successMarkDraw{
+  0%{stroke-dashoffset:48;}
+  100%{stroke-dashoffset:0;}
+}
+.success-check-wrap{
+  animation:successPop .5s cubic-bezier(.34,1.56,.64,1) .55s both;
+}
+@keyframes successPop{
+  0%{transform:scale(1);}
+  50%{transform:scale(1.12);}
+  100%{transform:scale(1);}
+}
+.success-order-num{
+  font-family:'Fraunces',serif;font-weight:800;font-size:30px !important;
+  color:var(--ink);margin:4px 0 10px !important;
+  opacity:0;animation:successFadeUp .4s ease-out .75s forwards;
+}
+@keyframes successFadeUp{
+  0%{opacity:0;transform:translateY(8px);}
+  100%{opacity:1;transform:translateY(0);}
+}
+.success-state p{
+  opacity:0;animation:successFadeUp .4s ease-out .9s forwards;
+}
 
 .ticket.out-of-stock{opacity:0.72;}
 .ticket.out-of-stock .ticket-img-wrap img{filter:grayscale(0.4);}
@@ -522,6 +565,23 @@ button{font-family:inherit;cursor:pointer;}
   display:flex;align-items:center;justify-content:center;gap:8px;
 }
 .btn-primary:active{background:var(--mustard-deep);}
+.confirm-order-btn{
+  font-size:16.5px;padding:17px;border-radius:26px;
+  box-shadow:0 8px 22px rgba(216,154,44,0.4);
+  transition:transform .12s ease, box-shadow .12s ease;
+}
+.confirm-order-btn:active{transform:scale(0.97);box-shadow:0 4px 12px rgba(216,154,44,0.35);}
+.confirm-order-icon{
+  width:26px;height:26px;border-radius:50%;
+  background:rgba(16,25,44,0.18);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;flex-shrink:0;
+}
+.confirm-order-text{font-family:'Fraunces',serif;font-weight:700;}
+.confirm-order-hint{
+  text-align:center;font-size:11.5px;color:var(--brass);
+  margin:-4px 0 10px;opacity:0.85;
+}
 .btn-secondary{
   width:100%;
   background:var(--glass-bg);
@@ -650,6 +710,16 @@ button{font-family:inherit;cursor:pointer;}
 .lot-bulk-box{
   background:var(--paper);border-radius:10px;padding:12px;margin-top:8px;margin-bottom:14px;
 }
+.cat-cover-box{
+  background:var(--paper);border-radius:10px;padding:12px;margin:0 12px 12px;
+}
+.cat-cover-row{display:flex;gap:12px;align-items:center;}
+.cat-cover-preview{
+  width:64px;height:64px;border-radius:10px;overflow:hidden;background:var(--paper-dim);
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+}
+.cat-cover-preview img{width:100%;height:100%;object-fit:cover;}
+.cat-cover-actions{flex:1;display:flex;flex-direction:column;}
 .lot-bulk-box .lqp-label{
   font-size:12px;color:var(--ink);font-weight:600;flex-basis:auto;margin-bottom:8px;
 }
@@ -708,8 +778,54 @@ button{font-family:inherit;cursor:pointer;}
 }
 .copy-order-btn{
   width:100%;background:var(--sage);border:none;color:#fff;
-  font-size:12.5px;font-weight:700;
-  padding:9px 0;margin-top:10px;border-radius:8px;
+  font-size:13.5px;font-weight:700;
+  padding:12px 0;margin-top:12px;border-radius:12px;
+  box-shadow:0 4px 14px rgba(94,122,94,0.3);
+  transition:transform .12s ease;
+}
+.copy-order-btn:active{transform:scale(0.97);}
+
+.oc-action-row{display:flex;gap:8px;margin-top:8px;}
+.oc-archive-btn,.oc-delete-btn{
+  flex:1;border:none;font-size:12.5px;font-weight:700;
+  padding:11px 0;border-radius:12px;
+  transition:transform .12s ease;
+}
+.oc-archive-btn{
+  background:rgba(255,255,255,0.7);
+  color:var(--mustard-deep);
+  border:1.5px solid var(--mustard);
+}
+.oc-delete-btn{
+  background:rgba(178,59,46,0.08);
+  color:var(--brick);
+  border:1.5px solid var(--brick);
+}
+.oc-archive-btn:active,.oc-delete-btn:active{transform:scale(0.96);}
+
+.oc-notes-wrap{margin-top:10px;}
+.oc-notes-label{
+  display:block;font-size:11px;font-weight:700;color:var(--brass);
+  margin-bottom:5px;letter-spacing:0.2px;
+}
+.oc-notes-input{
+  width:100%;min-height:52px;resize:vertical;
+  border:1.5px solid rgba(140,112,72,0.25);border-radius:10px;
+  padding:9px 11px;font-size:12.5px;font-family:'Jost';
+  background:rgba(255,255,255,0.7);color:var(--ink);outline:none;
+}
+.oc-notes-input:focus{border-color:var(--mustard);}
+.oc-notes-display{
+  font-size:12px;color:var(--ink);background:rgba(216,154,44,0.1);
+  border-radius:8px;padding:7px 10px;margin-top:6px;line-height:1.4;
+}
+
+.status-just-changed .status-select{
+  animation:statusPulse .5s ease;
+}
+@keyframes statusPulse{
+  0%{box-shadow:0 0 0 0 rgba(94,122,94,0.5);}
+  100%{box-shadow:0 0 0 8px rgba(94,122,94,0);}
 }
 
 .new-order-banner{
@@ -735,7 +851,9 @@ button{font-family:inherit;cursor:pointer;}
 .status-pill.en_cours{background:#dce8f5;color:#2b5f8f;}
 .status-pill.terminee{background:#dcebd9;color:var(--sage);}
 .status-select{
-  font-size:11px;border:1px solid rgba(140,112,72,0.3);border-radius:6px;padding:4px 6px;background:#fff;color:var(--ink);
+  font-size:13px;font-weight:700;border:1.5px solid rgba(140,112,72,0.35);
+  border-radius:10px;padding:8px 10px;background:#fff;color:var(--ink);
+  box-shadow:0 2px 8px rgba(20,20,30,0.06);
 }
 
 .admin-lock{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:30px;text-align:center;}
@@ -786,6 +904,27 @@ button{font-family:inherit;cursor:pointer;}
 }
 .bulk-pricing-box .row{display:flex;gap:10px;margin-top:8px;}
 .bulk-pricing-box .row .form-group{flex:1;margin-bottom:0;}
+
+.theme-settings-box{
+  background:var(--paper);border-radius:12px;padding:14px;margin-top:8px;
+}
+.theme-row{display:flex;gap:12px;margin-bottom:12px;}
+.theme-field{flex:1;}
+.theme-field label{
+  display:block;font-size:11.5px;font-weight:600;color:var(--brass);margin-bottom:6px;
+}
+.theme-field input[type=color]{
+  width:100%;height:40px;border:1.5px solid rgba(216,154,44,0.3);border-radius:8px;
+  padding:2px;background:var(--cream);cursor:pointer;
+}
+.theme-slider-row{margin-bottom:14px;}
+.theme-slider-row label{
+  display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:6px;
+}
+.theme-slider-val{color:var(--mustard-deep);font-weight:700;}
+.theme-slider-row input[type=range]{
+  width:100%;accent-color:var(--mustard);
+}
 
 .invoice-summary{
   background:var(--paper);border-radius:10px;padding:14px;margin:14px 0;
@@ -920,17 +1059,18 @@ button{font-family:inherit;cursor:pointer;}
       <p>Indiquez votre nom pour que la boutique retrouve facilement votre commande.</p>
       <div class="form-group">
         <label>Votre nom</label>
-        <input type="text" id="clientNameInput" placeholder="Ex. Tarek Ahmad">
+        <input type="text" id="clientNameInput" placeholder="Ex. Fuaad Bwadekji">
       </div>
       <div class="form-group">
         <label>Nom du magasin (optionnel)</label>
-        <input type="text" id="clientShopInput" placeholder="Ex. Art Attak">
+        <input type="text" id="clientShopInput" placeholder="Ex. Eva Souvenirs">
       </div>
       <div class="invoice-summary" id="checkoutInvoiceSummary"></div>
-      <button class="choice-btn local" id="confirmOrderBtn">
-        <span class="ic">✓</span>
-        <span class="tx"><strong>Envoyer la commande</strong><span>Elle apparaîtra dans l'espace administrateur</span></span>
+      <button class="btn-primary confirm-order-btn" id="confirmOrderBtn">
+        <span class="confirm-order-icon">✓</span>
+        <span class="confirm-order-text">Envoyer la commande</span>
       </button>
+      <p class="confirm-order-hint">Elle apparaîtra immédiatement dans l'espace administrateur</p>
     </div>
   </div>
 </div>
@@ -941,9 +1081,14 @@ button{font-family:inherit;cursor:pointer;}
     <button class="drawer-close" data-close="orderSuccessDrawer">✕</button>
   </div>
   <div class="drawer-body">
-    <div class="empty-state">
-      <span class="glyph">🎫</span>
-      <h3 id="successOrderNum">Commande n°—</h3>
+    <div class="empty-state success-state">
+      <div class="success-check-wrap">
+        <svg class="success-check" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle class="success-check-circle" cx="40" cy="40" r="36" stroke="var(--sage)" stroke-width="4"/>
+          <path class="success-check-mark" d="M24 41 L35 52 L57 28" stroke="var(--sage)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </div>
+      <h3 id="successOrderNum" class="success-order-num">Commande n°—</h3>
       <p>Merci ! La boutique a bien reçu votre commande et la prépare.</p>
     </div>
   </div>
@@ -1065,6 +1210,106 @@ button{font-family:inherit;cursor:pointer;}
           <input type="tel" maxlength="4" id="newPinInput" placeholder="••••" inputmode="numeric">
         </div>
         <button class="btn-secondary" id="savePinBtn">Mettre à jour le code</button>
+
+        <div class="admin-section-label">🎨 Thème & apparence</div>
+        <div class="theme-settings-box">
+          <div class="theme-row">
+            <div class="theme-field">
+              <label>Couleur principale (navy)</label>
+              <input type="color" id="themeColorNavy" value="#1B2A45">
+            </div>
+            <div class="theme-field">
+              <label>Couleur accent (moutarde)</label>
+              <input type="color" id="themeColorMustard" value="#D89A2C">
+            </div>
+          </div>
+          <div class="theme-row">
+            <div class="theme-field">
+              <label>Couleur alerte (brique)</label>
+              <input type="color" id="themeColorBrick" value="#B23B2E">
+            </div>
+            <div class="theme-field">
+              <label>Couleur succès (sauge)</label>
+              <input type="color" id="themeColorSage" value="#5E7A5E">
+            </div>
+          </div>
+          <div class="theme-row">
+            <div class="theme-field">
+              <label>Couleur du texte</label>
+              <input type="color" id="themeColorInk" value="#1A1814">
+            </div>
+            <div class="theme-field">
+              <label>Couleur de fond</label>
+              <input type="color" id="themeColorPageBg" value="#F7F4EE">
+            </div>
+          </div>
+
+          <div class="theme-slider-row">
+            <label>Opacité du verre (glassmorphism) <span class="theme-slider-val" id="valGlassOpacity">50%</span></label>
+            <input type="range" id="themeGlassOpacity" min="10" max="95" value="50">
+          </div>
+          <div class="theme-slider-row">
+            <label>Intensité du flou <span class="theme-slider-val" id="valGlassBlur">28px</span></label>
+            <input type="range" id="themeGlassBlur" min="0" max="40" value="28">
+          </div>
+          <div class="theme-slider-row">
+            <label>Opacité des cartes produit <span class="theme-slider-val" id="valCardOpacity">62%</span></label>
+            <input type="range" id="themeCardOpacity" min="20" max="100" value="62">
+          </div>
+          <div class="theme-slider-row">
+            <label>Arrondi des cartes <span class="theme-slider-val" id="valCardRadius">16px</span></label>
+            <input type="range" id="themeCardRadius" min="0" max="30" value="16">
+          </div>
+          <div class="theme-slider-row">
+            <label>Arrondi des chips de catégorie <span class="theme-slider-val" id="valChipRadius">18px</span></label>
+            <input type="range" id="themeChipRadius" min="0" max="30" value="18">
+          </div>
+          <div class="theme-slider-row">
+            <label>Taille du prix <span class="theme-slider-val" id="valPriceSize">21px</span></label>
+            <input type="range" id="themePriceSize" min="14" max="30" value="21">
+          </div>
+
+          <div class="form-group">
+            <label>Police du texte courant</label>
+            <select id="themeFontBody">
+              <option value="'Jost', sans-serif">Jost (par défaut)</option>
+              <option value="'Inter', sans-serif">Inter</option>
+              <option value="'Poppins', sans-serif">Poppins</option>
+              <option value="'Nunito', sans-serif">Nunito</option>
+              <option value="Georgia, serif">Georgia (classique)</option>
+            </select>
+          </div>
+
+          <div class="bg-remove-toggle" style="margin-top:14px;">
+            <div class="lb">Afficher la section « Promos »
+              <small>Bandeau spécial pour vos articles en promotion</small>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="themeShowPromo" checked>
+              <span class="track"></span>
+            </label>
+          </div>
+          <div class="form-group" style="margin-top:8px;">
+            <label>Libellé de la section Promos</label>
+            <input type="text" id="themePromoLabel" placeholder="🔥 Promos">
+          </div>
+          <div class="bg-remove-toggle">
+            <div class="lb">Afficher la section « Nouveauté »
+              <small>Déjà utilisée pour les produits marqués "Nouveauté"</small>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="themeShowNew" checked>
+              <span class="track"></span>
+            </label>
+          </div>
+          <div class="form-group" style="margin-top:8px;">
+            <label>Libellé de la section Nouveauté</label>
+            <input type="text" id="themeNewLabel" placeholder="✨ Nouveauté">
+          </div>
+
+          <button class="btn-primary" id="saveThemeBtn" style="margin-top:16px;">Enregistrer l'apparence</button>
+          <button class="btn-secondary" id="resetThemeBtn" style="padding:9px;font-size:13px;">↺ Réinitialiser l'apparence par défaut</button>
+        </div>
       </div>
 
       <button class="logout-link" id="adminLogoutBtn">Verrouiller l'administration</button>
@@ -1144,6 +1389,15 @@ button{font-family:inherit;cursor:pointer;}
         <span class="track"></span>
       </label>
     </div>
+    <div class="bg-remove-toggle" style="margin-top:8px;">
+      <div class="lb">Promo
+        <small>Affiche ce produit dans la section « Promos »</small>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="promoToggle">
+        <span class="track"></span>
+      </label>
+    </div>
     <button class="btn-primary" id="saveProductBtn" style="margin-top:16px;">Enregistrer le produit</button>
     <button class="btn-danger-outline" id="deleteProductBtn" style="display:none;">Supprimer ce produit</button>
   </div>
@@ -1173,6 +1427,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260627a"></script>
+<script src="app.js?v=20260627b"></script>
 </body>
 </html>

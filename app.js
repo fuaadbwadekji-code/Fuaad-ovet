@@ -17,6 +17,31 @@ const TVA_RATE = 0.20; // 20% — appliqué uniquement au moment de la confirmat
 let categories = [];
 let products = [];
 let settings = { shop_name: 'Souvenirs de Paris', whatsapp: '', email: '', admin_pin: '1234', next_order_number: 1 };
+
+/* Réglages d'apparence personnalisables depuis l'admin (onglet Réglages
+   → Thème). Stockés en JSON dans settings.theme_settings et appliqués
+   dynamiquement via des variables CSS sur :root. */
+const DEFAULT_THEME = {
+  colorNavy: '#1B2A45',
+  colorMustard: '#D89A2C',
+  colorBrick: '#B23B2E',
+  colorSage: '#5E7A5E',
+  colorInk: '#1A1814',
+  colorPageBg: '#F7F4EE',
+  glassOpacity: 50,      // 0-100 : opacité des panneaux en verre
+  glassBlur: 28,          // 0-40px : intensité du flou
+  cardOpacity: 62,        // 0-100 : opacité des cartes produit
+  cardRadius: 16,         // 0-30px : arrondi des cartes
+  priceSize: 21,          // 14-30px : taille du prix sur les cartes
+  fontHeading: "'Fraunces', serif",
+  fontBody: "'Jost', sans-serif",
+  chipRadius: 18,         // 0-30px : arrondi des chips de catégorie
+  showPromoSection: true,
+  showNewSection: true,
+  promoLabel: '🔥 Promos',
+  newLabel: '✨ Nouveauté'
+};
+let theme = Object.assign({}, DEFAULT_THEME);
 let cart = {}; // { productId: qty }  (qty déjà en unités réelles, multiples de unit_step)
 
 /* Persistance locale du panier : permet de retrouver le panier tel qu'il
@@ -130,6 +155,49 @@ function closeAllDrawers() {
    éviter un timeout côté base de données (la table contient 900+ lignes,
    certaines avec des images encodées en base64 assez lourdes). Réutilisée
    au chargement initial et lors du rafraîchissement manuel de l'admin. */
+/* Récupère un lot de produits (une seule requête), utilisée pour
+   l'affichage rapide du premier écran sans attendre tout le catalogue. */
+async function fetchProductsBatch(from, pageSize) {
+  const { data, error } = await supabaseClient
+    .from('products')
+    .select('*')
+    .range(from, from + pageSize - 1);
+  if (error) throw error;
+  return data || [];
+}
+
+/* Charge le reste du catalogue (après le premier lot rapide) en arrière-
+   plan, par petits lots successifs, et fusionne chaque lot dans
+   `products` au fur et à mesure — sans jamais bloquer l'affichage déjà
+   visible. Une fois terminé, redessine la grille une seule fois pour
+   éviter de "sauter" visuellement à chaque lot. */
+async function loadRemainingProductsInBackground(startFrom) {
+  let from = startFrom;
+  const pageSize = 60;
+  let addedAny = false;
+  while (true) {
+    let batch;
+    try {
+      batch = await fetchProductsBatch(from, pageSize);
+    } catch (e) {
+      console.warn('Chargement progressif interrompu', e);
+      break;
+    }
+    if (batch.length === 0) break;
+    const mapped = batch.map(mapDbProductToLocal);
+    products = products.concat(mapped);
+    addedAny = true;
+    if (batch.length < pageSize) break;
+    from += batch.length;
+  }
+  if (addedAny) {
+    products.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    renderCategoryStrip();
+    renderGrid();
+    renderHomeTiles();
+  }
+}
+
 async function fetchAllProductsFromDB() {
   let allProducts = [];
   let from = 0;
@@ -164,33 +232,36 @@ async function fetchAllProductsFromDB() {
 function mapDbProductToLocal(p) {
   return {
     id: p.id, ref: p.ref, name: p.name, price: Number(p.price),
-    categoryId: p.category_id, image: p.image,
+    categoryId: p.category_id, image: p.image, sortOrder: p.sort_order || 0,
     unitStep: p.unit_step || 1, unitLabel: p.unit_label || '',
     outOfStock: !!p.out_of_stock, featured: !!p.featured,
-    hidden: !!p.hidden, isNew: !!p.is_new
+    hidden: !!p.hidden, isNew: !!p.is_new, isPromo: !!p.is_promo
   };
 }
 
 async function loadAllData() {
   try {
-    const [catRes, settRes] = await Promise.all([
+    const FIRST_BATCH_SIZE = 60;
+    const [catRes, settRes, firstBatch] = await Promise.all([
       supabaseClient.from('categories').select('*').order('sort_order'),
-      supabaseClient.from('settings').select('*').eq('id', 1).single()
+      supabaseClient.from('settings').select('*').eq('id', 1).single(),
+      fetchProductsBatch(0, FIRST_BATCH_SIZE)
     ]);
     if (catRes.error) throw catRes.error;
     if (settRes.error) throw settRes.error;
-
-    const allProducts = await fetchAllProductsFromDB();
 
     categories = (catRes.data || []).map(c => ({
       id: c.id, name: c.name, sort_order: c.sort_order,
       bulkGroupId: c.bulk_group_id || null,
       bulkThresholdQty: c.bulk_threshold_qty || null,
       bulkPrice: c.bulk_price != null ? Number(c.bulk_price) : null,
-      hidden: !!c.hidden
+      hidden: !!c.hidden,
+      coverImage: c.cover_image || null
     }));
-    products = allProducts.map(mapDbProductToLocal);
+    products = firstBatch.map(mapDbProductToLocal);
     settings = settRes.data || settings;
+    theme = Object.assign({}, DEFAULT_THEME, settings.theme_settings || {});
+    applyThemeToPage();
 
     loadCartFromStorage();
     if (wasAdminPreviouslyUnlocked()) {
@@ -204,6 +275,12 @@ async function loadAllData() {
     renderHomeTiles();
     updateCartUI();
     startOrderPolling();
+
+    // Le reste du catalogue (au-delà du premier lot) continue de se
+    // charger en arrière-plan, sans bloquer l'affichage déjà visible.
+    if (firstBatch.length === FIRST_BATCH_SIZE) {
+      loadRemainingProductsInBackground(FIRST_BATCH_SIZE);
+    }
   } catch (e) {
     console.error('Erreur de chargement', e);
     document.getElementById('loadingState').innerHTML =
@@ -224,9 +301,13 @@ function renderCategoryStrip() {
   if (featuredCount > 0) {
     html += `<button class="cat-chip featured-chip ${activeCategory === 'featured' ? 'active' : ''}" data-cat="featured">⭐ Meilleures ventes <span class="count">${featuredCount}</span></button>`;
   }
+  const promoCount = visibleProducts.filter(p => p.isPromo).length;
+  if (promoCount > 0 && theme.showPromoSection) {
+    html += `<button class="cat-chip promo-chip ${activeCategory === 'promo' ? 'active' : ''}" data-cat="promo">${escapeHtml(theme.promoLabel || '🔥 Promos')} <span class="count">${promoCount}</span></button>`;
+  }
   const newCount = visibleProducts.filter(p => p.isNew).length;
-  if (newCount > 0) {
-    html += `<button class="cat-chip new-chip ${activeCategory === 'new' ? 'active' : ''}" data-cat="new">✨ Nouveauté <span class="count">${newCount}</span></button>`;
+  if (newCount > 0 && theme.showNewSection) {
+    html += `<button class="cat-chip new-chip ${activeCategory === 'new' ? 'active' : ''}" data-cat="new">${escapeHtml(theme.newLabel || '✨ Nouveauté')} <span class="count">${newCount}</span></button>`;
   }
   categories.filter(c => !c.hidden).forEach(c => {
     const count = visibleProducts.filter(p => p.categoryId === c.id).length;
@@ -353,10 +434,13 @@ function renderHomeTiles() {
   categories.filter(cat => !cat.hidden).forEach(cat => {
     const items = visibleProducts.filter(p => p.categoryId === cat.id);
     if (items.length === 0) return;
-    const sample = items[0];
+    // Utilise la photo de couverture personnalisée si l'admin en a défini
+    // une pour cette catégorie ; sinon, retombe sur la photo du premier
+    // produit du rayon, comme avant.
+    const coverImage = cat.coverImage || items[0].image;
     html += `
     <div class="home-tile" data-cat="${cat.id}">
-      <img src="${sample.image || ''}" alt="">
+      <img src="${coverImage || ''}" alt="">
       <div class="tile-label">${escapeHtml(cat.name)}<span class="tile-count">${items.length} article${items.length > 1 ? 's' : ''}</span></div>
     </div>`;
   });
@@ -378,6 +462,8 @@ function getFilteredProducts() {
   let list = products.filter(isProductVisible);
   if (activeCategory === 'featured') {
     list = list.filter(p => p.featured);
+  } else if (activeCategory === 'promo') {
+    list = list.filter(p => p.isPromo);
   } else if (activeCategory === 'new') {
     list = list.filter(p => p.isNew);
   } else if (activeCategory !== 'all') {
@@ -411,9 +497,15 @@ function renderGrid() {
       featured.forEach(p => html += productCardHtml(p));
       html += `</div>`;
     }
+    const promoItems = visibleProducts.filter(p => p.isPromo);
+    if (promoItems.length && theme.showPromoSection) {
+      html += `<div class="section-title promo-title">${escapeHtml(theme.promoLabel || '🔥 Promos')}</div><div class="grid">`;
+      promoItems.forEach(p => html += productCardHtml(p));
+      html += `</div>`;
+    }
     const newOnes = visibleProducts.filter(p => p.isNew);
-    if (newOnes.length) {
-      html += `<div class="section-title new-title">✨ Nouveauté</div><div class="grid">`;
+    if (newOnes.length && theme.showNewSection) {
+      html += `<div class="section-title new-title">${escapeHtml(theme.newLabel || '✨ Nouveauté')}</div><div class="grid">`;
       newOnes.forEach(p => html += productCardHtml(p));
       html += `</div>`;
     }
@@ -1033,6 +1125,7 @@ function unlockAdminPanel() {
   renderAdminCatList();
   renderAdminOrderList();
   prefillSettings();
+  prefillThemeControls();
 }
 
 function setupAdminLock() {
@@ -1147,13 +1240,20 @@ async function renderAdminOrderList() {
         <div class="oc-bottom">
           <span class="oc-total">${fmtPrice(totalWithTva)}</span>
           <select class="status-select" data-order-id="${o.id}">
-            <option value="nouvelle" ${o.status === 'nouvelle' ? 'selected' : ''}>Nouvelle</option>
-            <option value="en_cours" ${o.status === 'en_cours' ? 'selected' : ''}>En cours</option>
-            <option value="terminee" ${o.status === 'terminee' ? 'selected' : ''}>Terminée</option>
+            <option value="nouvelle" ${o.status === 'nouvelle' ? 'selected' : ''}>🆕 Nouvelle</option>
+            <option value="en_cours" ${o.status === 'en_cours' ? 'selected' : ''}>⏳ En cours</option>
+            <option value="terminee" ${o.status === 'terminee' ? 'selected' : ''}>✅ Terminée</option>
           </select>
         </div>
+        <div class="oc-notes-wrap">
+          <label class="oc-notes-label">📝 Note interne</label>
+          <textarea class="oc-notes-input" data-order-id="${o.id}" placeholder="Ex. Appeler le client avant livraison…">${escapeHtml(o.notes || '')}</textarea>
+        </div>
         <button class="copy-order-btn" data-copyitems='${escapeHtml(JSON.stringify(o.items || []))}'>📋 Copier (réf. × qté)</button>
-        <button class="delete-order-btn" data-archiveorder="${o.id}">🗂 Archiver cette commande</button>
+        <div class="oc-action-row">
+          <button class="oc-archive-btn" data-archiveorder="${o.id}">🗂 Archiver</button>
+          <button class="oc-delete-btn" data-delorder-active="${o.id}">🗑 Supprimer</button>
+        </div>
       </div>`;
     });
     list.innerHTML = html;
@@ -1170,11 +1270,32 @@ async function renderAdminOrderList() {
         }
       });
     });
+    list.querySelectorAll('[data-delorder-active]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Supprimer DÉFINITIVEMENT cette commande ? Cette action est irréversible.')) return;
+        const { error } = await supabaseClient.from('orders').delete().eq('id', btn.dataset.delorderActive);
+        if (error) { showToast('⚠️ Erreur lors de la suppression'); return; }
+        showToast('Commande supprimée définitivement');
+        renderAdminOrderList();
+      });
+    });
+    list.querySelectorAll('.oc-notes-input').forEach(textarea => {
+      let noteSaveTimer = null;
+      textarea.addEventListener('input', () => {
+        clearTimeout(noteSaveTimer);
+        noteSaveTimer = setTimeout(async () => {
+          const { error } = await supabaseClient.from('orders').update({ notes: textarea.value }).eq('id', textarea.dataset.orderId);
+          if (!error) showToast('✓ Note enregistrée');
+        }, 600);
+      });
+    });
     list.querySelectorAll('.status-select').forEach(sel => {
       sel.addEventListener('change', async () => {
+        sel.parentElement.parentElement.classList.add('status-just-changed');
         const { error } = await supabaseClient.from('orders').update({ status: sel.value }).eq('id', sel.dataset.orderId);
         if (error) showToast('Erreur de mise à jour');
         else showToast('Statut mis à jour');
+        setTimeout(() => sel.parentElement.parentElement.classList.remove('status-just-changed'), 600);
       });
     });
     list.querySelectorAll('[data-archiveorder]').forEach(btn => {
@@ -1219,6 +1340,9 @@ async function renderArchivedOrderList() {
         ? `${escapeHtml(o.client_name || 'Client')} <span style="opacity:0.6;font-weight:500;">— ${escapeHtml(o.shop_name)}</span>`
         : escapeHtml(o.client_name || 'Client');
       const totalWithTva = o.total_with_tva != null ? Number(o.total_with_tva) : Number(o.total);
+      const notesLine = o.notes && o.notes.trim()
+        ? `<div class="oc-notes-display">📝 ${escapeHtml(o.notes)}</div>`
+        : '';
       html += `
       <div class="order-card" data-order-id="${o.id}">
         <div class="oc-top">
@@ -1227,6 +1351,7 @@ async function renderArchivedOrderList() {
         </div>
         <div class="oc-client">${clientLine}</div>
         <div class="oc-items">${itemsLines}</div>
+        ${notesLine}
         <div class="oc-bottom">
           <span class="oc-total">${fmtPrice(totalWithTva)}</span>
           <span class="status-pill ${o.status}">${o.status === 'nouvelle' ? 'Nouvelle' : o.status === 'en_cours' ? 'En cours' : 'Terminée'}</span>
@@ -1411,6 +1536,64 @@ function quickSetProductImage(productId, file) {
   reader.readAsDataURL(file);
 }
 
+/* Définit une photo de couverture personnalisée pour une catégorie,
+   utilisée dans la mosaïque du tiroir "Catalogue" à la place de la
+   première photo de produit prise automatiquement. Même traitement
+   (redimensionnement, compression) que pour les photos de produit. */
+function setCategoryCoverImage(categoryId, file) {
+  const cat = categories.find(c => c.id === categoryId);
+  if (!cat) return;
+  if (file.size > 6 * 1024 * 1024) {
+    showToast('Image trop lourde (max 6 Mo)');
+    return;
+  }
+  showToast('⏳ Envoi de la photo…');
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = async () => {
+      const maxDim = 800;
+      let w = img.width, h = img.height;
+      if (w > h && w > maxDim) { h = h * maxDim / w; w = maxDim; }
+      else if (h > maxDim) { w = w * maxDim / h; h = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const newImageData = canvas.toDataURL('image/jpeg', 0.85);
+      try {
+        const { error } = await supabaseClient.from('categories').update({ cover_image: newImageData }).eq('id', categoryId);
+        if (error) throw error;
+        cat.coverImage = newImageData;
+        showToast(`✓ Photo de « ${cat.name} » mise à jour`);
+        renderAdminCatList();
+        renderHomeTiles();
+      } catch (e) {
+        console.error(e);
+        showToast('⚠️ Erreur lors de l\'enregistrement de la photo');
+      }
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function resetCategoryCoverImage(categoryId) {
+  const cat = categories.find(c => c.id === categoryId);
+  if (!cat) return;
+  try {
+    const { error } = await supabaseClient.from('categories').update({ cover_image: null }).eq('id', categoryId);
+    if (error) throw error;
+    cat.coverImage = null;
+    showToast(`✓ Photo de « ${cat.name} » réinitialisée`);
+    renderAdminCatList();
+    renderHomeTiles();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠️ Erreur lors de la réinitialisation');
+  }
+}
+
 async function quickSetUnitStep(productId, qty) {
   const p = products.find(x => x.id === productId);
   if (!p) return;
@@ -1519,6 +1702,19 @@ function renderAdminCatList() {
       </div>
       <details class="cat-advanced">
         <summary>⚙️ Réglages avancés${hasBulk ? ' · tarif de gros actif' : ''}</summary>
+        <div class="cat-cover-box">
+          <div class="lqp-label" style="margin-bottom:8px;">🖼️ Photo de couverture (vignette « Catalogue »)</div>
+          <div class="cat-cover-row">
+            <div class="cat-cover-preview">
+              <img src="${c.coverImage || (products.find(p => p.categoryId === c.id)?.image || '')}" alt="">
+            </div>
+            <div class="cat-cover-actions">
+              <button class="btn-secondary cat-cover-choose-btn" data-cat-id="${c.id}" style="padding:9px;font-size:12.5px;margin-bottom:6px;">📷 Choisir une photo</button>
+              ${c.coverImage ? `<button class="btn-secondary cat-cover-reset-btn" data-cat-id="${c.id}" style="padding:7px;font-size:11.5px;">↺ Revenir au produit</button>` : ''}
+            </div>
+            <input type="file" accept="image/*" class="cat-cover-input" data-cat-id="${c.id}" style="display:none;">
+          </div>
+        </div>
         <div class="bulk-pricing-box">
           <div class="bg-remove-toggle" style="margin:0;">
             <div class="lb">Tarif de gros par palier
@@ -1595,6 +1791,22 @@ function renderAdminCatList() {
       renderGrid();
       showToast('Catégorie supprimée');
     });
+  });
+  list.querySelectorAll('.cat-cover-choose-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = list.querySelector(`.cat-cover-input[data-cat-id="${btn.dataset.catId}"]`);
+      if (input) input.click();
+    });
+  });
+  list.querySelectorAll('.cat-cover-input').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) setCategoryCoverImage(input.dataset.catId, file);
+      input.value = '';
+    });
+  });
+  list.querySelectorAll('.cat-cover-reset-btn').forEach(btn => {
+    btn.addEventListener('click', () => resetCategoryCoverImage(btn.dataset.catId));
   });
   list.querySelectorAll('.bulk-toggle').forEach(toggle => {
     toggle.addEventListener('change', () => {
@@ -1745,6 +1957,58 @@ function applyBrandingToPage() {
   }
 }
 
+/* Convertit une couleur hex (#RRGGBB) en chaîne rgba(...) avec l'alpha
+   donné (0-1), utilisé pour générer les variables de "verre". */
+function hexToRgba(hex, alpha) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+  if (!m) return `rgba(255,255,255,${alpha})`;
+  const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/* Applique tous les réglages de thème (couleurs, flou, tailles...) en
+   tant que variables CSS sur :root, ce qui les fait immédiatement
+   prendre effet partout dans la feuille de style sans avoir à dupliquer
+   la logique CSS en JS. Appelée au chargement et après chaque
+   sauvegarde des réglages d'apparence dans l'admin. */
+function applyThemeToPage() {
+  const r = document.documentElement.style;
+  const t = theme;
+  r.setProperty('--navy', t.colorNavy);
+  r.setProperty('--mustard', t.colorMustard);
+  r.setProperty('--mustard-deep', t.colorMustard);
+  r.setProperty('--brick', t.colorBrick);
+  r.setProperty('--sage', t.colorSage);
+  r.setProperty('--ink', t.colorInk);
+  r.setProperty('--paper-dim', t.colorPageBg);
+
+  const glassAlpha = (t.glassOpacity != null ? t.glassOpacity : 50) / 100;
+  const blurPx = t.glassBlur != null ? t.glassBlur : 28;
+  r.setProperty('--glass-bg', hexToRgba('#ffffff', Math.max(0.1, glassAlpha - 0.12)));
+  r.setProperty('--glass-bg-strong', hexToRgba('#ffffff', Math.min(0.95, glassAlpha + 0.18)));
+  r.setProperty('--glass-bg-navy', hexToRgba(t.colorNavy, glassAlpha + 0.05));
+  r.setProperty('--glass-blur', `blur(${blurPx}px) saturate(180%)`);
+  r.setProperty('--glass-blur-soft', `blur(${Math.max(0, blurPx - 10)}px) saturate(160%)`);
+
+  document.querySelectorAll('.ticket').forEach(el => {});
+  r.setProperty('--card-opacity-value', String((t.cardOpacity != null ? t.cardOpacity : 62) / 100));
+  r.setProperty('--card-radius', `${t.cardRadius != null ? t.cardRadius : 16}px`);
+  r.setProperty('--chip-radius', `${t.chipRadius != null ? t.chipRadius : 18}px`);
+  r.setProperty('--price-size', `${t.priceSize != null ? t.priceSize : 21}px`);
+  r.setProperty('--font-heading', t.fontHeading || "'Fraunces', serif");
+  r.setProperty('--font-body', t.fontBody || "'Jost', sans-serif");
+
+  // Les cartes utilisent directement une couleur rgba (pas backdrop-filter,
+  // pour les raisons de performance vues plus haut) : on la recalcule ici.
+  const cardAlpha = (t.cardOpacity != null ? t.cardOpacity : 62) / 100;
+  document.querySelectorAll('.ticket').forEach(el => {
+    el.style.background = `rgba(255,255,255,${cardAlpha})`;
+  });
+  document.querySelectorAll('.ticket').forEach(el => {
+    el.style.borderRadius = `${t.cardRadius != null ? t.cardRadius : 16}px`;
+  });
+}
+
 function prefillSettings() {
   document.getElementById('settingWhatsapp').value = settings.whatsapp || '';
   document.getElementById('settingEmail').value = settings.email || '';
@@ -1784,6 +2048,104 @@ function setupSettingsSave() {
     settings.admin_pin = val;
     document.getElementById('newPinInput').value = '';
     showToast('Code admin mis à jour');
+  });
+}
+
+/* Remplit les contrôles du panneau "Thème & apparence" avec les valeurs
+   actuelles (sauvegardées ou par défaut). */
+function prefillThemeControls() {
+  document.getElementById('themeColorNavy').value = theme.colorNavy;
+  document.getElementById('themeColorMustard').value = theme.colorMustard;
+  document.getElementById('themeColorBrick').value = theme.colorBrick;
+  document.getElementById('themeColorSage').value = theme.colorSage;
+  document.getElementById('themeColorInk').value = theme.colorInk;
+  document.getElementById('themeColorPageBg').value = theme.colorPageBg;
+  document.getElementById('themeGlassOpacity').value = theme.glassOpacity;
+  document.getElementById('valGlassOpacity').textContent = theme.glassOpacity + '%';
+  document.getElementById('themeGlassBlur').value = theme.glassBlur;
+  document.getElementById('valGlassBlur').textContent = theme.glassBlur + 'px';
+  document.getElementById('themeCardOpacity').value = theme.cardOpacity;
+  document.getElementById('valCardOpacity').textContent = theme.cardOpacity + '%';
+  document.getElementById('themeCardRadius').value = theme.cardRadius;
+  document.getElementById('valCardRadius').textContent = theme.cardRadius + 'px';
+  document.getElementById('themeChipRadius').value = theme.chipRadius;
+  document.getElementById('valChipRadius').textContent = theme.chipRadius + 'px';
+  document.getElementById('themePriceSize').value = theme.priceSize;
+  document.getElementById('valPriceSize').textContent = theme.priceSize + 'px';
+  document.getElementById('themeFontBody').value = theme.fontBody;
+  document.getElementById('themeShowPromo').checked = theme.showPromoSection;
+  document.getElementById('themePromoLabel').value = theme.promoLabel;
+  document.getElementById('themeShowNew').checked = theme.showNewSection;
+  document.getElementById('themeNewLabel').value = theme.newLabel;
+}
+
+function setupThemeControls() {
+  // Mise à jour en direct des étiquettes de valeur pendant le glissement
+  // des curseurs, pour un retour visuel immédiat avant même d'enregistrer.
+  const sliderMap = [
+    ['themeGlassOpacity', 'valGlassOpacity', '%'],
+    ['themeGlassBlur', 'valGlassBlur', 'px'],
+    ['themeCardOpacity', 'valCardOpacity', '%'],
+    ['themeCardRadius', 'valCardRadius', 'px'],
+    ['themeChipRadius', 'valChipRadius', 'px'],
+    ['themePriceSize', 'valPriceSize', 'px']
+  ];
+  sliderMap.forEach(([inputId, labelId, unit]) => {
+    const input = document.getElementById(inputId);
+    const label = document.getElementById(labelId);
+    input.addEventListener('input', () => { label.textContent = input.value + unit; });
+  });
+
+  document.getElementById('saveThemeBtn').addEventListener('click', async () => {
+    const newTheme = {
+      colorNavy: document.getElementById('themeColorNavy').value,
+      colorMustard: document.getElementById('themeColorMustard').value,
+      colorBrick: document.getElementById('themeColorBrick').value,
+      colorSage: document.getElementById('themeColorSage').value,
+      colorInk: document.getElementById('themeColorInk').value,
+      colorPageBg: document.getElementById('themeColorPageBg').value,
+      glassOpacity: parseInt(document.getElementById('themeGlassOpacity').value, 10),
+      glassBlur: parseInt(document.getElementById('themeGlassBlur').value, 10),
+      cardOpacity: parseInt(document.getElementById('themeCardOpacity').value, 10),
+      cardRadius: parseInt(document.getElementById('themeCardRadius').value, 10),
+      chipRadius: parseInt(document.getElementById('themeChipRadius').value, 10),
+      priceSize: parseInt(document.getElementById('themePriceSize').value, 10),
+      fontHeading: theme.fontHeading,
+      fontBody: document.getElementById('themeFontBody').value,
+      showPromoSection: document.getElementById('themeShowPromo').checked,
+      showNewSection: document.getElementById('themeShowNew').checked,
+      promoLabel: document.getElementById('themePromoLabel').value.trim() || DEFAULT_THEME.promoLabel,
+      newLabel: document.getElementById('themeNewLabel').value.trim() || DEFAULT_THEME.newLabel
+    };
+    try {
+      const { error } = await supabaseClient.from('settings').update({ theme_settings: newTheme }).eq('id', 1);
+      if (error) throw error;
+      theme = newTheme;
+      applyThemeToPage();
+      renderGrid();
+      renderCategoryStrip();
+      showToast('✓ Apparence enregistrée');
+    } catch (e) {
+      console.error(e);
+      showToast('⚠️ Erreur lors de l\'enregistrement de l\'apparence');
+    }
+  });
+
+  document.getElementById('resetThemeBtn').addEventListener('click', async () => {
+    if (!confirm('Réinitialiser tous les réglages d\'apparence par défaut ?')) return;
+    try {
+      const { error } = await supabaseClient.from('settings').update({ theme_settings: null }).eq('id', 1);
+      if (error) throw error;
+      theme = Object.assign({}, DEFAULT_THEME);
+      applyThemeToPage();
+      prefillThemeControls();
+      renderGrid();
+      renderCategoryStrip();
+      showToast('✓ Apparence réinitialisée');
+    } catch (e) {
+      console.error(e);
+      showToast('⚠️ Erreur lors de la réinitialisation');
+    }
   });
 }
 
@@ -1890,6 +2252,7 @@ function openProductForm(productId) {
     document.getElementById('outOfStockToggle').checked = !!p.outOfStock;
     document.getElementById('featuredToggle').checked = !!p.featured;
     document.getElementById('newToggle').checked = !!p.isNew;
+    document.getElementById('promoToggle').checked = !!p.isPromo;
     imgPreview.src = p.image || '';
     imgPreview.style.display = 'block';
     imgPlaceholder.style.display = 'none';
@@ -1919,6 +2282,7 @@ function openProductForm(productId) {
     document.getElementById('outOfStockToggle').checked = false;
     document.getElementById('featuredToggle').checked = false;
     document.getElementById('newToggle').checked = false;
+    document.getElementById('promoToggle').checked = false;
     imgPreview.style.display = 'none';
     imgPlaceholder.style.display = 'block';
     delBtn.style.display = 'none';
@@ -2095,6 +2459,7 @@ function setupProductFormSave() {
     const outOfStock = document.getElementById('outOfStockToggle').checked;
     const featured = document.getElementById('featuredToggle').checked;
     const isNew = document.getElementById('newToggle').checked;
+    const isPromo = document.getElementById('promoToggle').checked;
     let unitStep = 1, unitLabel = '';
     if (currentUnitMode === 'bulk') {
       unitStep = parseInt(document.getElementById('formUnitStep').value, 10);
@@ -2126,23 +2491,23 @@ function setupProductFormSave() {
         const { error } = await supabaseClient.from('products').update({
           name, ref, price, category_id: categoryId, image: pendingImageData,
           unit_step: unitStep, unit_label: unitLabel,
-          out_of_stock: outOfStock, featured: featured, is_new: isNew
+          out_of_stock: outOfStock, featured: featured, is_new: isNew, is_promo: isPromo
         }).eq('id', editingProductId);
         if (error) throw error;
         const p = products.find(x => x.id === editingProductId);
         p.name = name; p.ref = ref; p.price = price; p.categoryId = categoryId;
         p.image = pendingImageData; p.unitStep = unitStep; p.unitLabel = unitLabel;
-        p.outOfStock = outOfStock; p.featured = featured; p.isNew = isNew;
+        p.outOfStock = outOfStock; p.featured = featured; p.isNew = isNew; p.isPromo = isPromo;
         showToast('Produit mis à jour');
       } else {
         const newId = uid('prod');
         const { error } = await supabaseClient.from('products').insert({
           id: newId, ref, name, price, category_id: categoryId, image: pendingImageData,
           unit_step: unitStep, unit_label: unitLabel, sort_order: products.length + 1,
-          out_of_stock: outOfStock, featured: featured, is_new: isNew
+          out_of_stock: outOfStock, featured: featured, is_new: isNew, is_promo: isPromo
         });
         if (error) throw error;
-        products.push({ id: newId, ref, name, price, categoryId, image: pendingImageData, unitStep, unitLabel, outOfStock, featured, isNew, hidden: false });
+        products.push({ id: newId, ref, name, price, categoryId, image: pendingImageData, unitStep, unitLabel, outOfStock, featured, isNew, isPromo, hidden: false });
         showToast('Produit ajouté');
       }
       closeDrawer('productFormDrawer');
@@ -2230,6 +2595,7 @@ function init() {
   setupAdminTabs();
   setupAddCategory();
   setupSettingsSave();
+  setupThemeControls();
   setupLogoUpload();
   setupImageUpload();
   setupImageCropper();
