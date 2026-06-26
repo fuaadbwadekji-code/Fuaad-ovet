@@ -869,15 +869,20 @@ function renderCartDrawer() {
 function setupSearch() {
   const input = document.getElementById('searchInput');
   const clearBtn = document.getElementById('searchClear');
+  let searchDebounceTimer = null;
   input.addEventListener('input', () => {
     searchTerm = input.value;
     clearBtn.style.display = searchTerm ? 'block' : 'none';
-    renderGrid();
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      renderGrid();
+    }, 180);
   });
   clearBtn.addEventListener('click', () => {
     input.value = '';
     searchTerm = '';
     clearBtn.style.display = 'none';
+    clearTimeout(searchDebounceTimer);
     renderGrid();
     input.focus();
   });

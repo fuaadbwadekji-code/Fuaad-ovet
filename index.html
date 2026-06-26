@@ -43,7 +43,7 @@
   --glass-shadow:0 8px 32px rgba(20,20,30,0.18);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html{margin:0;padding:0;overflow-x:hidden;width:100%;}
+html{margin:0;padding:0;overflow-x:hidden;width:100%;background:#F7F4EE;}
 body{margin:0;padding:0;overflow-x:hidden;width:100%;position:relative;}
 body{
   font-family:'Jost',sans-serif;
@@ -208,6 +208,33 @@ button{font-family:inherit;cursor:pointer;}
   animation:spin 0.8s linear infinite;
 }
 @keyframes spin{to{transform:rotate(360deg);}}
+
+.skeleton-grid{padding:0;text-align:left;opacity:1;}
+.skeleton-ticket{
+  background:rgba(255,255,255,0.55);
+  border-radius:16px;
+  overflow:hidden;
+  box-shadow:var(--glass-shadow);
+  padding-bottom:13px;
+}
+.sk-img{
+  aspect-ratio:1/1;
+  background:linear-gradient(110deg, rgba(20,20,30,0.06) 8%, rgba(20,20,30,0.12) 18%, rgba(20,20,30,0.06) 33%);
+  background-size:200% 100%;
+  animation:skeletonShine 1.4s ease-in-out infinite;
+}
+.sk-line{
+  height:11px;border-radius:6px;margin:12px 13px 0;
+  background:linear-gradient(110deg, rgba(20,20,30,0.06) 8%, rgba(20,20,30,0.12) 18%, rgba(20,20,30,0.06) 33%);
+  background-size:200% 100%;
+  animation:skeletonShine 1.4s ease-in-out infinite;
+}
+.sk-line.w70{width:70%;}
+.sk-line.w40{width:40%;margin-top:8px;height:15px;}
+@keyframes skeletonShine{
+  0%{background-position:200% 0;}
+  100%{background-position:-200% 0;}
+}
 
 .home-tiles{
   display:grid;grid-template-columns:repeat(2,1fr);gap:14px;
@@ -830,9 +857,15 @@ button{font-family:inherit;cursor:pointer;}
 </div>
 
 <div class="catalogue">
-  <div class="loading-state" id="loadingState">
-    <div class="spinner"></div>
-    <div>Chargement du catalogue…</div>
+  <div class="loading-state skeleton-grid" id="loadingState">
+    <div class="grid">
+      <div class="skeleton-ticket"><div class="sk-img"></div><div class="sk-line w70"></div><div class="sk-line w40"></div></div>
+      <div class="skeleton-ticket"><div class="sk-img"></div><div class="sk-line w70"></div><div class="sk-line w40"></div></div>
+      <div class="skeleton-ticket"><div class="sk-img"></div><div class="sk-line w70"></div><div class="sk-line w40"></div></div>
+      <div class="skeleton-ticket"><div class="sk-img"></div><div class="sk-line w70"></div><div class="sk-line w40"></div></div>
+      <div class="skeleton-ticket"><div class="sk-img"></div><div class="sk-line w70"></div><div class="sk-line w40"></div></div>
+      <div class="skeleton-ticket"><div class="sk-img"></div><div class="sk-line w70"></div><div class="sk-line w40"></div></div>
+    </div>
   </div>
   <div id="gridContainer"></div>
   <div class="empty-state" id="emptyState" style="display:none;">
@@ -1132,6 +1165,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260626g"></script>
+<script src="app.js?v=20260626h"></script>
 </body>
 </html>
