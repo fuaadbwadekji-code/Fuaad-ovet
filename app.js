@@ -482,6 +482,7 @@ function renderHomeTiles() {
     </div>`;
   });
   container.innerHTML = html;
+  observeCardsForScrollReveal('.home-tile');
   container.querySelectorAll('.home-tile').forEach(tile => {
     tile.addEventListener('click', () => {
       activeCategory = tile.dataset.cat;
@@ -643,7 +644,9 @@ function productCardHtml(p) {
    coupés par la largeur fixe d'origine. */
 function resizeQtyInput(input) {
   const len = String(input.value || '0').length;
-  input.style.width = Math.max(24, len * 9 + 6) + 'px';
+  const fontSize = parseFloat(getComputedStyle(input).fontSize) || 12.5;
+  const charWidth = fontSize * 0.62;
+  input.style.width = Math.max(24, Math.ceil(len * charWidth + 8)) + 'px';
 }
 
 function attachCardListeners() {
@@ -822,13 +825,15 @@ function openProductDetail(id) {
     footer.innerHTML = `
       <div class="qty-control" style="justify-content:center;margin-bottom:12px;background:var(--paper-dim, #F7F4EE);">
         <button class="qty-minus" data-id="${p.id}" style="width:38px;height:38px;font-size:18px;">−</button>
-        <input type="number" class="qty-input" data-id="${p.id}" value="${qty}" min="0" inputmode="numeric" style="width:50px;font-size:16px;">
+        <input type="number" class="qty-input" data-id="${p.id}" value="${qty}" min="0" inputmode="numeric" style="font-size:16px;">
         <button class="qty-plus" data-id="${p.id}" style="width:38px;height:38px;font-size:18px;">+</button>
       </div>
       <button class="btn-primary" id="detailAddToCartBtn" data-id="${p.id}">Ajouter au panier</button>
     `;
     footer.querySelector('.qty-minus').addEventListener('click', () => { addToCart(p.id, -1); openProductDetail(p.id); });
     footer.querySelector('.qty-plus').addEventListener('click', () => { addToCart(p.id, 1); openProductDetail(p.id); });
+    resizeQtyInput(footer.querySelector('.qty-input'));
+    footer.querySelector('.qty-input').addEventListener('input', (e) => resizeQtyInput(e.target));
     footer.querySelector('.qty-input').addEventListener('change', (e) => { setCartQtyLots(p.id, e.target.value); openProductDetail(p.id); });
     footer.querySelector('#detailAddToCartBtn').addEventListener('click', () => {
       addToCart(p.id, 1);
@@ -1089,24 +1094,41 @@ function setupCheckout() {
 
   document.getElementById('confirmOrderBtn').addEventListener('click', async () => {
     const nameInput = document.getElementById('clientNameInput');
+    const shopInput = document.getElementById('clientShopInput');
     const name = nameInput.value.trim();
-    const shopName = document.getElementById('clientShopInput').value.trim();
-    const errorMsg = document.getElementById('clientNameError');
+    const shopName = shopInput.value.trim();
+    const nameError = document.getElementById('clientNameError');
+    const shopError = document.getElementById('clientShopError');
     if (!name) {
       nameInput.classList.add('input-error');
-      errorMsg.style.display = 'block';
+      nameError.style.display = 'block';
       nameInput.focus();
       showToast('⚠️ Merci d\'indiquer votre nom');
       return;
     }
     nameInput.classList.remove('input-error');
-    errorMsg.style.display = 'none';
+    nameError.style.display = 'none';
+    if (!shopName) {
+      shopInput.classList.add('input-error');
+      shopError.style.display = 'block';
+      shopInput.focus();
+      showToast('⚠️ Merci d\'indiquer le nom du magasin');
+      return;
+    }
+    shopInput.classList.remove('input-error');
+    shopError.style.display = 'none';
     await submitOrder(name, shopName);
   });
   document.getElementById('clientNameInput').addEventListener('input', (e) => {
     if (e.target.value.trim()) {
       e.target.classList.remove('input-error');
       document.getElementById('clientNameError').style.display = 'none';
+    }
+  });
+  document.getElementById('clientShopInput').addEventListener('input', (e) => {
+    if (e.target.value.trim()) {
+      e.target.classList.remove('input-error');
+      document.getElementById('clientShopError').style.display = 'none';
     }
   });
 

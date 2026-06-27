@@ -262,13 +262,20 @@ button{font-family:inherit;cursor:pointer;}
 }
 .home-tile{
   position:relative;
-  background:var(--glass-bg);
-  -webkit-backdrop-filter:var(--glass-blur-soft);
-  backdrop-filter:var(--glass-blur-soft);
+  background:rgba(255,255,255,0.5);
   border:none;
   border-radius:12px;overflow:hidden;
   box-shadow:var(--glass-shadow);aspect-ratio:1/1;
   display:flex;align-items:flex-end;
+  opacity:0;
+  transform:translateY(6px);
+  transition:opacity .15s ease-out, transform .15s ease-out;
+  content-visibility:auto;
+  contain-intrinsic-size:0 180px;
+}
+.home-tile.in-view{
+  opacity:1;
+  transform:translateY(0);
 }
 .home-tile img{
   position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:14px;
@@ -1125,8 +1132,9 @@ button{font-family:inherit;cursor:pointer;}
         <div class="field-error" id="clientNameError" style="display:none;">⚠️ Merci d'indiquer votre nom pour confirmer la commande</div>
       </div>
       <div class="form-group">
-        <label>Nom du magasin (optionnel)</label>
+        <label>Nom du magasin</label>
         <input type="text" id="clientShopInput" placeholder="Ex. Eva Souvenirs">
+        <div class="field-error" id="clientShopError" style="display:none;">⚠️ Merci d'indiquer le nom du magasin pour confirmer la commande</div>
       </div>
       <div class="invoice-summary" id="checkoutInvoiceSummary"></div>
       <button class="btn-primary confirm-order-btn" id="confirmOrderBtn">
@@ -1629,6 +1637,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260627h"></script>
+<script src="app.js?v=20260627i"></script>
 </body>
 </html>
