@@ -262,9 +262,9 @@ function updateLoadingProgress(loaded, total, percent) {
   if (!bar || !label) return;
   if (percent == null) {
     // Total inconnu (la requête de comptage a échoué) : on affiche une
-    // progression approximative qui avance quand même, pour ne pas
-    // laisser un 0% figé tout le chargement.
-    label.textContent = `${loaded} produits chargés…`;
+    // progression indéterminée, sans jamais montrer de nombre brut de
+    // produits — seulement un pourcentage (même approximatif).
+    label.textContent = '…';
     bar.style.width = '40%';
     bar.classList.add('indeterminate');
   } else {
