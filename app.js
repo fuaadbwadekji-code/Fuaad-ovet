@@ -191,7 +191,21 @@ function closeAllDrawers() {
    éviter un timeout côté base de données (la table contient 900+ lignes,
    certaines avec des images encodées en base64 assez lourdes). Réutilisée
    au chargement initial et lors du rafraîchissement manuel de l'admin. */
-async function fetchAllProductsFromDB() {
+async function fetchAllProductsFromDB(onProgress) {
+  // Récupère d'abord le nombre total de produits (requête légère, sans
+  // les données elles-mêmes) pour pouvoir calculer une vraie progression
+  // en pourcentage au fur et à mesure des pages suivantes.
+  let totalCount = null;
+  try {
+    const { count, error: countError } = await supabaseClient
+      .from('products')
+      .select('*', { count: 'exact', head: true });
+    if (!countError && typeof count === 'number') totalCount = count;
+  } catch (e) {
+    // Si le comptage échoue, on continue sans pourcentage exact (la barre
+    // avancera quand même de façon approximative, voir plus bas).
+  }
+
   let allProducts = [];
   let from = 0;
   let pageSize = 40;
@@ -215,10 +229,17 @@ async function fetchAllProductsFromDB() {
     }
     if (!data || data.length === 0) break;
     allProducts = allProducts.concat(data);
+    if (onProgress) {
+      const percent = totalCount
+        ? Math.min(99, Math.round((allProducts.length / totalCount) * 100))
+        : null; // pas de total connu : l'appelant peut afficher un état indéterminé
+      onProgress(allProducts.length, totalCount, percent);
+    }
     if (data.length < pageSize) break;
     from += data.length;
   }
   allProducts.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  if (onProgress) onProgress(allProducts.length, totalCount || allProducts.length, 100);
   return allProducts;
 }
 
@@ -230,6 +251,27 @@ function mapDbProductToLocal(p) {
     outOfStock: !!p.out_of_stock, featured: !!p.featured,
     hidden: !!p.hidden, isNew: !!p.is_new, isPromo: !!p.is_promo
   };
+}
+
+/* Met à jour la barre de progression visible pendant le chargement
+   initial du catalogue (pourcentage réel basé sur le nombre total de
+   produits, récupéré au début de fetchAllProductsFromDB). */
+function updateLoadingProgress(loaded, total, percent) {
+  const bar = document.getElementById('loadingProgressBar');
+  const label = document.getElementById('loadingProgressLabel');
+  if (!bar || !label) return;
+  if (percent == null) {
+    // Total inconnu (la requête de comptage a échoué) : on affiche une
+    // progression approximative qui avance quand même, pour ne pas
+    // laisser un 0% figé tout le chargement.
+    label.textContent = `${loaded} produits chargés…`;
+    bar.style.width = '40%';
+    bar.classList.add('indeterminate');
+  } else {
+    bar.classList.remove('indeterminate');
+    bar.style.width = percent + '%';
+    label.textContent = `${percent}%`;
+  }
 }
 
 async function loadAllData() {
@@ -254,7 +296,9 @@ async function loadAllData() {
     savedTheme = Object.assign({}, theme);
     applyThemeToPage();
 
-    const allProducts = await fetchAllProductsFromDB();
+    const allProducts = await fetchAllProductsFromDB((loaded, total, percent) => {
+      updateLoadingProgress(loaded, total, percent);
+    });
     products = allProducts.map(mapDbProductToLocal);
 
     loadCartFromStorage();
