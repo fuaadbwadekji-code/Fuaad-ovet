@@ -723,6 +723,31 @@ button{font-family:inherit;cursor:pointer;}
   text-align:center;font-size:11.5px;color:var(--brass);
   margin:-4px 0 10px;opacity:0.85;
 }
+.signature-pad-label{
+  text-align:center;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:10px;
+}
+.signature-pad-box{
+  position:relative;
+  background:rgba(255,255,255,0.7);
+  border:1.5px dashed rgba(140,112,72,0.35);
+  border-radius:16px;
+  margin-bottom:14px;
+  overflow:hidden;
+}
+#signatureCanvas{
+  width:100%;height:160px;display:block;touch-action:none;
+}
+.signature-pad-line{
+  position:absolute;left:24px;right:24px;bottom:36px;
+  border-top:1.5px dotted rgba(140,112,72,0.4);
+  pointer-events:none;
+}
+.signature-clear-btn{
+  position:absolute;top:8px;right:8px;
+  background:rgba(255,255,255,0.85);border:1px solid rgba(140,112,72,0.25);
+  border-radius:14px;padding:5px 12px;font-size:11px;font-weight:600;color:var(--brass);
+}
+.confirm-order-btn:disabled{opacity:0.45;}
 .btn-secondary{
   width:100%;
   background:var(--glass-bg);
@@ -1258,6 +1283,20 @@ button{font-family:inherit;cursor:pointer;}
       </div>
       <p id="checkoutPrefilledNotice" style="display:none;color:var(--brass);font-size:13px;"></p>
       <div class="invoice-summary" id="checkoutInvoiceSummary"></div>
+
+      <div id="signaturePadWrap" style="display:none;">
+        <div class="signature-pad-label">Signez ici pour confirmer votre commande</div>
+        <div class="signature-pad-box">
+          <canvas id="signatureCanvas"></canvas>
+          <div class="signature-pad-line"></div>
+          <button class="signature-clear-btn" id="signatureClearBtn">↺ Effacer</button>
+        </div>
+        <button class="btn-primary confirm-order-btn" id="confirmSignatureBtn" disabled>
+          <span class="confirm-order-icon">✓</span>
+          <span class="confirm-order-text">Confirmer avec ma signature</span>
+        </button>
+      </div>
+
       <button class="btn-primary confirm-order-btn" id="confirmOrderBtn">
         <span class="confirm-order-icon">✓</span>
         <span class="confirm-order-text">Envoyer la commande</span>
@@ -1776,6 +1815,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260628c"></script>
+<script src="app.js?v=20260628d"></script>
 </body>
 </html>

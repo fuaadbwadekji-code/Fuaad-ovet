@@ -1100,6 +1100,86 @@ function setupSearch() {
 /* =========================================================
    COMMANDE — création + stockage dans Supabase
    ========================================================= */
+/* Pavé de signature tactile — purement visuel : il sert seulement à
+   activer le bouton de confirmation une fois qu'un trait a été dessiné
+   ("le client signe pour valider"), pour donner une impression de
+   commande soignée et professionnelle. Le dessin lui-même n'est JAMAIS
+   converti en image, enregistré, ni envoyé où que ce soit — seul le
+   booléen "a signé / pas signé" compte côté code, exactement comme
+   demandé. */
+let signatureHasDrawn = false;
+let signatureDrawing = false;
+let signatureCtx = null;
+
+function setupSignaturePad() {
+  const canvas = document.getElementById('signatureCanvas');
+  const clearBtn = document.getElementById('signatureClearBtn');
+  const confirmBtn = document.getElementById('confirmSignatureBtn');
+
+  function resizeCanvasToDisplaySize() {
+    const rect = canvas.getBoundingClientRect();
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = rect.width * ratio;
+    canvas.height = rect.height * ratio;
+    signatureCtx = canvas.getContext('2d');
+    signatureCtx.scale(ratio, ratio);
+    signatureCtx.lineWidth = 2.4;
+    signatureCtx.lineCap = 'round';
+    signatureCtx.lineJoin = 'round';
+    signatureCtx.strokeStyle = '#1B2A45';
+  }
+  resizeCanvasToDisplaySize();
+  window.addEventListener('resize', resizeCanvasToDisplaySize);
+
+  function getPoint(e) {
+    const rect = canvas.getBoundingClientRect();
+    const evt = e.touches ? e.touches[0] : e;
+    return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+  }
+  function startDraw(e) {
+    e.preventDefault();
+    signatureDrawing = true;
+    const p = getPoint(e);
+    signatureCtx.beginPath();
+    signatureCtx.moveTo(p.x, p.y);
+  }
+  function moveDraw(e) {
+    if (!signatureDrawing) return;
+    e.preventDefault();
+    const p = getPoint(e);
+    signatureCtx.lineTo(p.x, p.y);
+    signatureCtx.stroke();
+    if (!signatureHasDrawn) {
+      signatureHasDrawn = true;
+      confirmBtn.disabled = false;
+    }
+  }
+  function endDraw() { signatureDrawing = false; }
+
+  canvas.addEventListener('mousedown', startDraw);
+  canvas.addEventListener('mousemove', moveDraw);
+  canvas.addEventListener('mouseup', endDraw);
+  canvas.addEventListener('mouseleave', endDraw);
+  canvas.addEventListener('touchstart', startDraw, { passive: false });
+  canvas.addEventListener('touchmove', moveDraw, { passive: false });
+  canvas.addEventListener('touchend', endDraw);
+
+  clearBtn.addEventListener('click', () => resetSignaturePad());
+}
+
+/* Efface visuellement le pavé et désactive à nouveau le bouton —
+   appelée à l'ouverture de chaque nouvelle commande, pour qu'une
+   signature précédente ne "traîne" jamais sur la commande suivante. */
+function resetSignaturePad() {
+  signatureHasDrawn = false;
+  const confirmBtn = document.getElementById('confirmSignatureBtn');
+  if (confirmBtn) confirmBtn.disabled = true;
+  if (signatureCtx) {
+    const canvas = document.getElementById('signatureCanvas');
+    signatureCtx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+}
+
 function setupCheckout() {
   document.getElementById('checkoutBtn').addEventListener('click', () => {
     if (Object.keys(cart).length === 0) return;
@@ -1109,16 +1189,25 @@ function setupCheckout() {
       renderInvoiceSummary();
       // Si Fuaad a déjà renseigné le client dans la fenêtre d'accueil de
       // l'admin, on saute entièrement les champs "Votre nom" / "Nom du
-      // magasin" — le client n'a plus qu'à confirmer.
+      // magasin" — la confirmation se fait alors par signature tactile
+      // plutôt que par un simple bouton, puisque c'est le client qui a
+      // la tablette en main en magasin.
       const nameFieldsWrap = document.getElementById('checkoutNameFieldsWrap');
       const prefilledNotice = document.getElementById('checkoutPrefilledNotice');
+      const signaturePadWrap = document.getElementById('signaturePadWrap');
+      const regularConfirmBtn = document.getElementById('confirmOrderBtn');
       if (prefilledClientName && prefilledClientShop) {
         nameFieldsWrap.style.display = 'none';
         prefilledNotice.style.display = 'block';
         prefilledNotice.textContent = `Commande pour ${prefilledClientName} — ${prefilledClientShop}`;
+        signaturePadWrap.style.display = 'block';
+        regularConfirmBtn.style.display = 'none';
+        resetSignaturePad();
       } else {
         nameFieldsWrap.style.display = 'block';
         prefilledNotice.style.display = 'none';
+        signaturePadWrap.style.display = 'none';
+        regularConfirmBtn.style.display = 'flex';
       }
     }, 200);
   });
@@ -1157,6 +1246,15 @@ function setupCheckout() {
     shopError.style.display = 'none';
     await submitOrder(name, shopName);
   });
+
+  document.getElementById('confirmSignatureBtn').addEventListener('click', async () => {
+    if (!signatureHasDrawn) {
+      showToast('✍️ Merci de signer pour confirmer');
+      return;
+    }
+    await submitOrder(prefilledClientName, prefilledClientShop);
+  });
+
   document.getElementById('clientNameInput').addEventListener('input', (e) => {
     if (e.target.value.trim()) {
       e.target.classList.remove('input-error');
@@ -3128,6 +3226,7 @@ function init() {
   setupProductFormSave();
   setupUnitToggle();
   setupCheckout();
+  setupSignaturePad();
   setupGeneralUI();
   loadAllData();
 }
