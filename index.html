@@ -187,7 +187,9 @@ button{font-family:inherit;cursor:pointer;}
 .cat-strip::-webkit-scrollbar{display:none;}
 .cat-chip{
   flex:0 0 auto;
-  background:var(--catstrip-chip-bg, rgba(255,255,255,0.45));
+  background:var(--catstrip-chip-bg, var(--glass-bg));
+  -webkit-backdrop-filter:var(--glass-blur-soft);
+  backdrop-filter:var(--glass-blur-soft);
   border:1px solid var(--glass-border);
   color:var(--ink);
   padding:9px 16px;
@@ -553,7 +555,7 @@ button{font-family:inherit;cursor:pointer;}
   display:flex;align-items:center;justify-content:space-between;
   box-shadow:0 14px 36px rgba(16,25,44,0.45);z-index:35;
   transform:translateY(140%) scale(0.92);opacity:0;
-  transition:transform .45s cubic-bezier(.22,1.4,.36,1), opacity .3s ease;
+  transition:transform .25s cubic-bezier(.22,1.4,.36,1), opacity .2s ease;
 }
 .cart-fab.show{transform:translateY(0) scale(1);opacity:1;}
 .cart-fab.bump{animation:cartFabBump .4s cubic-bezier(.34,1.56,.64,1);}
@@ -589,6 +591,47 @@ button{font-family:inherit;cursor:pointer;}
   backdrop-filter:blur(14px) saturate(120%);
   opacity:0;visibility:hidden;transition:opacity .3s;
 }
+#clientPromptOverlay{z-index:90;}
+#clientPromptOverlay.show{opacity:1;visibility:visible;}
+.client-prompt-modal{
+  position:fixed;top:50%;left:50%;
+  transform:translate(-50%,-46%) scale(0.9);
+  width:min(360px,88vw);
+  background:var(--glass-bg-strong);
+  -webkit-backdrop-filter:var(--glass-blur);
+  backdrop-filter:var(--glass-blur);
+  border:1px solid var(--glass-border-soft);
+  border-radius:24px;
+  padding:28px 22px 24px;
+  box-shadow:0 24px 60px rgba(0,0,0,0.4);
+  z-index:91;
+  opacity:0;visibility:hidden;
+  transition:opacity .3s ease, transform .4s cubic-bezier(.22,1.55,.36,1);
+  text-align:center;
+}
+.client-prompt-modal.show{
+  opacity:1;visibility:visible;
+  transform:translate(-50%,-50%) scale(1);
+}
+.client-prompt-emoji{
+  font-size:40px;margin-bottom:8px;
+  animation:promptWave .6s ease-in-out .15s;
+}
+@keyframes promptWave{
+  0%,100%{transform:rotate(0deg);}
+  25%{transform:rotate(-15deg);}
+  50%{transform:rotate(12deg);}
+  75%{transform:rotate(-8deg);}
+}
+.client-prompt-modal h2{
+  font-family:'Fraunces',serif;font-size:22px;margin:0 0 6px;color:var(--ink);
+}
+.client-prompt-modal p{font-size:14px;color:var(--ink);opacity:0.75;margin:0 0 18px;}
+.client-prompt-modal .form-group{text-align:left;margin-bottom:12px;}
+.client-prompt-modal .form-group label{color:var(--mustard-deep) !important;}
+.client-prompt-modal input{
+  background:rgba(255,255,255,0.7) !important;
+}
 .overlay.show{opacity:1;visibility:visible;}
 .drawer{
   position:fixed;top:0;right:0;bottom:0;width:min(440px,92vw);
@@ -598,7 +641,7 @@ button{font-family:inherit;cursor:pointer;}
   z-index:61;
   transform:translateX(100%);
   will-change:transform;
-  transition:transform var(--anim-speed-normal, .34s) cubic-bezier(.16,1.32,.38,1), box-shadow var(--anim-speed-normal, .3s);
+  transition:transform var(--anim-speed-normal, .24s) cubic-bezier(.16,1.32,.38,1), box-shadow var(--anim-speed-normal, .22s);
   display:flex;flex-direction:column;
   box-shadow:none;
   border-left:1px solid var(--glass-border-soft);
@@ -1198,17 +1241,20 @@ button{font-family:inherit;cursor:pointer;}
   </div>
   <div class="drawer-body">
     <div class="choice-modal-body">
-      <p>Indiquez votre nom pour que la boutique retrouve facilement votre commande.</p>
-      <div class="form-group">
-        <label>Votre nom</label>
-        <input type="text" id="clientNameInput" placeholder="Ex. Fuaad Bwadekji">
-        <div class="field-error" id="clientNameError" style="display:none;">⚠️ Merci d'indiquer votre nom pour confirmer la commande</div>
+      <div id="checkoutNameFieldsWrap">
+        <p>Indiquez votre nom pour que la boutique retrouve facilement votre commande.</p>
+        <div class="form-group">
+          <label>Votre nom</label>
+          <input type="text" id="clientNameInput" placeholder="Ex. Fuaad Bwadekji">
+          <div class="field-error" id="clientNameError" style="display:none;">⚠️ Merci d'indiquer votre nom pour confirmer la commande</div>
+        </div>
+        <div class="form-group">
+          <label>Nom du magasin</label>
+          <input type="text" id="clientShopInput" placeholder="Ex. Eva Souvenirs">
+          <div class="field-error" id="clientShopError" style="display:none;">⚠️ Merci d'indiquer le nom du magasin pour confirmer la commande</div>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Nom du magasin</label>
-        <input type="text" id="clientShopInput" placeholder="Ex. Eva Souvenirs">
-        <div class="field-error" id="clientShopError" style="display:none;">⚠️ Merci d'indiquer le nom du magasin pour confirmer la commande</div>
-      </div>
+      <p id="checkoutPrefilledNotice" style="display:none;color:var(--brass);font-size:13px;"></p>
       <div class="invoice-summary" id="checkoutInvoiceSummary"></div>
       <button class="btn-primary confirm-order-btn" id="confirmOrderBtn">
         <span class="confirm-order-icon">✓</span>
@@ -1600,6 +1646,24 @@ button{font-family:inherit;cursor:pointer;}
   </div>
 </div>
 
+<div class="overlay" id="clientPromptOverlay"></div>
+<div class="client-prompt-modal" id="clientPromptModal">
+  <div class="client-prompt-emoji">👋</div>
+  <h2>Salut Fuaad</h2>
+  <p>Pour qui la commande d'aujourd'hui ?</p>
+  <div class="form-group">
+    <label>Nom du client</label>
+    <input type="text" id="adminClientNameInput" placeholder="Ex. Fuaad Bwadekji">
+    <div class="field-error" id="adminClientNameError" style="display:none;">⚠️ Merci d'indiquer le nom du client</div>
+  </div>
+  <div class="form-group">
+    <label>Nom du magasin</label>
+    <input type="text" id="adminClientShopInput" placeholder="Ex. Eva Souvenirs">
+    <div class="field-error" id="adminClientShopError" style="display:none;">⚠️ Merci d'indiquer le nom du magasin</div>
+  </div>
+  <button class="btn-primary" id="adminClientPromptConfirmBtn">✓ C'est parti</button>
+</div>
+
 <div class="drawer" id="productFormDrawer">
   <div class="drawer-header">
     <h2 id="productFormTitle">Nouveau produit</h2>
@@ -1710,6 +1774,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260627q"></script>
+<script src="app.js?v=20260628b"></script>
 </body>
 </html>

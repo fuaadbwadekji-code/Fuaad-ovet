@@ -79,6 +79,13 @@ let theme = Object.assign({}, DEFAULT_THEME);
    l'enregistré"). */
 let savedTheme = Object.assign({}, DEFAULT_THEME);
 let cart = {}; // { productId: qty }  (qty déjà en unités réelles, multiples de unit_step)
+/* Nom du client et du magasin saisis par Fuaad lui-même dans la fenêtre
+   d'accueil de l'admin, avant que le client ne parcoure le catalogue.
+   Quand ces valeurs sont renseignées, l'étape "Votre nom" du tunnel de
+   commande est sautée — la commande se confirme directement avec ces
+   informations déjà connues. */
+let prefilledClientName = null;
+let prefilledClientShop = null;
 
 /* Persistance locale du panier : permet de retrouver le panier tel qu'il
    était si la page se recharge (perte de connexion, fermeture accidentelle
@@ -435,10 +442,14 @@ async function checkForNewOrders() {
     const newOnes = data.filter(o => !knownOrderIds.has(o.id));
     newOnes.forEach(o => knownOrderIds.add(o.id));
 
-    if (newOnes.length > 0) {
+    // La notification (son + bandeau) ne doit apparaître que côté
+    // administrateur — un client en train de parcourir le catalogue ne
+    // doit jamais voir ni entendre l'arrivée d'une commande d'un autre
+    // client.
+    if (newOnes.length > 0 && adminUnlocked) {
       playNotificationSound();
       newOnes.forEach(o => showNewOrderBanner(o));
-      if (adminUnlocked) renderAdminOrderList();
+      renderAdminOrderList();
     }
   } catch (e) {
     console.warn('Vérification des commandes échouée', e);
@@ -1093,10 +1104,33 @@ function setupCheckout() {
   document.getElementById('checkoutBtn').addEventListener('click', () => {
     if (Object.keys(cart).length === 0) return;
     closeDrawer('cartDrawer');
-    setTimeout(() => { openDrawer('checkoutDrawer'); renderInvoiceSummary(); }, 200);
+    setTimeout(() => {
+      openDrawer('checkoutDrawer');
+      renderInvoiceSummary();
+      // Si Fuaad a déjà renseigné le client dans la fenêtre d'accueil de
+      // l'admin, on saute entièrement les champs "Votre nom" / "Nom du
+      // magasin" — le client n'a plus qu'à confirmer.
+      const nameFieldsWrap = document.getElementById('checkoutNameFieldsWrap');
+      const prefilledNotice = document.getElementById('checkoutPrefilledNotice');
+      if (prefilledClientName && prefilledClientShop) {
+        nameFieldsWrap.style.display = 'none';
+        prefilledNotice.style.display = 'block';
+        prefilledNotice.textContent = `Commande pour ${prefilledClientName} — ${prefilledClientShop}`;
+      } else {
+        nameFieldsWrap.style.display = 'block';
+        prefilledNotice.style.display = 'none';
+      }
+    }, 200);
   });
 
   document.getElementById('confirmOrderBtn').addEventListener('click', async () => {
+    // Cas 1 : informations déjà saisies par l'admin — on les utilise
+    // directement, sans toucher aux champs (masqués) du formulaire.
+    if (prefilledClientName && prefilledClientShop) {
+      await submitOrder(prefilledClientName, prefilledClientShop);
+      return;
+    }
+
     const nameInput = document.getElementById('clientNameInput');
     const shopInput = document.getElementById('clientShopInput');
     const name = nameInput.value.trim();
@@ -1220,6 +1254,11 @@ async function submitOrder(clientName, shopName) {
     renderGrid();
     document.getElementById('clientNameInput').value = '';
     document.getElementById('clientShopInput').value = '';
+    // Une commande confirmée "consomme" le client pré-rempli : on ne
+    // veut surtout pas que le client suivant hérite silencieusement du
+    // même nom si Fuaad oublie de relancer la fenêtre d'accueil.
+    prefilledClientName = null;
+    prefilledClientShop = null;
     closeDrawer('checkoutDrawer');
     setTimeout(() => openDrawer('orderSuccessDrawer'), 200);
   } catch (e) {
@@ -1252,6 +1291,70 @@ function wasAdminPreviouslyUnlocked() {
     return false;
   }
 }
+/* Affiche la fenêtre "Pour qui la commande d'aujourd'hui ?" — appelée à
+   chaque déverrouillage de l'admin (manuel ou automatique au
+   rechargement, ce qui couvre le cas de la tablette qui reste connectée
+   en continu). Pré-remplit les champs si un nom/magasin avait déjà été
+   saisi plus tôt dans la session, pour ne pas avoir à retaper si Fuaad
+   ferme et rouvre la fenêtre sans changer de client. */
+function showClientPromptModal() {
+  document.getElementById('adminClientNameInput').value = prefilledClientName || '';
+  document.getElementById('adminClientShopInput').value = prefilledClientShop || '';
+  document.getElementById('clientPromptOverlay').classList.add('show');
+  document.getElementById('clientPromptModal').classList.add('show');
+}
+
+function hideClientPromptModal() {
+  document.getElementById('clientPromptOverlay').classList.remove('show');
+  document.getElementById('clientPromptModal').classList.remove('show');
+}
+
+function setupClientPromptModal() {
+  document.getElementById('adminClientPromptConfirmBtn').addEventListener('click', () => {
+    const nameInput = document.getElementById('adminClientNameInput');
+    const shopInput = document.getElementById('adminClientShopInput');
+    const nameError = document.getElementById('adminClientNameError');
+    const shopError = document.getElementById('adminClientShopError');
+    const name = nameInput.value.trim();
+    const shop = shopInput.value.trim();
+
+    if (!name) {
+      nameInput.classList.add('input-error');
+      nameError.style.display = 'block';
+      nameInput.focus();
+      return;
+    }
+    nameInput.classList.remove('input-error');
+    nameError.style.display = 'none';
+
+    if (!shop) {
+      shopInput.classList.add('input-error');
+      shopError.style.display = 'block';
+      shopInput.focus();
+      return;
+    }
+    shopInput.classList.remove('input-error');
+    shopError.style.display = 'none';
+
+    prefilledClientName = name;
+    prefilledClientShop = shop;
+    hideClientPromptModal();
+    showToast(`✓ Commande pour ${name}`);
+  });
+  document.getElementById('adminClientNameInput').addEventListener('input', (e) => {
+    if (e.target.value.trim()) {
+      e.target.classList.remove('input-error');
+      document.getElementById('adminClientNameError').style.display = 'none';
+    }
+  });
+  document.getElementById('adminClientShopInput').addEventListener('input', (e) => {
+    if (e.target.value.trim()) {
+      e.target.classList.remove('input-error');
+      document.getElementById('adminClientShopError').style.display = 'none';
+    }
+  });
+}
+
 function unlockAdminPanel() {
   adminUnlocked = true;
   saveAdminUnlockState(true);
@@ -1262,6 +1365,7 @@ function unlockAdminPanel() {
   renderAdminOrderList();
   prefillSettings();
   prefillThemeControls();
+  showClientPromptModal();
 }
 
 function setupAdminLock() {
@@ -1643,6 +1747,25 @@ async function toggleHideProduct(id) {
    sans passer par le formulaire complet. Aucun traitement (pas de
    détourage) : la photo est juste redimensionnée puis enregistrée
    immédiatement. */
+/* Envoie un fichier image vers le bucket Storage "Product-images" et
+   retourne son adresse publique. Le nom de fichier inclut toujours un
+   horodatage unique : ainsi, à chaque nouvelle photo, l'adresse change
+   complètement — c'est ce qui garantit qu'un client voit la nouvelle
+   photo dès son prochain rafraîchissement, sans jamais rester bloqué
+   sur une ancienne version mise en cache par son navigateur (un cache
+   ne peut "se souvenir" que d'une adresse qu'il a déjà vue ; une
+   adresse neuve est toujours redemandée). */
+async function uploadImageToStorage(blob, idHint) {
+  const ext = blob.type && blob.type.includes('png') ? 'png' : 'jpg';
+  const fileName = `${idHint || 'img'}-v${Date.now()}.${ext}`;
+  const { error } = await supabaseClient.storage
+    .from('Product-images')
+    .upload(fileName, blob, { contentType: blob.type || 'image/jpeg', cacheControl: '31536000' });
+  if (error) throw error;
+  const { data } = supabaseClient.storage.from('Product-images').getPublicUrl(fileName);
+  return data.publicUrl;
+}
+
 function quickSetProductImage(productId, file) {
   const p = products.find(x => x.id === productId);
   if (!p) return;
@@ -1652,36 +1775,21 @@ function quickSetProductImage(productId, file) {
   }
   showToast('⏳ Envoi de la photo…');
 
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    const img = new Image();
-    img.onload = async () => {
-      const maxDim = 800;
-      let w = img.width, h = img.height;
-      if (w > h && w > maxDim) { h = h * maxDim / w; w = maxDim; }
-      else if (h > maxDim) { w = w * maxDim / h; h = maxDim; }
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      const newImageData = canvas.toDataURL('image/jpeg', 0.85);
-
-      try {
-        const { error } = await supabaseClient.from('products').update({ image: newImageData }).eq('id', productId);
-        if (error) throw error;
-        p.image = newImageData;
-        showToast(`✓ Photo de ${p.ref} mise à jour`);
-        renderAdminProductList();
-        renderGrid();
-        renderHomeTiles();
-      } catch (e) {
-        console.error(e);
-        showToast('⚠️ Erreur lors de l\'enregistrement de la photo');
-      }
-    };
-    img.src = ev.target.result;
-  };
-  reader.readAsDataURL(file);
+  (async () => {
+    try {
+      const publicUrl = await uploadImageToStorage(file, productId);
+      const { error } = await supabaseClient.from('products').update({ image: publicUrl }).eq('id', productId);
+      if (error) throw error;
+      p.image = publicUrl;
+      showToast(`✓ Photo de ${p.ref} mise à jour`);
+      renderAdminProductList();
+      renderGrid();
+      renderHomeTiles();
+    } catch (e) {
+      console.error(e);
+      showToast('⚠️ Erreur lors de l\'enregistrement de la photo');
+    }
+  })();
 }
 
 /* Définit une photo de couverture personnalisée pour une catégorie,
@@ -1696,34 +1804,20 @@ function setCategoryCoverImage(categoryId, file) {
     return;
   }
   showToast('⏳ Envoi de la photo…');
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    const img = new Image();
-    img.onload = async () => {
-      const maxDim = 800;
-      let w = img.width, h = img.height;
-      if (w > h && w > maxDim) { h = h * maxDim / w; w = maxDim; }
-      else if (h > maxDim) { w = w * maxDim / h; h = maxDim; }
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      const newImageData = canvas.toDataURL('image/jpeg', 0.85);
-      try {
-        const { error } = await supabaseClient.from('categories').update({ cover_image: newImageData }).eq('id', categoryId);
-        if (error) throw error;
-        cat.coverImage = newImageData;
-        showToast(`✓ Photo de « ${cat.name} » mise à jour`);
-        renderAdminCatList();
-        renderHomeTiles();
-      } catch (e) {
-        console.error(e);
-        showToast('⚠️ Erreur lors de l\'enregistrement de la photo');
-      }
-    };
-    img.src = ev.target.result;
-  };
-  reader.readAsDataURL(file);
+  (async () => {
+    try {
+      const publicUrl = await uploadImageToStorage(file, 'cat-' + categoryId);
+      const { error } = await supabaseClient.from('categories').update({ cover_image: publicUrl }).eq('id', categoryId);
+      if (error) throw error;
+      cat.coverImage = publicUrl;
+      showToast(`✓ Photo de « ${cat.name} » mise à jour`);
+      renderAdminCatList();
+      renderHomeTiles();
+    } catch (e) {
+      console.error(e);
+      showToast('⚠️ Erreur lors de l\'enregistrement de la photo');
+    }
+  })();
 }
 
 async function resetCategoryCoverImage(categoryId) {
@@ -2410,33 +2504,20 @@ function setBackgroundImage(file) {
     return;
   }
   showToast('⏳ Envoi de la photo…');
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    const img = new Image();
-    img.onload = async () => {
-      const maxDim = 1600;
-      let w = img.width, h = img.height;
-      if (w > maxDim) { h = h * maxDim / w; w = maxDim; }
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      const newImageData = canvas.toDataURL('image/jpeg', 0.85);
-      try {
-        const { error } = await supabaseClient.from('settings').update({ background_image: newImageData }).eq('id', 1);
-        if (error) throw error;
-        settings.background_image = newImageData;
-        applyThemeToPage();
-        prefillThemeControls();
-        showToast('✓ Photo de fond mise à jour');
-      } catch (e) {
-        console.error(e);
-        showToast('⚠️ Erreur lors de l\'enregistrement de la photo');
-      }
-    };
-    img.src = ev.target.result;
-  };
-  reader.readAsDataURL(file);
+  (async () => {
+    try {
+      const publicUrl = await uploadImageToStorage(file, 'background');
+      const { error } = await supabaseClient.from('settings').update({ background_image: publicUrl }).eq('id', 1);
+      if (error) throw error;
+      settings.background_image = publicUrl;
+      applyThemeToPage();
+      prefillThemeControls();
+      showToast('✓ Photo de fond mise à jour');
+    } catch (e) {
+      console.error(e);
+      showToast('⚠️ Erreur lors de l\'enregistrement de la photo');
+    }
+  })();
 }
 
 async function resetBackgroundImage() {
@@ -2850,7 +2931,7 @@ function setupImageCropper() {
   });
 
   document.getElementById('applyCropBtn').addEventListener('click', () => {
-    const outSize = 700;
+    const outSize = 1000;
     const outCanvas = document.createElement('canvas');
     outCanvas.width = outSize; outCanvas.height = outSize;
     const outCtx = outCanvas.getContext('2d');
@@ -2866,7 +2947,12 @@ function setupImageCropper() {
     const drawY = (outSize - drawH) / 2 + cropState.offsetY * ratio;
     outCtx.drawImage(cropImageObj, drawX, drawY, drawW, drawH);
 
-    pendingImageData = outCanvas.toDataURL('image/jpeg', 0.88);
+    // Qualité élevée conservée : les photos sont maintenant envoyées
+    // vers Storage (et non plus écrites directement dans la base), donc
+    // le souci d'egress qui justifiait une compression forte est traité
+    // structurellement par Storage + mise en cache navigateur, sans
+    // sacrifier la netteté des photos.
+    pendingImageData = outCanvas.toDataURL('image/jpeg', 0.92);
     document.getElementById('imagePreview').src = pendingImageData;
     document.getElementById('imagePreview').style.display = 'block';
     document.getElementById('imagePlaceholder').style.display = 'none';
@@ -2912,27 +2998,41 @@ function setupProductFormSave() {
     btn.style.opacity = '0.6';
 
     try {
+      // pendingImageData peut être soit une URL Storage déjà existante
+      // (produit en cours d'édition, photo non changée), soit une image
+      // locale en base64 fraîchement recadrée (nouvelle photo) : dans ce
+      // second cas seulement, on l'envoie vers Storage maintenant, juste
+      // avant l'enregistrement — jamais le base64 lui-même n'est écrit
+      // dans la base.
+      let finalImageUrl = pendingImageData;
+      if (pendingImageData && pendingImageData.startsWith('data:image')) {
+        showToast('⏳ Envoi de la photo…');
+        const res = await fetch(pendingImageData);
+        const blob = await res.blob();
+        finalImageUrl = await uploadImageToStorage(blob, editingProductId || ref);
+      }
+
       if (editingProductId) {
         const { error } = await supabaseClient.from('products').update({
-          name, ref, price, category_id: categoryId, image: pendingImageData,
+          name, ref, price, category_id: categoryId, image: finalImageUrl,
           unit_step: unitStep, unit_label: unitLabel,
           out_of_stock: outOfStock, featured: featured, is_new: isNew, is_promo: isPromo
         }).eq('id', editingProductId);
         if (error) throw error;
         const p = products.find(x => x.id === editingProductId);
         p.name = name; p.ref = ref; p.price = price; p.categoryId = categoryId;
-        p.image = pendingImageData; p.unitStep = unitStep; p.unitLabel = unitLabel;
+        p.image = finalImageUrl; p.unitStep = unitStep; p.unitLabel = unitLabel;
         p.outOfStock = outOfStock; p.featured = featured; p.isNew = isNew; p.isPromo = isPromo;
         showToast('Produit mis à jour');
       } else {
         const newId = uid('prod');
         const { error } = await supabaseClient.from('products').insert({
-          id: newId, ref, name, price, category_id: categoryId, image: pendingImageData,
+          id: newId, ref, name, price, category_id: categoryId, image: finalImageUrl,
           unit_step: unitStep, unit_label: unitLabel, sort_order: products.length + 1,
           out_of_stock: outOfStock, featured: featured, is_new: isNew, is_promo: isPromo
         });
         if (error) throw error;
-        products.push({ id: newId, ref, name, price, categoryId, image: pendingImageData, unitStep, unitLabel, outOfStock, featured, isNew, isPromo, hidden: false });
+        products.push({ id: newId, ref, name, price, categoryId, image: finalImageUrl, unitStep, unitLabel, outOfStock, featured, isNew, isPromo, hidden: false });
         showToast('Produit ajouté');
       }
       closeDrawer('productFormDrawer');
@@ -3021,6 +3121,7 @@ function init() {
   setupAddCategory();
   setupSettingsSave();
   setupThemeControls();
+  setupClientPromptModal();
   setupLogoUpload();
   setupImageUpload();
   setupImageCropper();
