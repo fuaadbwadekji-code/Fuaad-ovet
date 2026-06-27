@@ -2135,7 +2135,7 @@ function applyThemeToPage() {
   if (settings.background_image) {
     r.setProperty('--bg-image', `url('${settings.background_image}')`);
   } else {
-    r.style.removeProperty('--bg-image');
+    r.removeProperty('--bg-image');
   }
 
   // Les cartes utilisent directement une couleur rgba (pas backdrop-filter,
