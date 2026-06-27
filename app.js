@@ -191,99 +191,6 @@ function closeAllDrawers() {
    éviter un timeout côté base de données (la table contient 900+ lignes,
    certaines avec des images encodées en base64 assez lourdes). Réutilisée
    au chargement initial et lors du rafraîchissement manuel de l'admin. */
-/* Récupère un lot de produits (une seule requête), utilisée pour
-   l'affichage rapide du premier écran sans attendre tout le catalogue. */
-async function fetchProductsBatch(from, pageSize) {
-  const { data, error } = await supabaseClient
-    .from('products')
-    .select('*')
-    .range(from, from + pageSize - 1);
-  if (error) throw error;
-  return data || [];
-}
-
-/* Récupère TOUS les produits d'une seule catégorie (utilisé par le
-   chargement progressif catégorie par catégorie, et par la priorisation
-   immédiate quand l'utilisateur ouvre une catégorie pas encore chargée). */
-async function fetchProductsByCategory(categoryId) {
-  const { data, error } = await supabaseClient
-    .from('products')
-    .select('*')
-    .eq('category_id', categoryId);
-  if (error) throw error;
-  return data || [];
-}
-
-/* Catégories déjà entièrement chargées en mémoire (Set d'IDs). Permet de
-   savoir si la catégorie qu'un client vient d'ouvrir est complète ou
-   encore en cours de chargement en arrière-plan. */
-const loadedCategoryIds = new Set();
-let backgroundLoadingPromise = null;
-
-/* Fusionne un lot de produits dans `products`, en remplaçant toute
-   version déjà présente du même id (évite les doublons si une catégorie
-   est rechargée en priorité alors qu'elle était déjà partiellement
-   chargée par la boucle de fond). */
-function mergeProductsIntoState(rawList) {
-  const mapped = rawList.map(mapDbProductToLocal);
-  const byId = new Map(products.map(p => [p.id, p]));
-  mapped.forEach(p => byId.set(p.id, p));
-  products = Array.from(byId.values());
-  products.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-}
-
-/* Charge le reste du catalogue catégorie par catégorie (plutôt que par
-   simple pagination "de 60 en 60"), dans l'ordre d'affichage. Comme
-   chaque lot correspond à UNE catégorie complète, n'importe quelle
-   catégorie déjà traitée par cette boucle est garantie complète — c'est
-   ce qui élimine le risque de catégorie "à moitié chargée" si le client
-   clique dessus pendant que le reste se charge encore en arrière-plan.
-   S'arrête proprement si prioritizeCategory() a déjà chargé une
-   catégorie entre-temps (pour ne pas la recharger deux fois). */
-async function loadRemainingProductsInBackground(alreadyLoadedCategoryIds) {
-  const categoriesToLoad = categories
-    .slice()
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
-    .filter(c => !alreadyLoadedCategoryIds.has(c.id));
-
-  backgroundLoadingPromise = (async () => {
-    for (const cat of categoriesToLoad) {
-      if (loadedCategoryIds.has(cat.id)) continue; // déjà pris en charge par une priorisation
-      try {
-        const batch = await fetchProductsByCategory(cat.id);
-        mergeProductsIntoState(batch);
-        loadedCategoryIds.add(cat.id);
-        renderCategoryStrip();
-        renderGrid();
-        renderHomeTiles();
-      } catch (e) {
-        console.warn('Chargement en arrière-plan interrompu pour une catégorie', e);
-      }
-    }
-  })();
-  await backgroundLoadingPromise;
-}
-
-/* Donne la priorité immédiate au chargement complet d'UNE catégorie —
-   appelée dès que l'utilisateur clique sur un chip de catégorie pas
-   encore marquée comme entièrement chargée. Ainsi, même si le
-   chargement de fond n'y est pas encore arrivé, la catégorie ouverte se
-   complète quasi instantanément plutôt que de rester partielle pendant
-   plusieurs secondes. */
-async function prioritizeCategoryLoad(categoryId) {
-  if (!categoryId || categoryId === 'all' || categoryId === 'featured' || categoryId === 'promo' || categoryId === 'new') return;
-  if (loadedCategoryIds.has(categoryId)) return;
-  try {
-    const batch = await fetchProductsByCategory(categoryId);
-    mergeProductsIntoState(batch);
-    loadedCategoryIds.add(categoryId);
-    renderCategoryStrip();
-    renderGrid();
-  } catch (e) {
-    console.warn('Priorisation du chargement de catégorie échouée', e);
-  }
-}
-
 async function fetchAllProductsFromDB() {
   let allProducts = [];
   let from = 0;
@@ -347,21 +254,8 @@ async function loadAllData() {
     savedTheme = Object.assign({}, theme);
     applyThemeToPage();
 
-    // On charge en priorité la première catégorie affichée (par ordre de
-    // tri) : elle est ainsi toujours complète dès l'affichage initial,
-    // au lieu de prendre "les 60 premiers produits" qui pouvaient ne
-    // couvrir qu'une partie d'une catégorie et laisser les autres vides
-    // jusqu'à ce que le chargement de fond les atteigne.
-    const sortedCats = categories.slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    if (sortedCats.length > 0) {
-      const firstCat = sortedCats[0];
-      const firstBatch = await fetchProductsByCategory(firstCat.id);
-      products = firstBatch.map(mapDbProductToLocal);
-      products.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-      loadedCategoryIds.add(firstCat.id);
-    } else {
-      products = [];
-    }
+    const allProducts = await fetchAllProductsFromDB();
+    products = allProducts.map(mapDbProductToLocal);
 
     loadCartFromStorage();
     if (wasAdminPreviouslyUnlocked()) {
@@ -375,13 +269,6 @@ async function loadAllData() {
     renderHomeTiles();
     updateCartUI();
     startOrderPolling();
-
-    // Le reste du catalogue continue de se charger en arrière-plan, une
-    // catégorie complète à la fois, sans jamais bloquer l'affichage déjà
-    // visible. Si le client clique sur une catégorie pas encore
-    // atteinte, prioritizeCategoryLoad() (appelée depuis le clic sur un
-    // chip) la fait passer devant dans la file.
-    loadRemainingProductsInBackground(loadedCategoryIds);
   } catch (e) {
     console.error('Erreur de chargement', e);
     document.getElementById('loadingState').innerHTML =
@@ -425,11 +312,6 @@ function renderCategoryStrip() {
       // rapidement entre plusieurs catégories à la suite.
       renderCategoryStrip();
       requestAnimationFrame(() => renderGrid());
-      // Si cette catégorie n'est pas encore entièrement chargée (le
-      // chargement de fond n'y est pas encore arrivé), on la fait passer
-      // en priorité tout de suite, pour qu'elle se complète presque
-      // instantanément plutôt que de rester partielle plusieurs secondes.
-      prioritizeCategoryLoad(btn.dataset.cat);
     });
   });
   const catalogueBtn = strip.querySelector('[data-action="open-catalogue"]');
@@ -1407,7 +1289,6 @@ async function refreshAdminProducts() {
   try {
     const allProducts = await fetchAllProductsFromDB();
     products = allProducts.map(mapDbProductToLocal);
-    categories.forEach(c => loadedCategoryIds.add(c.id));
     renderAdminProductList();
     renderGrid();
     renderHomeTiles();
