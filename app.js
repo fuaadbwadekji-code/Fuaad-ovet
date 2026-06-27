@@ -1110,6 +1110,7 @@ function setupSearch() {
 let signatureHasDrawn = false;
 let signatureDrawing = false;
 let signatureCtx = null;
+let resizeSignatureCanvas = null; // exposée pour être rappelée à l'ouverture du panneau
 
 function setupSignaturePad() {
   const canvas = document.getElementById('signatureCanvas');
@@ -1118,6 +1119,12 @@ function setupSignaturePad() {
 
   function resizeCanvasToDisplaySize() {
     const rect = canvas.getBoundingClientRect();
+    // Le pavé est caché (display:none) à l'initialisation de la page :
+    // getBoundingClientRect() renverrait alors 0×0, ce qui casserait
+    // tout calcul de position de dessin. On ignore donc silencieusement
+    // un appel qui tomberait sur des dimensions nulles — la fonction
+    // est rappelée explicitement au moment où le pavé devient visible.
+    if (rect.width === 0 || rect.height === 0) return;
     const ratio = window.devicePixelRatio || 1;
     canvas.width = rect.width * ratio;
     canvas.height = rect.height * ratio;
@@ -1128,6 +1135,7 @@ function setupSignaturePad() {
     signatureCtx.lineJoin = 'round';
     signatureCtx.strokeStyle = '#1B2A45';
   }
+  resizeSignatureCanvas = resizeCanvasToDisplaySize;
   resizeCanvasToDisplaySize();
   window.addEventListener('resize', resizeCanvasToDisplaySize);
 
@@ -1203,6 +1211,11 @@ function setupCheckout() {
         signaturePadWrap.style.display = 'block';
         regularConfirmBtn.style.display = 'none';
         resetSignaturePad();
+        // Le pavé vient juste de devenir visible : on (re)calcule
+        // maintenant ses dimensions réelles pour que le dessin tactile
+        // fonctionne correctement (voir le commentaire dans
+        // resizeCanvasToDisplaySize plus haut).
+        if (resizeSignatureCanvas) resizeSignatureCanvas();
       } else {
         nameFieldsWrap.style.display = 'block';
         prefilledNotice.style.display = 'none';
