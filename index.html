@@ -278,7 +278,7 @@ button{font-family:inherit;cursor:pointer;}
   display:flex;align-items:center;gap:10px;letter-spacing:0.3px;
 }
 .section-title::after{content:'';flex:1;height:1px;background:rgba(20,20,30,0.1);}
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--card-gap, 8px);}
 @media(min-width:700px){.grid{grid-template-columns:repeat(3,1fr);}}
 
 .ticket{
@@ -301,11 +301,11 @@ button{font-family:inherit;cursor:pointer;}
   display:flex;align-items:center;justify-content:center;
   min-width:0;
 }
-.ticket-img-wrap img{width:100%;height:100%;object-fit:contain;padding:14px;display:block;}
+.ticket-img-wrap img{width:100%;height:100%;object-fit:contain;padding:var(--image-padding, 14px);display:block;}
 .stamp{display:none;}
 .ticket-body{padding:12px 13px 10px;min-width:0;overflow:hidden;}
 .t-name{
-  font-family:'Fraunces',serif;font-weight:700;font-size:13.5px;
+  font-family:'Fraunces',serif;font-weight:700;font-size:var(--name-size, 13.5px);
   color:var(--ink);line-height:1.32;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
   margin-bottom:3px;min-height:35px;
@@ -356,7 +356,7 @@ button{font-family:inherit;cursor:pointer;}
 .add-btn{
   position:relative;
   background:var(--mustard-deep);color:#fff;border:none;
-  width:34px;height:34px;border-radius:50%;font-size:18px;flex-shrink:0;
+  width:var(--add-btn-size, 34px);height:var(--add-btn-size, 34px);border-radius:50%;font-size:18px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   box-shadow:0 3px 10px rgba(185,125,26,0.35);
   transition:transform .12s cubic-bezier(.34,1.56,.64,1), background-color .25s ease, box-shadow .25s ease;
@@ -507,7 +507,7 @@ button{font-family:inherit;cursor:pointer;}
   z-index:61;
   transform:translateX(100%);
   will-change:transform;
-  transition:transform .3s cubic-bezier(.3,.9,.4,1), box-shadow .3s;
+  transition:transform var(--anim-speed-normal, .3s) cubic-bezier(.3,.9,.4,1), box-shadow var(--anim-speed-normal, .3s);
   display:flex;flex-direction:column;
   box-shadow:none;
   border-left:1px solid var(--glass-border-soft);
@@ -561,7 +561,7 @@ button{font-family:inherit;cursor:pointer;}
 
 .btn-primary{
   width:100%;background:var(--mustard);color:var(--navy-deep);border:none;
-  padding:14px;border-radius:24px;font-size:15px;font-weight:700;letter-spacing:0.3px;margin-bottom:10px;
+  padding:14px;border-radius:var(--button-radius, 24px);font-size:15px;font-weight:700;letter-spacing:0.3px;margin-bottom:10px;
   display:flex;align-items:center;justify-content:center;gap:8px;
 }
 .btn-primary:active{background:var(--mustard-deep);}
@@ -908,6 +908,14 @@ button{font-family:inherit;cursor:pointer;}
 .theme-settings-box{
   background:var(--paper);border-radius:12px;padding:14px;margin-top:8px;
 }
+.theme-intro-hint{
+  font-size:12px;color:var(--brass);line-height:1.5;margin:0 4px 10px;opacity:0.9;
+}
+.theme-group-title{
+  font-size:12.5px;font-weight:700;color:var(--mustard-deep);
+  margin:18px 0 10px;padding-top:14px;border-top:1px solid rgba(140,112,72,0.15);
+}
+.theme-group-title:first-child{margin-top:0;padding-top:0;border-top:none;}
 .theme-row{display:flex;gap:12px;margin-bottom:12px;}
 .theme-field{flex:1;}
 .theme-field label{
@@ -1211,49 +1219,23 @@ button{font-family:inherit;cursor:pointer;}
         </div>
         <button class="btn-secondary" id="savePinBtn">Mettre à jour le code</button>
 
-        <div class="admin-section-label">🎨 Thème & apparence</div>
+        <div class="admin-section-label">🎨 Apparence du site</div>
+        <p class="theme-intro-hint">Chaque réglage s'applique en direct sur le site dès que tu le modifies — tu peux essayer librement. Rien n'est définitif jusqu'à ce que tu appuies sur « Enregistrer ».</p>
         <div class="theme-settings-box">
-          <div class="theme-row">
-            <div class="theme-field">
-              <label>Couleur principale (navy)</label>
-              <input type="color" id="themeColorNavy" value="#1B2A45">
-            </div>
-            <div class="theme-field">
-              <label>Couleur accent (moutarde)</label>
-              <input type="color" id="themeColorMustard" value="#D89A2C">
-            </div>
-          </div>
-          <div class="theme-row">
-            <div class="theme-field">
-              <label>Couleur alerte (brique)</label>
-              <input type="color" id="themeColorBrick" value="#B23B2E">
-            </div>
-            <div class="theme-field">
-              <label>Couleur succès (sauge)</label>
-              <input type="color" id="themeColorSage" value="#5E7A5E">
-            </div>
-          </div>
-          <div class="theme-row">
-            <div class="theme-field">
-              <label>Couleur du texte</label>
-              <input type="color" id="themeColorInk" value="#1A1814">
-            </div>
-            <div class="theme-field">
-              <label>Couleur de fond</label>
-              <input type="color" id="themeColorPageBg" value="#F7F4EE">
-            </div>
-          </div>
 
+          <div class="theme-group-title">✨ Effet verre (glassmorphism)</div>
           <div class="theme-slider-row">
-            <label>Opacité du verre (glassmorphism) <span class="theme-slider-val" id="valGlassOpacity">50%</span></label>
+            <label>Opacité du verre <span class="theme-slider-val" id="valGlassOpacity">50%</span></label>
             <input type="range" id="themeGlassOpacity" min="10" max="95" value="50">
           </div>
           <div class="theme-slider-row">
             <label>Intensité du flou <span class="theme-slider-val" id="valGlassBlur">28px</span></label>
             <input type="range" id="themeGlassBlur" min="0" max="40" value="28">
           </div>
+
+          <div class="theme-group-title">🃏 Cartes produit</div>
           <div class="theme-slider-row">
-            <label>Opacité des cartes produit <span class="theme-slider-val" id="valCardOpacity">62%</span></label>
+            <label>Opacité des cartes <span class="theme-slider-val" id="valCardOpacity">62%</span></label>
             <input type="range" id="themeCardOpacity" min="20" max="100" value="62">
           </div>
           <div class="theme-slider-row">
@@ -1261,14 +1243,39 @@ button{font-family:inherit;cursor:pointer;}
             <input type="range" id="themeCardRadius" min="0" max="30" value="16">
           </div>
           <div class="theme-slider-row">
-            <label>Arrondi des chips de catégorie <span class="theme-slider-val" id="valChipRadius">18px</span></label>
+            <label>Intensité de l'ombre <span class="theme-slider-val" id="valCardShadow">18%</span></label>
+            <input type="range" id="themeCardShadow" min="0" max="40" value="18">
+          </div>
+          <div class="theme-slider-row">
+            <label>Espace entre les cartes <span class="theme-slider-val" id="valCardGap">8px</span></label>
+            <input type="range" id="themeCardGap" min="2" max="24" value="8">
+          </div>
+
+          <div class="theme-group-title">🏷️ Chips de catégorie</div>
+          <div class="theme-slider-row">
+            <label>Arrondi des chips <span class="theme-slider-val" id="valChipRadius">18px</span></label>
             <input type="range" id="themeChipRadius" min="0" max="30" value="18">
           </div>
+
+          <div class="theme-group-title">💰 Texte & prix</div>
           <div class="theme-slider-row">
             <label>Taille du prix <span class="theme-slider-val" id="valPriceSize">21px</span></label>
             <input type="range" id="themePriceSize" min="14" max="30" value="21">
           </div>
-
+          <div class="theme-slider-row">
+            <label>Taille du nom de produit <span class="theme-slider-val" id="valNameSize">13.5px</span></label>
+            <input type="range" id="themeNameSize" min="11" max="18" step="0.5" value="13.5">
+          </div>
+          <div class="form-group">
+            <label>Police des titres</label>
+            <select id="themeFontHeading">
+              <option value="'Fraunces', serif">Fraunces (par défaut, élégant)</option>
+              <option value="'Playfair Display', serif">Playfair Display (classique)</option>
+              <option value="'Georgia', serif">Georgia</option>
+              <option value="'Poppins', sans-serif">Poppins (moderne)</option>
+              <option value="'Jost', sans-serif">Jost (épuré)</option>
+            </select>
+          </div>
           <div class="form-group">
             <label>Police du texte courant</label>
             <select id="themeFontBody">
@@ -1280,7 +1287,30 @@ button{font-family:inherit;cursor:pointer;}
             </select>
           </div>
 
-          <div class="bg-remove-toggle" style="margin-top:14px;">
+          <div class="theme-group-title">🔘 Boutons</div>
+          <div class="theme-slider-row">
+            <label>Arrondi des boutons <span class="theme-slider-val" id="valButtonRadius">24px</span></label>
+            <input type="range" id="themeButtonRadius" min="0" max="34" value="24">
+          </div>
+          <div class="theme-slider-row">
+            <label>Taille du bouton "+" <span class="theme-slider-val" id="valAddBtnSize">34px</span></label>
+            <input type="range" id="themeAddBtnSize" min="26" max="46" value="34">
+          </div>
+
+          <div class="theme-group-title">🖼️ Photos produit</div>
+          <div class="theme-slider-row">
+            <label>Marge intérieure des photos <span class="theme-slider-val" id="valImagePadding">14px</span></label>
+            <input type="range" id="themeImagePadding" min="0" max="30" value="14">
+          </div>
+
+          <div class="theme-group-title">⚡ Animations</div>
+          <div class="theme-slider-row">
+            <label>Vitesse des animations <span class="theme-slider-val" id="valAnimSpeed">100%</span></label>
+            <input type="range" id="themeAnimSpeed" min="40" max="200" value="100">
+          </div>
+
+          <div class="theme-group-title">🔥 Sections spéciales</div>
+          <div class="bg-remove-toggle" style="margin-top:0;">
             <div class="lb">Afficher la section « Promos »
               <small>Bandeau spécial pour vos articles en promotion</small>
             </div>
@@ -1307,8 +1337,8 @@ button{font-family:inherit;cursor:pointer;}
             <input type="text" id="themeNewLabel" placeholder="✨ Nouveauté">
           </div>
 
-          <button class="btn-primary" id="saveThemeBtn" style="margin-top:16px;">Enregistrer l'apparence</button>
-          <button class="btn-secondary" id="resetThemeBtn" style="padding:9px;font-size:13px;">↺ Réinitialiser l'apparence par défaut</button>
+          <button class="btn-primary" id="saveThemeBtn" style="margin-top:18px;">✓ Enregistrer l'apparence</button>
+          <button class="btn-secondary" id="resetThemeBtn" style="padding:9px;font-size:13px;">↺ Annuler / revenir à l'enregistré</button>
         </div>
       </div>
 
@@ -1427,6 +1457,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260627b"></script>
+<script src="app.js?v=20260627c"></script>
 </body>
 </html>

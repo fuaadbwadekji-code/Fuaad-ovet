@@ -22,26 +22,31 @@ let settings = { shop_name: 'Souvenirs de Paris', whatsapp: '', email: '', admin
    → Thème). Stockés en JSON dans settings.theme_settings et appliqués
    dynamiquement via des variables CSS sur :root. */
 const DEFAULT_THEME = {
-  colorNavy: '#1B2A45',
-  colorMustard: '#D89A2C',
-  colorBrick: '#B23B2E',
-  colorSage: '#5E7A5E',
-  colorInk: '#1A1814',
-  colorPageBg: '#F7F4EE',
-  glassOpacity: 50,      // 0-100 : opacité des panneaux en verre
+  glassOpacity: 50,       // 0-100 : opacité des panneaux en verre
   glassBlur: 28,          // 0-40px : intensité du flou
   cardOpacity: 62,        // 0-100 : opacité des cartes produit
   cardRadius: 16,         // 0-30px : arrondi des cartes
+  cardShadow: 18,         // 0-40 : intensité de l'ombre des cartes (%)
+  cardGap: 8,             // 2-24px : espace entre les cartes
   priceSize: 21,          // 14-30px : taille du prix sur les cartes
+  nameSize: 13.5,         // 11-18px : taille du nom de produit
   fontHeading: "'Fraunces', serif",
   fontBody: "'Jost', sans-serif",
   chipRadius: 18,         // 0-30px : arrondi des chips de catégorie
+  buttonRadius: 24,       // 0-34px : arrondi des boutons principaux
+  addBtnSize: 34,         // 26-46px : taille du bouton rond "+"
+  imagePadding: 14,       // 0-30px : marge intérieure des photos produit
+  animSpeed: 100,         // 40-200% : multiplicateur de vitesse d'animation
   showPromoSection: true,
   showNewSection: true,
   promoLabel: '🔥 Promos',
   newLabel: '✨ Nouveauté'
 };
 let theme = Object.assign({}, DEFAULT_THEME);
+/* Copie du thème tel qu'enregistré en base, utilisée pour annuler un
+   aperçu en direct non sauvegardé (bouton "Annuler / revenir à
+   l'enregistré"). */
+let savedTheme = Object.assign({}, DEFAULT_THEME);
 let cart = {}; // { productId: qty }  (qty déjà en unités réelles, multiples de unit_step)
 
 /* Persistance locale du panier : permet de retrouver le panier tel qu'il
@@ -261,6 +266,7 @@ async function loadAllData() {
     products = firstBatch.map(mapDbProductToLocal);
     settings = settRes.data || settings;
     theme = Object.assign({}, DEFAULT_THEME, settings.theme_settings || {});
+    savedTheme = Object.assign({}, theme);
     applyThemeToPage();
 
     loadCartFromStorage();
@@ -1756,7 +1762,7 @@ function renderAdminCatList() {
   });
   list.innerHTML = html;
 
-  list.querySelectorAll('input[data-cat-id]:not(.bulk-toggle):not(.bulk-threshold):not(.bulk-price)').forEach(inp => {
+  list.querySelectorAll('input[data-cat-id]:not(.bulk-toggle):not(.bulk-threshold):not(.bulk-price):not(.cat-cover-input)').forEach(inp => {
     inp.addEventListener('change', async () => {
       const cat = categories.find(c => c.id === inp.dataset.catId);
       if (cat && inp.value.trim()) {
@@ -1966,45 +1972,47 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/* Applique tous les réglages de thème (couleurs, flou, tailles...) en
+/* Applique tous les réglages de thème (flou, tailles, espacements...) en
    tant que variables CSS sur :root, ce qui les fait immédiatement
    prendre effet partout dans la feuille de style sans avoir à dupliquer
-   la logique CSS en JS. Appelée au chargement et après chaque
-   sauvegarde des réglages d'apparence dans l'admin. */
+   la logique CSS en JS. Appelée au chargement et en direct à chaque
+   modification d'un curseur dans l'admin (aperçu live avant sauvegarde). */
 function applyThemeToPage() {
   const r = document.documentElement.style;
   const t = theme;
-  r.setProperty('--navy', t.colorNavy);
-  r.setProperty('--mustard', t.colorMustard);
-  r.setProperty('--mustard-deep', t.colorMustard);
-  r.setProperty('--brick', t.colorBrick);
-  r.setProperty('--sage', t.colorSage);
-  r.setProperty('--ink', t.colorInk);
-  r.setProperty('--paper-dim', t.colorPageBg);
 
   const glassAlpha = (t.glassOpacity != null ? t.glassOpacity : 50) / 100;
   const blurPx = t.glassBlur != null ? t.glassBlur : 28;
   r.setProperty('--glass-bg', hexToRgba('#ffffff', Math.max(0.1, glassAlpha - 0.12)));
   r.setProperty('--glass-bg-strong', hexToRgba('#ffffff', Math.min(0.95, glassAlpha + 0.18)));
-  r.setProperty('--glass-bg-navy', hexToRgba(t.colorNavy, glassAlpha + 0.05));
+  r.setProperty('--glass-bg-navy', hexToRgba('#1B2A45', glassAlpha + 0.05));
   r.setProperty('--glass-blur', `blur(${blurPx}px) saturate(180%)`);
   r.setProperty('--glass-blur-soft', `blur(${Math.max(0, blurPx - 10)}px) saturate(160%)`);
 
-  document.querySelectorAll('.ticket').forEach(el => {});
-  r.setProperty('--card-opacity-value', String((t.cardOpacity != null ? t.cardOpacity : 62) / 100));
   r.setProperty('--card-radius', `${t.cardRadius != null ? t.cardRadius : 16}px`);
   r.setProperty('--chip-radius', `${t.chipRadius != null ? t.chipRadius : 18}px`);
   r.setProperty('--price-size', `${t.priceSize != null ? t.priceSize : 21}px`);
+  r.setProperty('--name-size', `${t.nameSize != null ? t.nameSize : 13.5}px`);
   r.setProperty('--font-heading', t.fontHeading || "'Fraunces', serif");
   r.setProperty('--font-body', t.fontBody || "'Jost', sans-serif");
+  r.setProperty('--button-radius', `${t.buttonRadius != null ? t.buttonRadius : 24}px`);
+  r.setProperty('--add-btn-size', `${t.addBtnSize != null ? t.addBtnSize : 34}px`);
+  r.setProperty('--image-padding', `${t.imagePadding != null ? t.imagePadding : 14}px`);
+  r.setProperty('--card-gap', `${t.cardGap != null ? t.cardGap : 8}px`);
+
+  const shadowAlpha = (t.cardShadow != null ? t.cardShadow : 18) / 100;
+  r.setProperty('--glass-shadow', `0 8px 32px rgba(20,20,30,${shadowAlpha})`);
+
+  const speedMultiplier = 100 / (t.animSpeed != null ? t.animSpeed : 100);
+  r.setProperty('--anim-speed-fast', `${(0.12 * speedMultiplier).toFixed(3)}s`);
+  r.setProperty('--anim-speed-normal', `${(0.3 * speedMultiplier).toFixed(3)}s`);
+  r.setProperty('--anim-speed-slow', `${(0.45 * speedMultiplier).toFixed(3)}s`);
 
   // Les cartes utilisent directement une couleur rgba (pas backdrop-filter,
   // pour les raisons de performance vues plus haut) : on la recalcule ici.
   const cardAlpha = (t.cardOpacity != null ? t.cardOpacity : 62) / 100;
   document.querySelectorAll('.ticket').forEach(el => {
     el.style.background = `rgba(255,255,255,${cardAlpha})`;
-  });
-  document.querySelectorAll('.ticket').forEach(el => {
     el.style.borderRadius = `${t.cardRadius != null ? t.cardRadius : 16}px`;
   });
 }
@@ -2054,12 +2062,6 @@ function setupSettingsSave() {
 /* Remplit les contrôles du panneau "Thème & apparence" avec les valeurs
    actuelles (sauvegardées ou par défaut). */
 function prefillThemeControls() {
-  document.getElementById('themeColorNavy').value = theme.colorNavy;
-  document.getElementById('themeColorMustard').value = theme.colorMustard;
-  document.getElementById('themeColorBrick').value = theme.colorBrick;
-  document.getElementById('themeColorSage').value = theme.colorSage;
-  document.getElementById('themeColorInk').value = theme.colorInk;
-  document.getElementById('themeColorPageBg').value = theme.colorPageBg;
   document.getElementById('themeGlassOpacity').value = theme.glassOpacity;
   document.getElementById('valGlassOpacity').textContent = theme.glassOpacity + '%';
   document.getElementById('themeGlassBlur').value = theme.glassBlur;
@@ -2068,59 +2070,107 @@ function prefillThemeControls() {
   document.getElementById('valCardOpacity').textContent = theme.cardOpacity + '%';
   document.getElementById('themeCardRadius').value = theme.cardRadius;
   document.getElementById('valCardRadius').textContent = theme.cardRadius + 'px';
+  document.getElementById('themeCardShadow').value = theme.cardShadow;
+  document.getElementById('valCardShadow').textContent = theme.cardShadow + '%';
+  document.getElementById('themeCardGap').value = theme.cardGap;
+  document.getElementById('valCardGap').textContent = theme.cardGap + 'px';
   document.getElementById('themeChipRadius').value = theme.chipRadius;
   document.getElementById('valChipRadius').textContent = theme.chipRadius + 'px';
   document.getElementById('themePriceSize').value = theme.priceSize;
   document.getElementById('valPriceSize').textContent = theme.priceSize + 'px';
+  document.getElementById('themeNameSize').value = theme.nameSize;
+  document.getElementById('valNameSize').textContent = theme.nameSize + 'px';
+  document.getElementById('themeFontHeading').value = theme.fontHeading;
   document.getElementById('themeFontBody').value = theme.fontBody;
+  document.getElementById('themeButtonRadius').value = theme.buttonRadius;
+  document.getElementById('valButtonRadius').textContent = theme.buttonRadius + 'px';
+  document.getElementById('themeAddBtnSize').value = theme.addBtnSize;
+  document.getElementById('valAddBtnSize').textContent = theme.addBtnSize + 'px';
+  document.getElementById('themeImagePadding').value = theme.imagePadding;
+  document.getElementById('valImagePadding').textContent = theme.imagePadding + 'px';
+  document.getElementById('themeAnimSpeed').value = theme.animSpeed;
+  document.getElementById('valAnimSpeed').textContent = theme.animSpeed + '%';
   document.getElementById('themeShowPromo').checked = theme.showPromoSection;
   document.getElementById('themePromoLabel').value = theme.promoLabel;
   document.getElementById('themeShowNew').checked = theme.showNewSection;
   document.getElementById('themeNewLabel').value = theme.newLabel;
 }
 
+/* Lit l'état actuel de tous les contrôles du panneau et retourne l'objet
+   thème correspondant (utilisé à la fois par l'aperçu live et par la
+   sauvegarde, pour ne jamais avoir deux logiques de lecture différentes). */
+function readThemeFromControls() {
+  return {
+    glassOpacity: parseInt(document.getElementById('themeGlassOpacity').value, 10),
+    glassBlur: parseInt(document.getElementById('themeGlassBlur').value, 10),
+    cardOpacity: parseInt(document.getElementById('themeCardOpacity').value, 10),
+    cardRadius: parseInt(document.getElementById('themeCardRadius').value, 10),
+    cardShadow: parseInt(document.getElementById('themeCardShadow').value, 10),
+    cardGap: parseInt(document.getElementById('themeCardGap').value, 10),
+    chipRadius: parseInt(document.getElementById('themeChipRadius').value, 10),
+    priceSize: parseInt(document.getElementById('themePriceSize').value, 10),
+    nameSize: parseFloat(document.getElementById('themeNameSize').value),
+    fontHeading: document.getElementById('themeFontHeading').value,
+    fontBody: document.getElementById('themeFontBody').value,
+    buttonRadius: parseInt(document.getElementById('themeButtonRadius').value, 10),
+    addBtnSize: parseInt(document.getElementById('themeAddBtnSize').value, 10),
+    imagePadding: parseInt(document.getElementById('themeImagePadding').value, 10),
+    animSpeed: parseInt(document.getElementById('themeAnimSpeed').value, 10),
+    showPromoSection: document.getElementById('themeShowPromo').checked,
+    showNewSection: document.getElementById('themeShowNew').checked,
+    promoLabel: document.getElementById('themePromoLabel').value.trim() || DEFAULT_THEME.promoLabel,
+    newLabel: document.getElementById('themeNewLabel').value.trim() || DEFAULT_THEME.newLabel
+  };
+}
+
 function setupThemeControls() {
-  // Mise à jour en direct des étiquettes de valeur pendant le glissement
-  // des curseurs, pour un retour visuel immédiat avant même d'enregistrer.
+  // Mise à jour en direct des étiquettes de valeur ET application
+  // immédiate sur le site (aperçu live) à chaque glissement de curseur,
+  // sans attendre la sauvegarde — c'est le comportement demandé : pouvoir
+  // essayer librement et ne valider qu'avec le bouton "Enregistrer".
   const sliderMap = [
     ['themeGlassOpacity', 'valGlassOpacity', '%'],
     ['themeGlassBlur', 'valGlassBlur', 'px'],
     ['themeCardOpacity', 'valCardOpacity', '%'],
     ['themeCardRadius', 'valCardRadius', 'px'],
+    ['themeCardShadow', 'valCardShadow', '%'],
+    ['themeCardGap', 'valCardGap', 'px'],
     ['themeChipRadius', 'valChipRadius', 'px'],
-    ['themePriceSize', 'valPriceSize', 'px']
+    ['themePriceSize', 'valPriceSize', 'px'],
+    ['themeNameSize', 'valNameSize', 'px'],
+    ['themeButtonRadius', 'valButtonRadius', 'px'],
+    ['themeAddBtnSize', 'valAddBtnSize', 'px'],
+    ['themeImagePadding', 'valImagePadding', 'px'],
+    ['themeAnimSpeed', 'valAnimSpeed', '%']
   ];
+  function livePreview() {
+    theme = readThemeFromControls();
+    applyThemeToPage();
+    renderGrid();
+    renderCategoryStrip();
+  }
   sliderMap.forEach(([inputId, labelId, unit]) => {
     const input = document.getElementById(inputId);
     const label = document.getElementById(labelId);
-    input.addEventListener('input', () => { label.textContent = input.value + unit; });
+    input.addEventListener('input', () => {
+      label.textContent = input.value + unit;
+      livePreview();
+    });
+  });
+  ['themeFontHeading', 'themeFontBody', 'themeShowPromo', 'themeShowNew'].forEach(id => {
+    document.getElementById(id).addEventListener('change', livePreview);
+  });
+  ['themePromoLabel', 'themeNewLabel'].forEach(id => {
+    document.getElementById(id).addEventListener('input', livePreview);
   });
 
   document.getElementById('saveThemeBtn').addEventListener('click', async () => {
-    const newTheme = {
-      colorNavy: document.getElementById('themeColorNavy').value,
-      colorMustard: document.getElementById('themeColorMustard').value,
-      colorBrick: document.getElementById('themeColorBrick').value,
-      colorSage: document.getElementById('themeColorSage').value,
-      colorInk: document.getElementById('themeColorInk').value,
-      colorPageBg: document.getElementById('themeColorPageBg').value,
-      glassOpacity: parseInt(document.getElementById('themeGlassOpacity').value, 10),
-      glassBlur: parseInt(document.getElementById('themeGlassBlur').value, 10),
-      cardOpacity: parseInt(document.getElementById('themeCardOpacity').value, 10),
-      cardRadius: parseInt(document.getElementById('themeCardRadius').value, 10),
-      chipRadius: parseInt(document.getElementById('themeChipRadius').value, 10),
-      priceSize: parseInt(document.getElementById('themePriceSize').value, 10),
-      fontHeading: theme.fontHeading,
-      fontBody: document.getElementById('themeFontBody').value,
-      showPromoSection: document.getElementById('themeShowPromo').checked,
-      showNewSection: document.getElementById('themeShowNew').checked,
-      promoLabel: document.getElementById('themePromoLabel').value.trim() || DEFAULT_THEME.promoLabel,
-      newLabel: document.getElementById('themeNewLabel').value.trim() || DEFAULT_THEME.newLabel
-    };
+    const newTheme = readThemeFromControls();
     try {
       const { error } = await supabaseClient.from('settings').update({ theme_settings: newTheme }).eq('id', 1);
       if (error) throw error;
       theme = newTheme;
+      savedTheme = Object.assign({}, newTheme);
       applyThemeToPage();
       renderGrid();
       renderCategoryStrip();
@@ -2131,21 +2181,15 @@ function setupThemeControls() {
     }
   });
 
-  document.getElementById('resetThemeBtn').addEventListener('click', async () => {
-    if (!confirm('Réinitialiser tous les réglages d\'apparence par défaut ?')) return;
-    try {
-      const { error } = await supabaseClient.from('settings').update({ theme_settings: null }).eq('id', 1);
-      if (error) throw error;
-      theme = Object.assign({}, DEFAULT_THEME);
-      applyThemeToPage();
-      prefillThemeControls();
-      renderGrid();
-      renderCategoryStrip();
-      showToast('✓ Apparence réinitialisée');
-    } catch (e) {
-      console.error(e);
-      showToast('⚠️ Erreur lors de la réinitialisation');
-    }
+  document.getElementById('resetThemeBtn').addEventListener('click', () => {
+    // Annule l'aperçu en cours et revient à la dernière version
+    // effectivement enregistrée (pas forcément les valeurs par défaut).
+    theme = Object.assign({}, savedTheme);
+    applyThemeToPage();
+    prefillThemeControls();
+    renderGrid();
+    renderCategoryStrip();
+    showToast('Aperçu annulé');
   });
 }
 
