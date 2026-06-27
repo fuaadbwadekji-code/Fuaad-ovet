@@ -40,7 +40,36 @@ const DEFAULT_THEME = {
   showPromoSection: true,
   showNewSection: true,
   promoLabel: '🔥 Promos',
-  newLabel: '✨ Nouveauté'
+  newLabel: '✨ Nouveauté',
+
+  // ===== Transparence & flou (8 réglages supplémentaires) =====
+  topbarOpacity: 92,      // 0-100 : opacité du bandeau du haut (logo + recherche)
+  topbarBlur: 28,         // 0-40px : flou du bandeau du haut
+  catStripOpacity: 38,    // 0-100 : opacité des chips de catégorie au repos
+  drawerOpacity: 68,      // 0-100 : opacité des tiroirs (panier, admin...)
+  drawerBlur: 28,         // 0-40px : flou des tiroirs
+  cartFabOpacity: 55,     // 0-100 : opacité du bandeau panier flottant
+  overlayOpacity: 55,     // 0-100 : opacité du voile sombre derrière un tiroir ouvert
+  toastOpacity: 100,      // 0-100 : opacité des petits messages de confirmation
+
+  // ===== 17 réglages additionnels =====
+  shopNameSize: 21,        // 16-28px : taille du nom de la boutique dans l'en-tête
+  logoSize: 38,            // 28-60px : taille du logo
+  searchBarHeight: 45,     // 36-60px : hauteur de la barre de recherche
+  searchFontSize: 14.5,    // 12-18px : taille du texte de recherche
+  imageAspectRatio: 100,   // 80-130% : proportion des photos produit (100 = carré)
+  lineHeight: 132,         // 110-160% : interligne du nom de produit
+  refSize: 10,             // 8-14px : taille du texte "Réf. ..."
+  headerShadow: 6,         // 0-20 : intensité de l'ombre sous l'en-tête (%)
+  toastSpeed: 100,         // 40-200% : vitesse d'apparition des messages
+  drawerCloseSize: 32,     // 26-44px : taille du bouton de fermeture des tiroirs
+  catStripPadding: 14,     // 6-24px : hauteur de la bande de catégories
+  chipGap: 9,              // 4-18px : espace entre les chips de catégorie
+  cartIconSize: 48,        // 38-60px : taille de l'icône panier
+  lotLabelSize: 11.5,      // 9-15px : taille du texte "Lot de X"
+  imageRadius: 0,          // 0-20px : arrondi des photos produit elles-mêmes
+  pressScale: 8,           // 0-20 : intensité de l'effet d'appui (% de réduction)
+  emptyHint: 'Essayez une autre recherche ou catégorie.'
 };
 let theme = Object.assign({}, DEFAULT_THEME);
 /* Copie du thème tel qu'enregistré en base, utilisée pour annuler un
@@ -622,6 +651,36 @@ function attachCardListeners() {
   });
   // Le clic sur la photo n'ouvre plus le tiroir de détail produit (retiré
   // sur demande) : on reste simplement sur la grille du catalogue.
+  observeCardsForScrollReveal();
+}
+
+/* Observateur unique et réutilisé (plutôt qu'une instance par carte,
+   trop coûteuse) qui ajoute la classe "in-view" à chaque carte au
+   moment où elle entre dans l'écran pendant le défilement, déclenchant
+   un fondu + léger glissement vers le haut défini en CSS. Rend le
+   défilement du catalogue plus agréable visuellement sans aucun coût de
+   performance notable (l'observation est passive, gérée par le
+   navigateur). */
+let scrollRevealObserver = null;
+function observeCardsForScrollReveal() {
+  if (!('IntersectionObserver' in window)) {
+    // Navigateur trop ancien : on affiche tout normalement, sans animation.
+    document.querySelectorAll('.ticket').forEach(el => el.classList.add('in-view'));
+    return;
+  }
+  if (!scrollRevealObserver) {
+    scrollRevealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in-view');
+          scrollRevealObserver.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -40px 0px', threshold: 0.08 });
+  }
+  document.querySelectorAll('.ticket:not(.in-view)').forEach(el => {
+    scrollRevealObserver.observe(el);
+  });
 }
 
 /* Construit uniquement le contenu du "ticket-stub" (prix + bouton/qty)
@@ -2008,6 +2067,36 @@ function applyThemeToPage() {
   r.setProperty('--anim-speed-normal', `${(0.3 * speedMultiplier).toFixed(3)}s`);
   r.setProperty('--anim-speed-slow', `${(0.45 * speedMultiplier).toFixed(3)}s`);
 
+  // ===== Transparence & flou par zone =====
+  r.setProperty('--topbar-bg', hexToRgba('#F7F4EE', (t.topbarOpacity != null ? t.topbarOpacity : 92) / 100));
+  r.setProperty('--topbar-blur', `blur(${t.topbarBlur != null ? t.topbarBlur : 28}px) saturate(180%)`);
+  r.setProperty('--catstrip-chip-bg', hexToRgba('#ffffff', (t.catStripOpacity != null ? t.catStripOpacity : 38) / 100));
+  const drawerAlpha = (t.drawerOpacity != null ? t.drawerOpacity : 68) / 100;
+  r.setProperty('--drawer-bg', hexToRgba('#ffffff', drawerAlpha));
+  r.setProperty('--drawer-blur', `blur(${t.drawerBlur != null ? t.drawerBlur : 28}px) saturate(180%)`);
+  r.setProperty('--cartfab-bg', hexToRgba('#1B2A45', (t.cartFabOpacity != null ? t.cartFabOpacity : 55) / 100));
+  r.setProperty('--overlay-bg', hexToRgba('#080c16', (t.overlayOpacity != null ? t.overlayOpacity : 55) / 100));
+  r.setProperty('--toast-opacity', String((t.toastOpacity != null ? t.toastOpacity : 100) / 100));
+
+  // ===== 17 réglages additionnels =====
+  r.setProperty('--shop-name-size', `${t.shopNameSize != null ? t.shopNameSize : 21}px`);
+  r.setProperty('--logo-size', `${t.logoSize != null ? t.logoSize : 38}px`);
+  r.setProperty('--search-bar-height', `${t.searchBarHeight != null ? t.searchBarHeight : 45}px`);
+  r.setProperty('--search-font-size', `${t.searchFontSize != null ? t.searchFontSize : 14.5}px`);
+  r.setProperty('--image-aspect', `${(t.imageAspectRatio != null ? t.imageAspectRatio : 100) / 100}`);
+  r.setProperty('--name-line-height', `${(t.lineHeight != null ? t.lineHeight : 132) / 100}`);
+  r.setProperty('--ref-size', `${t.refSize != null ? t.refSize : 10}px`);
+  r.setProperty('--header-shadow', `0 6px 18px rgba(20,20,30,${(t.headerShadow != null ? t.headerShadow : 6) / 100})`);
+  const toastSpeedMultiplier = 100 / (t.toastSpeed != null ? t.toastSpeed : 100);
+  r.setProperty('--toast-speed', `${(0.3 * toastSpeedMultiplier).toFixed(3)}s`);
+  r.setProperty('--drawer-close-size', `${t.drawerCloseSize != null ? t.drawerCloseSize : 32}px`);
+  r.setProperty('--catstrip-padding', `${t.catStripPadding != null ? t.catStripPadding : 14}px`);
+  r.setProperty('--chip-gap', `${t.chipGap != null ? t.chipGap : 9}px`);
+  r.setProperty('--cart-icon-size', `${t.cartIconSize != null ? t.cartIconSize : 48}px`);
+  r.setProperty('--lot-label-size', `${t.lotLabelSize != null ? t.lotLabelSize : 11.5}px`);
+  r.setProperty('--image-radius', `${t.imageRadius != null ? t.imageRadius : 0}px`);
+  r.setProperty('--press-scale', `${1 - (t.pressScale != null ? t.pressScale : 8) / 100}`);
+
   // Les cartes utilisent directement une couleur rgba (pas backdrop-filter,
   // pour les raisons de performance vues plus haut) : on la recalcule ici.
   const cardAlpha = (t.cardOpacity != null ? t.cardOpacity : 62) / 100;
@@ -2066,6 +2155,34 @@ function prefillThemeControls() {
   document.getElementById('valGlassOpacity').textContent = theme.glassOpacity + '%';
   document.getElementById('themeGlassBlur').value = theme.glassBlur;
   document.getElementById('valGlassBlur').textContent = theme.glassBlur + 'px';
+  document.getElementById('themeTopbarOpacity').value = theme.topbarOpacity;
+  document.getElementById('valTopbarOpacity').textContent = theme.topbarOpacity + '%';
+  document.getElementById('themeCatStripOpacity').value = theme.catStripOpacity;
+  document.getElementById('valCatStripOpacity').textContent = theme.catStripOpacity + '%';
+  document.getElementById('themeDrawerOpacity').value = theme.drawerOpacity;
+  document.getElementById('valDrawerOpacity').textContent = theme.drawerOpacity + '%';
+  document.getElementById('themeDrawerBlur').value = theme.drawerBlur;
+  document.getElementById('valDrawerBlur').textContent = theme.drawerBlur + 'px';
+  document.getElementById('themeCartFabOpacity').value = theme.cartFabOpacity;
+  document.getElementById('valCartFabOpacity').textContent = theme.cartFabOpacity + '%';
+  document.getElementById('themeOverlayOpacity').value = theme.overlayOpacity;
+  document.getElementById('valOverlayOpacity').textContent = theme.overlayOpacity + '%';
+  document.getElementById('themeToastOpacity').value = theme.toastOpacity;
+  document.getElementById('valToastOpacity').textContent = theme.toastOpacity + '%';
+
+  document.getElementById('themeShopNameSize').value = theme.shopNameSize;
+  document.getElementById('valShopNameSize').textContent = theme.shopNameSize + 'px';
+  document.getElementById('themeLogoSize').value = theme.logoSize;
+  document.getElementById('valLogoSize').textContent = theme.logoSize + 'px';
+  document.getElementById('themeSearchBarHeight').value = theme.searchBarHeight;
+  document.getElementById('valSearchBarHeight').textContent = theme.searchBarHeight + 'px';
+  document.getElementById('themeSearchFontSize').value = theme.searchFontSize;
+  document.getElementById('valSearchFontSize').textContent = theme.searchFontSize + 'px';
+  document.getElementById('themeCartIconSize').value = theme.cartIconSize;
+  document.getElementById('valCartIconSize').textContent = theme.cartIconSize + 'px';
+  document.getElementById('themeCatStripPadding').value = theme.catStripPadding;
+  document.getElementById('valCatStripPadding').textContent = theme.catStripPadding + 'px';
+
   document.getElementById('themeCardOpacity').value = theme.cardOpacity;
   document.getElementById('valCardOpacity').textContent = theme.cardOpacity + '%';
   document.getElementById('themeCardRadius').value = theme.cardRadius;
@@ -2074,22 +2191,48 @@ function prefillThemeControls() {
   document.getElementById('valCardShadow').textContent = theme.cardShadow + '%';
   document.getElementById('themeCardGap').value = theme.cardGap;
   document.getElementById('valCardGap').textContent = theme.cardGap + 'px';
+  document.getElementById('themeHeaderShadow').value = theme.headerShadow;
+  document.getElementById('valHeaderShadow').textContent = theme.headerShadow + '%';
+  document.getElementById('themePressScale').value = theme.pressScale;
+  document.getElementById('valPressScale').textContent = theme.pressScale + '%';
+
   document.getElementById('themeChipRadius').value = theme.chipRadius;
   document.getElementById('valChipRadius').textContent = theme.chipRadius + 'px';
+  document.getElementById('themeChipGap').value = theme.chipGap;
+  document.getElementById('valChipGap').textContent = theme.chipGap + 'px';
+
   document.getElementById('themePriceSize').value = theme.priceSize;
   document.getElementById('valPriceSize').textContent = theme.priceSize + 'px';
   document.getElementById('themeNameSize').value = theme.nameSize;
   document.getElementById('valNameSize').textContent = theme.nameSize + 'px';
+  document.getElementById('themeLineHeight').value = theme.lineHeight;
+  document.getElementById('valLineHeight').textContent = theme.lineHeight + '%';
+  document.getElementById('themeRefSize').value = theme.refSize;
+  document.getElementById('valRefSize').textContent = theme.refSize + 'px';
+  document.getElementById('themeLotLabelSize').value = theme.lotLabelSize;
+  document.getElementById('valLotLabelSize').textContent = theme.lotLabelSize + 'px';
   document.getElementById('themeFontHeading').value = theme.fontHeading;
   document.getElementById('themeFontBody').value = theme.fontBody;
+
   document.getElementById('themeButtonRadius').value = theme.buttonRadius;
   document.getElementById('valButtonRadius').textContent = theme.buttonRadius + 'px';
   document.getElementById('themeAddBtnSize').value = theme.addBtnSize;
   document.getElementById('valAddBtnSize').textContent = theme.addBtnSize + 'px';
+  document.getElementById('themeDrawerCloseSize').value = theme.drawerCloseSize;
+  document.getElementById('valDrawerCloseSize').textContent = theme.drawerCloseSize + 'px';
+
   document.getElementById('themeImagePadding').value = theme.imagePadding;
   document.getElementById('valImagePadding').textContent = theme.imagePadding + 'px';
+  document.getElementById('themeImageAspectRatio').value = theme.imageAspectRatio;
+  document.getElementById('valImageAspectRatio').textContent = theme.imageAspectRatio + '%';
+  document.getElementById('themeImageRadius').value = theme.imageRadius;
+  document.getElementById('valImageRadius').textContent = theme.imageRadius + 'px';
+
   document.getElementById('themeAnimSpeed').value = theme.animSpeed;
   document.getElementById('valAnimSpeed').textContent = theme.animSpeed + '%';
+  document.getElementById('themeToastSpeed').value = theme.toastSpeed;
+  document.getElementById('valToastSpeed').textContent = theme.toastSpeed + '%';
+
   document.getElementById('themeShowPromo').checked = theme.showPromoSection;
   document.getElementById('themePromoLabel').value = theme.promoLabel;
   document.getElementById('themeShowNew').checked = theme.showNewSection;
@@ -2103,19 +2246,50 @@ function readThemeFromControls() {
   return {
     glassOpacity: parseInt(document.getElementById('themeGlassOpacity').value, 10),
     glassBlur: parseInt(document.getElementById('themeGlassBlur').value, 10),
+    topbarOpacity: parseInt(document.getElementById('themeTopbarOpacity').value, 10),
+    catStripOpacity: parseInt(document.getElementById('themeCatStripOpacity').value, 10),
+    drawerOpacity: parseInt(document.getElementById('themeDrawerOpacity').value, 10),
+    drawerBlur: parseInt(document.getElementById('themeDrawerBlur').value, 10),
+    cartFabOpacity: parseInt(document.getElementById('themeCartFabOpacity').value, 10),
+    overlayOpacity: parseInt(document.getElementById('themeOverlayOpacity').value, 10),
+    toastOpacity: parseInt(document.getElementById('themeToastOpacity').value, 10),
+
+    shopNameSize: parseInt(document.getElementById('themeShopNameSize').value, 10),
+    logoSize: parseInt(document.getElementById('themeLogoSize').value, 10),
+    searchBarHeight: parseInt(document.getElementById('themeSearchBarHeight').value, 10),
+    searchFontSize: parseFloat(document.getElementById('themeSearchFontSize').value),
+    cartIconSize: parseInt(document.getElementById('themeCartIconSize').value, 10),
+    catStripPadding: parseInt(document.getElementById('themeCatStripPadding').value, 10),
+
     cardOpacity: parseInt(document.getElementById('themeCardOpacity').value, 10),
     cardRadius: parseInt(document.getElementById('themeCardRadius').value, 10),
     cardShadow: parseInt(document.getElementById('themeCardShadow').value, 10),
     cardGap: parseInt(document.getElementById('themeCardGap').value, 10),
+    headerShadow: parseInt(document.getElementById('themeHeaderShadow').value, 10),
+    pressScale: parseInt(document.getElementById('themePressScale').value, 10),
+
     chipRadius: parseInt(document.getElementById('themeChipRadius').value, 10),
+    chipGap: parseInt(document.getElementById('themeChipGap').value, 10),
+
     priceSize: parseInt(document.getElementById('themePriceSize').value, 10),
     nameSize: parseFloat(document.getElementById('themeNameSize').value),
+    lineHeight: parseInt(document.getElementById('themeLineHeight').value, 10),
+    refSize: parseInt(document.getElementById('themeRefSize').value, 10),
+    lotLabelSize: parseFloat(document.getElementById('themeLotLabelSize').value),
     fontHeading: document.getElementById('themeFontHeading').value,
     fontBody: document.getElementById('themeFontBody').value,
+
     buttonRadius: parseInt(document.getElementById('themeButtonRadius').value, 10),
     addBtnSize: parseInt(document.getElementById('themeAddBtnSize').value, 10),
+    drawerCloseSize: parseInt(document.getElementById('themeDrawerCloseSize').value, 10),
+
     imagePadding: parseInt(document.getElementById('themeImagePadding').value, 10),
+    imageAspectRatio: parseInt(document.getElementById('themeImageAspectRatio').value, 10),
+    imageRadius: parseInt(document.getElementById('themeImageRadius').value, 10),
+
     animSpeed: parseInt(document.getElementById('themeAnimSpeed').value, 10),
+    toastSpeed: parseInt(document.getElementById('themeToastSpeed').value, 10),
+
     showPromoSection: document.getElementById('themeShowPromo').checked,
     showNewSection: document.getElementById('themeShowNew').checked,
     promoLabel: document.getElementById('themePromoLabel').value.trim() || DEFAULT_THEME.promoLabel,
@@ -2126,42 +2300,81 @@ function readThemeFromControls() {
 function setupThemeControls() {
   // Mise à jour en direct des étiquettes de valeur ET application
   // immédiate sur le site (aperçu live) à chaque glissement de curseur,
-  // sans attendre la sauvegarde — c'est le comportement demandé : pouvoir
-  // essayer librement et ne valider qu'avec le bouton "Enregistrer".
+  // sans attendre la sauvegarde. Les curseurs n'affectent que des
+  // variables CSS (déjà appliquées en direct à chaque élément par
+  // applyThemeToPage) : on évite donc tout renderGrid()/renderCategoryStrip()
+  // ici, sinon le glissement reconstruit tout le catalogue à chaque pixel
+  // de déplacement et provoque un vrai ralentissement perceptible.
   const sliderMap = [
     ['themeGlassOpacity', 'valGlassOpacity', '%'],
     ['themeGlassBlur', 'valGlassBlur', 'px'],
+    ['themeTopbarOpacity', 'valTopbarOpacity', '%'],
+    ['themeCatStripOpacity', 'valCatStripOpacity', '%'],
+    ['themeDrawerOpacity', 'valDrawerOpacity', '%'],
+    ['themeDrawerBlur', 'valDrawerBlur', 'px'],
+    ['themeCartFabOpacity', 'valCartFabOpacity', '%'],
+    ['themeOverlayOpacity', 'valOverlayOpacity', '%'],
+    ['themeToastOpacity', 'valToastOpacity', '%'],
+    ['themeShopNameSize', 'valShopNameSize', 'px'],
+    ['themeLogoSize', 'valLogoSize', 'px'],
+    ['themeSearchBarHeight', 'valSearchBarHeight', 'px'],
+    ['themeSearchFontSize', 'valSearchFontSize', 'px'],
+    ['themeCartIconSize', 'valCartIconSize', 'px'],
+    ['themeCatStripPadding', 'valCatStripPadding', 'px'],
     ['themeCardOpacity', 'valCardOpacity', '%'],
     ['themeCardRadius', 'valCardRadius', 'px'],
     ['themeCardShadow', 'valCardShadow', '%'],
     ['themeCardGap', 'valCardGap', 'px'],
+    ['themeHeaderShadow', 'valHeaderShadow', '%'],
+    ['themePressScale', 'valPressScale', '%'],
     ['themeChipRadius', 'valChipRadius', 'px'],
+    ['themeChipGap', 'valChipGap', 'px'],
     ['themePriceSize', 'valPriceSize', 'px'],
     ['themeNameSize', 'valNameSize', 'px'],
+    ['themeLineHeight', 'valLineHeight', '%'],
+    ['themeRefSize', 'valRefSize', 'px'],
+    ['themeLotLabelSize', 'valLotLabelSize', 'px'],
     ['themeButtonRadius', 'valButtonRadius', 'px'],
     ['themeAddBtnSize', 'valAddBtnSize', 'px'],
+    ['themeDrawerCloseSize', 'valDrawerCloseSize', 'px'],
     ['themeImagePadding', 'valImagePadding', 'px'],
-    ['themeAnimSpeed', 'valAnimSpeed', '%']
+    ['themeImageAspectRatio', 'valImageAspectRatio', '%'],
+    ['themeImageRadius', 'valImageRadius', 'px'],
+    ['themeAnimSpeed', 'valAnimSpeed', '%'],
+    ['themeToastSpeed', 'valToastSpeed', '%']
   ];
-  function livePreview() {
+  function livePreviewStyleOnly() {
     theme = readThemeFromControls();
     applyThemeToPage();
-    renderGrid();
-    renderCategoryStrip();
   }
   sliderMap.forEach(([inputId, labelId, unit]) => {
     const input = document.getElementById(inputId);
     const label = document.getElementById(labelId);
     input.addEventListener('input', () => {
       label.textContent = input.value + unit;
-      livePreview();
+      livePreviewStyleOnly();
     });
   });
+
+  // Les bascules Promo/Nouveauté et leurs libellés changent du texte et
+  // la présence de sections entières : elles ont réellement besoin de
+  // renderGrid()/renderCategoryStrip(), mais ça reste rare (toggle/texte
+  // tapé) donc sans impact sur la fluidité des curseurs ci-dessus.
+  function livePreviewFull() {
+    theme = readThemeFromControls();
+    applyThemeToPage();
+    renderGrid();
+    renderCategoryStrip();
+  }
   ['themeFontHeading', 'themeFontBody', 'themeShowPromo', 'themeShowNew'].forEach(id => {
-    document.getElementById(id).addEventListener('change', livePreview);
+    document.getElementById(id).addEventListener('change', livePreviewFull);
   });
+  let labelDebounceTimer = null;
   ['themePromoLabel', 'themeNewLabel'].forEach(id => {
-    document.getElementById(id).addEventListener('input', livePreview);
+    document.getElementById(id).addEventListener('input', () => {
+      clearTimeout(labelDebounceTimer);
+      labelDebounceTimer = setTimeout(livePreviewFull, 250);
+    });
   });
 
   document.getElementById('saveThemeBtn').addEventListener('click', async () => {
