@@ -637,6 +637,15 @@ function productCardHtml(p) {
   </div>`;
 }
 
+/* Ajuste dynamiquement la largeur d'un champ de quantité selon le
+   nombre de caractères affichés, pour que les nombres à 3+ chiffres
+   (ex. 120, 1000) restent toujours entièrement visibles au lieu d'être
+   coupés par la largeur fixe d'origine. */
+function resizeQtyInput(input) {
+  const len = String(input.value || '0').length;
+  input.style.width = Math.max(24, len * 9 + 6) + 'px';
+}
+
 function attachCardListeners() {
   document.querySelectorAll('.add-btn').forEach(btn => {
     btn.addEventListener('click', () => addToCart(btn.dataset.id, 1, btn));
@@ -648,6 +657,8 @@ function attachCardListeners() {
     btn.addEventListener('click', () => addToCart(btn.dataset.id, -1));
   });
   document.querySelectorAll('.qty-input').forEach(inp => {
+    resizeQtyInput(inp);
+    inp.addEventListener('input', () => resizeQtyInput(inp));
     inp.addEventListener('change', () => setCartQtyLots(inp.dataset.id, inp.value));
     inp.addEventListener('click', (e) => e.target.select());
   });
@@ -674,11 +685,20 @@ function observeCardsForScrollReveal(selector) {
     scrollRevealObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
-          entry.target.classList.add('in-view');
-          scrollRevealObserver.unobserve(entry.target);
+          const el = entry.target;
+          el.classList.add('animating');
+          // requestAnimationFrame garantit que will-change est bien
+          // appliqué par le navigateur avant le changement d'état qui
+          // déclenche la transition (sinon le navigateur peut "rater"
+          // l'optimisation sur certains appareils).
+          requestAnimationFrame(() => {
+            el.classList.add('in-view');
+            setTimeout(() => el.classList.remove('animating'), 170);
+          });
+          scrollRevealObserver.unobserve(el);
         }
       });
-    }, { rootMargin: '60px 0px -20px 0px', threshold: 0.05 });
+    }, { rootMargin: '150px 0px 0px 0px', threshold: 0 });
   }
   document.querySelectorAll(`${selector}:not(.in-view)`).forEach(el => {
     scrollRevealObserver.observe(el);
@@ -742,6 +762,8 @@ function attachStubListeners(stub) {
     btn.addEventListener('click', () => addToCart(btn.dataset.id, -1));
   });
   stub.querySelectorAll('.qty-input').forEach(inp => {
+    resizeQtyInput(inp);
+    inp.addEventListener('input', () => resizeQtyInput(inp));
     inp.addEventListener('change', () => setCartQtyLots(inp.dataset.id, inp.value));
     inp.addEventListener('click', (e) => e.target.select());
   });
@@ -1019,6 +1041,8 @@ function renderCartDrawer() {
   body.querySelectorAll('.cl-plus').forEach(b => b.addEventListener('click', () => addToCart(b.dataset.id, 1)));
   body.querySelectorAll('.cl-minus').forEach(b => b.addEventListener('click', () => addToCart(b.dataset.id, -1)));
   body.querySelectorAll('.cl-input').forEach(inp => {
+    resizeQtyInput(inp);
+    inp.addEventListener('input', () => resizeQtyInput(inp));
     inp.addEventListener('change', () => setCartQtyLots(inp.dataset.id, inp.value));
     inp.addEventListener('click', (e) => e.target.select());
   });
