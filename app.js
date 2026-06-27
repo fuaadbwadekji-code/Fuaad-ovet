@@ -354,8 +354,13 @@ function renderCategoryStrip() {
   strip.querySelectorAll('.cat-chip[data-cat]').forEach(btn => {
     btn.addEventListener('click', () => {
       activeCategory = btn.dataset.cat;
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      // requestAnimationFrame laisse le navigateur terminer le scroll et
+      // la mise à jour visuelle des chips avant de lancer le rendu de la
+      // grille, ce qui évite l'impression de saccade quand on bascule
+      // rapidement entre plusieurs catégories à la suite.
       renderCategoryStrip();
-      renderGrid();
+      requestAnimationFrame(() => renderGrid());
     });
   });
   const catalogueBtn = strip.querySelector('[data-action="open-catalogue"]');
@@ -519,6 +524,10 @@ function renderGrid() {
   const empty = document.getElementById('emptyState');
   const list = getFilteredProducts();
   const visibleProducts = products.filter(isProductVisible);
+  // Calculé UNE SEULE fois par rendu (et non une fois par produit, comme
+  // c'était le cas avant) : c'est ce qui causait le ralentissement
+  // ressenti dans "Tout", où ce calcul tournait jusqu'à 900 fois.
+  const bulkEligible = getBulkEligibleCategories();
 
   if (list.length === 0) {
     container.innerHTML = '';
@@ -532,41 +541,41 @@ function renderGrid() {
     const featured = visibleProducts.filter(p => p.featured);
     if (featured.length) {
       html += `<div class="section-title featured-title">⭐ Meilleures ventes</div><div class="grid">`;
-      featured.forEach(p => html += productCardHtml(p));
+      featured.forEach(p => html += productCardHtml(p, bulkEligible));
       html += `</div>`;
     }
     const promoItems = visibleProducts.filter(p => p.isPromo);
     if (promoItems.length && theme.showPromoSection) {
       html += `<div class="section-title promo-title">${escapeHtml(theme.promoLabel || '🔥 Promos')}</div><div class="grid">`;
-      promoItems.forEach(p => html += productCardHtml(p));
+      promoItems.forEach(p => html += productCardHtml(p, bulkEligible));
       html += `</div>`;
     }
     const newOnes = visibleProducts.filter(p => p.isNew);
     if (newOnes.length && theme.showNewSection) {
       html += `<div class="section-title new-title">${escapeHtml(theme.newLabel || '✨ Nouveauté')}</div><div class="grid">`;
-      newOnes.forEach(p => html += productCardHtml(p));
+      newOnes.forEach(p => html += productCardHtml(p, bulkEligible));
       html += `</div>`;
     }
     categories.filter(cat => !cat.hidden).forEach(cat => {
       const items = visibleProducts.filter(p => p.categoryId === cat.id);
       if (items.length === 0) return;
       html += `<div class="section-title">${escapeHtml(cat.name)}</div><div class="grid">`;
-      items.forEach(p => html += productCardHtml(p));
+      items.forEach(p => html += productCardHtml(p, bulkEligible));
       html += `</div>`;
     });
     const orphan = visibleProducts.filter(p => !categories.some(c => c.id === p.categoryId));
     if (orphan.length) {
       html += `<div class="section-title">Autres</div><div class="grid">`;
-      orphan.forEach(p => html += productCardHtml(p));
+      orphan.forEach(p => html += productCardHtml(p, bulkEligible));
       html += `</div>`;
     }
   } else if (activeCategory === 'featured') {
     html += `<div class="grid">`;
-    visibleProducts.filter(p => p.featured).forEach(p => html += productCardHtml(p));
+    visibleProducts.filter(p => p.featured).forEach(p => html += productCardHtml(p, bulkEligible));
     html += `</div>`;
   } else {
     html += `<div class="grid">`;
-    list.forEach(p => html += productCardHtml(p));
+    list.forEach(p => html += productCardHtml(p, bulkEligible));
     html += `</div>`;
   }
 
@@ -574,12 +583,12 @@ function renderGrid() {
   attachCardListeners();
 }
 
-function productCardHtml(p) {
+function productCardHtml(p, bulkEligible) {
   const qty = cart[p.id] || 0; // en unités réelles
   const lots = p.unitStep > 1 ? Math.round(qty / p.unitStep) : qty;
   const img = p.image || '';
   const unitTag = p.unitStep > 1 ? `<span class="t-unit">📦 Lot de ${p.unitStep}</span>` : '';
-  const bulkEligible = getBulkEligibleCategories();
+  bulkEligible = bulkEligible || getBulkEligibleCategories();
   const effectivePrice = getEffectivePrice(p, bulkEligible);
   const isBulk = effectivePrice !== p.price;
   const priceDisplay = isBulk
