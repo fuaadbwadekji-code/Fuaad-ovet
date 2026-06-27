@@ -69,6 +69,8 @@ const DEFAULT_THEME = {
   lotLabelSize: 11.5,      // 9-15px : taille du texte "Lot de X"
   imageRadius: 0,          // 0-20px : arrondi des photos produit elles-mêmes
   pressScale: 8,           // 0-20 : intensité de l'effet d'appui (% de réduction)
+  bgImageOpacity: 100,      // 0-100 : opacité de la photo de fond (Paris ou personnalisée)
+  bgOverlayOpacity: 55,     // 0-100 : opacité du voile crème posé sur la photo de fond
   emptyHint: 'Essayez une autre recherche ou catégorie.'
 };
 let theme = Object.assign({}, DEFAULT_THEME);
@@ -662,10 +664,10 @@ function attachCardListeners() {
    performance notable (l'observation est passive, gérée par le
    navigateur). */
 let scrollRevealObserver = null;
-function observeCardsForScrollReveal() {
+function observeCardsForScrollReveal(selector) {
+  selector = selector || '.ticket';
   if (!('IntersectionObserver' in window)) {
-    // Navigateur trop ancien : on affiche tout normalement, sans animation.
-    document.querySelectorAll('.ticket').forEach(el => el.classList.add('in-view'));
+    document.querySelectorAll(selector).forEach(el => el.classList.add('in-view'));
     return;
   }
   if (!scrollRevealObserver) {
@@ -676,9 +678,9 @@ function observeCardsForScrollReveal() {
           scrollRevealObserver.unobserve(entry.target);
         }
       });
-    }, { rootMargin: '0px 0px -40px 0px', threshold: 0.08 });
+    }, { rootMargin: '60px 0px -20px 0px', threshold: 0.05 });
   }
-  document.querySelectorAll('.ticket:not(.in-view)').forEach(el => {
+  document.querySelectorAll(`${selector}:not(.in-view)`).forEach(el => {
     scrollRevealObserver.observe(el);
   });
 }
@@ -755,6 +757,12 @@ function playAddPulse(productId) {
     void btn.offsetWidth;
     btn.classList.add('pop');
   });
+  const badge = document.getElementById('cartBadge');
+  if (badge) {
+    badge.classList.remove('bump');
+    void badge.offsetWidth;
+    badge.classList.add('bump');
+  }
 }
 
 /* =========================================================
@@ -1056,13 +1064,26 @@ function setupCheckout() {
   });
 
   document.getElementById('confirmOrderBtn').addEventListener('click', async () => {
-    const name = document.getElementById('clientNameInput').value.trim();
+    const nameInput = document.getElementById('clientNameInput');
+    const name = nameInput.value.trim();
     const shopName = document.getElementById('clientShopInput').value.trim();
+    const errorMsg = document.getElementById('clientNameError');
     if (!name) {
-      showToast('Merci d\'indiquer votre nom');
+      nameInput.classList.add('input-error');
+      errorMsg.style.display = 'block';
+      nameInput.focus();
+      showToast('⚠️ Merci d\'indiquer votre nom');
       return;
     }
+    nameInput.classList.remove('input-error');
+    errorMsg.style.display = 'none';
     await submitOrder(name, shopName);
+  });
+  document.getElementById('clientNameInput').addEventListener('input', (e) => {
+    if (e.target.value.trim()) {
+      e.target.classList.remove('input-error');
+      document.getElementById('clientNameError').style.display = 'none';
+    }
   });
 
   document.getElementById('clearCartBtn').addEventListener('click', () => {
@@ -1228,7 +1249,17 @@ function setupAdminTabs() {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       ['orders', 'products', 'categories', 'settings'].forEach(t => {
-        document.getElementById('tab' + capitalize(t)).style.display = (t === btn.dataset.tab) ? 'block' : 'none';
+        const panel = document.getElementById('tab' + capitalize(t));
+        if (t === btn.dataset.tab) {
+          panel.style.display = 'block';
+          panel.classList.remove('tab-fade-in');
+          // Force un reflow pour pouvoir relancer l'animation à chaque clic.
+          void panel.offsetWidth;
+          panel.classList.add('tab-fade-in');
+        } else {
+          panel.style.display = 'none';
+          panel.classList.remove('tab-fade-in');
+        }
       });
       // Toujours repartir des données les plus récentes de la base avant
       // d'afficher la liste des produits : évite qu'un autre appareil
@@ -1322,6 +1353,7 @@ async function renderAdminOrderList() {
       </div>`;
     });
     list.innerHTML = html;
+    observeCardsForScrollReveal('.order-card');
     list.querySelectorAll('.copy-order-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         let items = [];
@@ -1505,6 +1537,7 @@ function renderAdminProductList() {
     </div>`;
   });
   list.innerHTML = html;
+  observeCardsForScrollReveal('.admin-product-row-wrap');
   list.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openProductForm(b.dataset.edit)));
   list.querySelectorAll('[data-hide]').forEach(b => b.addEventListener('click', () => toggleHideProduct(b.dataset.hide)));
   list.querySelectorAll('[data-quickphoto]').forEach(b => b.addEventListener('click', () => {
@@ -1820,6 +1853,7 @@ function renderAdminCatList() {
     </div>`;
   });
   list.innerHTML = html;
+  observeCardsForScrollReveal('.cat-manage-card');
 
   list.querySelectorAll('input[data-cat-id]:not(.bulk-toggle):not(.bulk-threshold):not(.bulk-price):not(.cat-cover-input)').forEach(inp => {
     inp.addEventListener('change', async () => {
@@ -2096,6 +2130,13 @@ function applyThemeToPage() {
   r.setProperty('--lot-label-size', `${t.lotLabelSize != null ? t.lotLabelSize : 11.5}px`);
   r.setProperty('--image-radius', `${t.imageRadius != null ? t.imageRadius : 0}px`);
   r.setProperty('--press-scale', `${1 - (t.pressScale != null ? t.pressScale : 8) / 100}`);
+  r.setProperty('--bg-image-opacity', String((t.bgImageOpacity != null ? t.bgImageOpacity : 100) / 100));
+  r.setProperty('--bg-overlay-opacity', String((t.bgOverlayOpacity != null ? t.bgOverlayOpacity : 55) / 100));
+  if (settings.background_image) {
+    r.setProperty('--bg-image', `url('${settings.background_image}')`);
+  } else {
+    r.style.removeProperty('--bg-image');
+  }
 
   // Les cartes utilisent directement une couleur rgba (pas backdrop-filter,
   // pour les raisons de performance vues plus haut) : on la recalcule ici.
@@ -2195,6 +2236,17 @@ function prefillThemeControls() {
   document.getElementById('valHeaderShadow').textContent = theme.headerShadow + '%';
   document.getElementById('themePressScale').value = theme.pressScale;
   document.getElementById('valPressScale').textContent = theme.pressScale + '%';
+  document.getElementById('themeBgImageOpacity').value = theme.bgImageOpacity;
+  document.getElementById('valBgImageOpacity').textContent = theme.bgImageOpacity + '%';
+  document.getElementById('themeBgOverlayOpacity').value = theme.bgOverlayOpacity;
+  document.getElementById('valBgOverlayOpacity').textContent = theme.bgOverlayOpacity + '%';
+  const bgPreview = document.getElementById('bgImagePreview');
+  if (settings.background_image) {
+    bgPreview.src = settings.background_image;
+    bgPreview.style.display = 'block';
+  } else {
+    bgPreview.style.display = 'none';
+  }
 
   document.getElementById('themeChipRadius').value = theme.chipRadius;
   document.getElementById('valChipRadius').textContent = theme.chipRadius + 'px';
@@ -2267,6 +2319,8 @@ function readThemeFromControls() {
     cardGap: parseInt(document.getElementById('themeCardGap').value, 10),
     headerShadow: parseInt(document.getElementById('themeHeaderShadow').value, 10),
     pressScale: parseInt(document.getElementById('themePressScale').value, 10),
+    bgImageOpacity: parseInt(document.getElementById('themeBgImageOpacity').value, 10),
+    bgOverlayOpacity: parseInt(document.getElementById('themeBgOverlayOpacity').value, 10),
 
     chipRadius: parseInt(document.getElementById('themeChipRadius').value, 10),
     chipGap: parseInt(document.getElementById('themeChipGap').value, 10),
@@ -2295,6 +2349,58 @@ function readThemeFromControls() {
     promoLabel: document.getElementById('themePromoLabel').value.trim() || DEFAULT_THEME.promoLabel,
     newLabel: document.getElementById('themeNewLabel').value.trim() || DEFAULT_THEME.newLabel
   };
+}
+
+/* Définit une photo de fond personnalisée pour tout le site, remplaçant
+   la photo de Paris par défaut. Même traitement (redimensionnement,
+   compression) que pour le logo et les photos de catégorie. */
+function setBackgroundImage(file) {
+  if (file.size > 6 * 1024 * 1024) {
+    showToast('Image trop lourde (max 6 Mo)');
+    return;
+  }
+  showToast('⏳ Envoi de la photo…');
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = async () => {
+      const maxDim = 1600;
+      let w = img.width, h = img.height;
+      if (w > maxDim) { h = h * maxDim / w; w = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const newImageData = canvas.toDataURL('image/jpeg', 0.85);
+      try {
+        const { error } = await supabaseClient.from('settings').update({ background_image: newImageData }).eq('id', 1);
+        if (error) throw error;
+        settings.background_image = newImageData;
+        applyThemeToPage();
+        prefillThemeControls();
+        showToast('✓ Photo de fond mise à jour');
+      } catch (e) {
+        console.error(e);
+        showToast('⚠️ Erreur lors de l\'enregistrement de la photo');
+      }
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function resetBackgroundImage() {
+  try {
+    const { error } = await supabaseClient.from('settings').update({ background_image: null }).eq('id', 1);
+    if (error) throw error;
+    settings.background_image = null;
+    applyThemeToPage();
+    prefillThemeControls();
+    showToast('✓ Photo de Paris par défaut restaurée');
+  } catch (e) {
+    console.error(e);
+    showToast('⚠️ Erreur lors de la réinitialisation');
+  }
 }
 
 function setupThemeControls() {
@@ -2327,6 +2433,8 @@ function setupThemeControls() {
     ['themeCardGap', 'valCardGap', 'px'],
     ['themeHeaderShadow', 'valHeaderShadow', '%'],
     ['themePressScale', 'valPressScale', '%'],
+    ['themeBgImageOpacity', 'valBgImageOpacity', '%'],
+    ['themeBgOverlayOpacity', 'valBgOverlayOpacity', '%'],
     ['themeChipRadius', 'valChipRadius', 'px'],
     ['themeChipGap', 'valChipGap', 'px'],
     ['themePriceSize', 'valPriceSize', 'px'],
@@ -2376,6 +2484,16 @@ function setupThemeControls() {
       labelDebounceTimer = setTimeout(livePreviewFull, 250);
     });
   });
+
+  document.getElementById('chooseBgImageBtn').addEventListener('click', () => {
+    document.getElementById('bgImageInput').click();
+  });
+  document.getElementById('bgImageInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) setBackgroundImage(file);
+    e.target.value = '';
+  });
+  document.getElementById('resetBgImageBtn').addEventListener('click', () => resetBackgroundImage());
 
   document.getElementById('saveThemeBtn').addEventListener('click', async () => {
     const newTheme = readThemeFromControls();
