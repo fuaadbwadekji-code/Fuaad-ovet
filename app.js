@@ -25,7 +25,7 @@ const TVA_RATE = 0.20; // 20% — appliqué uniquement au moment de la confirmat
 function getCommissionRateForShop(shopName) {
   const normalized = (shopName || '').trim().toLowerCase();
   const isReduced = reducedCommissionShops.some(s => s.trim().toLowerCase() === normalized);
-  return isReduced ? REDUCED_COMMISSION_RATE : DEFAULT_COMMISSION_RATE;
+  return isReduced ? SPECIAL_COMMISSION_RATE : DEFAULT_COMMISSION_RATE;
 }
 
 /* Calcule les bornes exactes (début et fin) d'un mois calendaire donné.
@@ -55,9 +55,13 @@ let settings = { shop_name: 'Souvenirs de Paris', whatsapp: '', email: '', admin
    Total à payer (TVA incluse), comme décidé explicitement — voir
    calculateOrderCommission(). Certains magasins (liste personnalisable
    depuis l'admin) ont un taux réduit spécial. */
-const DEFAULT_COMMISSION_RATE = 5;      // %
-const REDUCED_COMMISSION_RATE = 0.05;   // % — pour les magasins de la liste ci-dessous
-let reducedCommissionShops = []; // noms de magasins (insensible à la casse) bénéficiant du taux réduit
+const DEFAULT_COMMISSION_RATE = 2;      // % — appliqué à tous les magasins NON listés ci-dessous
+const SPECIAL_COMMISSION_RATE = 0.5;    // % — uniquement pour les magasins de la liste reducedCommissionShops
+let reducedCommissionShops = [
+  'NK STEINKERQUE', 'MONDIAL SOUVENIRS', 'ANVERS TISSUS', 'BM SOUVENIRS',
+  'AU PARIS MONTMARTRE', 'SACRE SOUVENIRS', 'CHARMRS SOUVENIRS', 'LE CHAT NOIR',
+  'SACRE CŒUR SOUVENIRS', 'ART TABLEAUX', 'ART ATAK', 'WORLD SOUVENIRS'
+]; // noms de magasins (insensible à la casse) bénéficiant du taux spécial 0,5%
 
 /* Réglages d'apparence personnalisables depuis l'admin (onglet Réglages
    → Thème). Stockés en JSON dans settings.theme_settings et appliqués
@@ -347,8 +351,15 @@ async function loadAllData() {
       coverImage: c.cover_image || null
     }));
     settings = settRes.data || settings;
-    reducedCommissionShops = settings.reduced_commission_shops || [];
-    dismissedNotifications = new Set(settings.dismissed_notifications || []);
+    if (settings.reduced_commission_shops && settings.reduced_commission_shops.length > 0) {
+      reducedCommissionShops = settings.reduced_commission_shops;
+    } else {
+      // Première utilisation (ou liste vide en base) : on initialise
+      // avec la liste exacte donnée par Fuaad et on la sauvegarde tout
+      // de suite, pour que le bon taux s'applique dès cette session.
+      persistReducedShops();
+    }
+    dismissedNotifications = new Set((settings.dismissed_notifications || []).map(String));
     shopMapPoints = settings.shop_map_points || [];
     theme = Object.assign({}, DEFAULT_THEME, settings.theme_settings || {});
     savedTheme = Object.assign({}, theme);
@@ -441,6 +452,7 @@ let shopMapPoints = []; // [{ name, lat, lng }]
    indépendant l'un de l'autre pour que naviguer dans l'un ne déplace
    pas l'autre par surprise. */
 let commissionsViewYear, commissionsViewMonth;
+let commissionsShowingTotal = false; // bascule "Total général" (toutes périodes, sans découpage par mois)
 let ventesViewYear, ventesViewMonth;
 (() => {
   const now = new Date();
@@ -470,9 +482,11 @@ function playAdminEntranceChime() {
       osc.stop(startTime + duration);
     };
     const now = ctx.currentTime;
-    playTone(523.25, now, 0.2, 0.12);        // Do
-    playTone(659.25, now + 0.1, 0.22, 0.12); // Mi
-    playTone(783.99, now + 0.2, 0.32, 0.14); // Sol
+    playTone(523.25, now, 0.26, 0.12);         // Do
+    playTone(659.25, now + 0.18, 0.28, 0.12);  // Mi
+    playTone(783.99, now + 0.36, 0.30, 0.13);  // Sol
+    playTone(880.00, now + 0.54, 0.32, 0.13);  // La
+    playTone(1046.5, now + 0.74, 0.42, 0.14);  // Do (octave)
   } catch (e) {
     console.warn('Son indisponible', e);
   }
@@ -1540,6 +1554,7 @@ async function submitOrder(clientName, shopName) {
     knownOrderIds.add(insertedOrder.id);
     renderAdminNotifications();
     checkForCelebrationTriggers(totalWithTva);
+    if (adminUnlocked) playAdminEntranceChime();
 
     document.getElementById('successOrderNum').textContent = `Commande n°${orderNumber}`;
     cart = {};
@@ -1988,6 +2003,7 @@ async function renderArchivedOrderList() {
       </div>`;
     });
     list.innerHTML = html;
+    observeCardsForScrollReveal('.order-card');
     list.querySelectorAll('[data-unarchiveorder]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const { error } = await supabaseClient.from('orders').update({ archived: false }).eq('id', btn.dataset.unarchiveorder);
@@ -2299,7 +2315,7 @@ async function moveCategory(categoryId, action) {
    supprime explicitement la notification elle-même avec le ✕. */
 function getOrderNotifications() {
   return knownOrdersLog
-    .filter(o => !dismissedNotifications.has(o.id))
+    .filter(o => !dismissedNotifications.has(String(o.id)))
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
@@ -2341,7 +2357,7 @@ function renderAdminNotifications() {
 /* Supprime définitivement une notification de commande — persisté
    côté serveur pour ne jamais réapparaître après un rechargement. */
 async function dismissOrderNotification(orderId) {
-  dismissedNotifications.add(orderId);
+  dismissedNotifications.add(String(orderId));
   try {
     const { error } = await supabaseClient
       .from('settings')
@@ -2383,13 +2399,23 @@ async function fetchOrdersForMonth(year, monthIndex) {
 const MONTH_NAMES_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 
 async function renderCommissionsTab() {
-  document.getElementById('commissionsMonthLabel').textContent = `${MONTH_NAMES_FR[commissionsViewMonth]} ${commissionsViewYear}`;
+  const monthNav = document.querySelector('#tabCommissions .month-nav');
+  const comparisonEl = document.getElementById('commissionComparison');
   const listEl = document.getElementById('commissionOrdersList');
   listEl.innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
 
   let orders;
   try {
-    orders = await fetchOrdersForMonth(commissionsViewYear, commissionsViewMonth);
+    if (commissionsShowingTotal) {
+      monthNav.style.display = 'none';
+      comparisonEl.style.display = 'none';
+      document.getElementById('commissionsMonthLabel').textContent = 'Total général';
+      orders = await fetchAllOrdersFullForCommissions();
+    } else {
+      monthNav.style.display = 'flex';
+      document.getElementById('commissionsMonthLabel').textContent = `${MONTH_NAMES_FR[commissionsViewMonth]} ${commissionsViewYear}`;
+      orders = await fetchOrdersForMonth(commissionsViewYear, commissionsViewMonth);
+    }
   } catch (e) {
     console.error(e);
     listEl.innerHTML = `<div class="empty-state"><span class="glyph">⚠️</span><h3>Erreur</h3><p>${escapeHtml(e.message || '')}</p></div>`;
@@ -2406,9 +2432,10 @@ async function renderCommissionsTab() {
   document.getElementById('commissionTotalAmount').textContent = fmtPrice(totalCommission);
   document.getElementById('commissionTotalSub').textContent = `${orders.length} commande${orders.length !== 1 ? 's' : ''} ce mois-ci`;
 
-  // Comparaison avec le mois précédent — calculée à la volée (pas de
-  // cache) pour rester toujours exacte si une commande est ajoutée ou
-  // modifiée après coup.
+  // Comparaison avec le mois précédent — uniquement pertinente en mode
+  // "vue par mois" ; calculée à la volée (pas de cache) pour rester
+  // toujours exacte si une commande est ajoutée ou modifiée après coup.
+  if (!commissionsShowingTotal) {
   try {
     let prevMonth = commissionsViewMonth - 1, prevYear = commissionsViewYear;
     if (prevMonth < 0) { prevMonth = 11; prevYear--; }
@@ -2426,6 +2453,7 @@ async function renderCommissionsTab() {
     }
   } catch (e) {
     console.warn('Comparaison mensuelle échouée', e);
+  }
   }
 
   if (rows.length === 0) {
@@ -2506,6 +2534,13 @@ function setupCommissionsTab() {
   document.getElementById('commissionsNextMonthBtn').addEventListener('click', () => {
     commissionsViewMonth++;
     if (commissionsViewMonth > 11) { commissionsViewMonth = 0; commissionsViewYear++; }
+    renderCommissionsTab();
+  });
+  document.getElementById('commissionsToggleTotalBtn').addEventListener('click', () => {
+    commissionsShowingTotal = !commissionsShowingTotal;
+    document.getElementById('commissionsToggleTotalBtn').textContent = commissionsShowingTotal
+      ? '📅 Revenir à la vue par mois'
+      : '📊 Voir le total général (toutes périodes)';
     renderCommissionsTab();
   });
   document.getElementById('addReducedShopBtn').addEventListener('click', () => {
@@ -2589,6 +2624,27 @@ async function renderVentesTab() {
 /* Récupère TOUTES les commandes existantes (pas seulement un mois),
    page par page pour éviter le même problème de requête trop lourde
    rencontré précédemment avec fetchAllProductsFromDB. */
+/* Comme fetchAllOrdersEver, mais récupère toutes les colonnes (pas
+   seulement shop_name/total) — nécessaire pour le mode "Total général"
+   de l'onglet Commissions, qui affiche le détail de chaque commande. */
+async function fetchAllOrdersFullForCommissions() {
+  let all = [];
+  let from = 0;
+  const pageSize = 200;
+  while (true) {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('*')
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all = all.concat(data);
+    if (data.length < pageSize) break;
+    from += data.length;
+  }
+  return all;
+}
+
 async function fetchAllOrdersEver() {
   let all = [];
   let from = 0;
@@ -2757,7 +2813,7 @@ function renderMapShopsList() {
     <div class="map-shop-row">
       <div>
         <div class="map-shop-row-name">${escapeHtml(p.name)}</div>
-        <div class="map-shop-row-coords">${p.lat}, ${p.lng}</div>
+        <div class="map-shop-row-coords">${escapeHtml(p.address || `${p.lat}, ${p.lng}`)}</div>
       </div>
       <button class="stock-alert-dismiss" data-remove-map-idx="${idx}">✕</button>
     </div>
@@ -2786,36 +2842,51 @@ async function removeMapShop(idx) {
 function setupCarteTab() {
   document.getElementById('saveMapShopBtn').addEventListener('click', async () => {
     const name = document.getElementById('mapShopNameInput').value.trim();
-    const lat = parseFloat(document.getElementById('mapShopLatInput').value);
-    const lng = parseFloat(document.getElementById('mapShopLngInput').value);
+    const address = document.getElementById('mapShopAddressInput').value.trim();
     if (!name) { showToast('Indiquez le nom du magasin'); return; }
-    if (isNaN(lat) || isNaN(lng)) { showToast('Latitude/longitude invalides'); return; }
+    if (!address) { showToast('Indiquez une adresse'); return; }
 
-    const existingIdx = shopMapPoints.findIndex(p => p.name.trim().toLowerCase() === name.toLowerCase());
-    if (existingIdx >= 0) shopMapPoints[existingIdx] = { name, lat, lng };
-    else shopMapPoints.push({ name, lat, lng });
+    const btn = document.getElementById('saveMapShopBtn');
+    const originalLabel = btn.textContent;
+    btn.textContent = '⏳ Recherche de l\'adresse…';
+    btn.disabled = true;
 
-    await persistMapPoints();
-    document.getElementById('mapShopNameInput').value = '';
-    document.getElementById('mapShopLatInput').value = '';
-    document.getElementById('mapShopLngInput').value = '';
-    showToast(`✓ ${name} positionné sur la carte`);
-    renderCarteTab();
+    try {
+      // Nominatim (OpenStreetMap) : service de géocodage gratuit, sans
+      // clé d'API — convertit une adresse en texte libre en
+      // coordonnées GPS exploitables sur la carte.
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+      const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
+      const results = await res.json();
+      if (!results || results.length === 0) {
+        showToast('⚠️ Adresse introuvable, vérifiez l\'orthographe');
+        return;
+      }
+      const lat = parseFloat(results[0].lat);
+      const lng = parseFloat(results[0].lon);
+
+      const existingIdx = shopMapPoints.findIndex(p => p.name.trim().toLowerCase() === name.toLowerCase());
+      const point = { name, lat, lng, address };
+      if (existingIdx >= 0) shopMapPoints[existingIdx] = point;
+      else shopMapPoints.push(point);
+
+      await persistMapPoints();
+      document.getElementById('mapShopNameInput').value = '';
+      document.getElementById('mapShopAddressInput').value = '';
+      showToast(`✓ ${name} localisé et ajouté à la carte`);
+      renderCarteTab();
+    } catch (e) {
+      console.error(e);
+      showToast('⚠️ Erreur lors de la recherche d\'adresse');
+    } finally {
+      btn.textContent = originalLabel;
+      btn.disabled = false;
+    }
   });
 }
 
-function setupPresentationMode() {
+function setupAwardModal() {
   document.getElementById('closeAwardModalBtn').addEventListener('click', hideMonthlyAwardModal);
-  document.getElementById('presentationModeBtn').addEventListener('click', () => {
-    document.body.classList.add('presentation-mode');
-    closeDrawer('adminDrawer');
-    document.getElementById('overlay').classList.remove('show');
-    showToast('🖥️ Mode présentation activé');
-  });
-  document.getElementById('presentationExitBtn').addEventListener('click', () => {
-    document.body.classList.remove('presentation-mode');
-    showToast('Mode présentation désactivé');
-  });
 }
 
 function setupVentesTab() {
@@ -4040,7 +4111,7 @@ function init() {
   setupCommissionsTab();
   setupVentesTab();
   setupCarteTab();
-  setupPresentationMode();
+  setupAwardModal();
   setupLogoUpload();
   setupImageUpload();
   setupImageCropper();
