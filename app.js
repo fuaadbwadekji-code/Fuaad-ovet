@@ -120,6 +120,13 @@ let theme = Object.assign({}, DEFAULT_THEME);
    l'enregistré"). */
 let savedTheme = Object.assign({}, DEFAULT_THEME);
 let cart = {}; // { productId: qty }  (qty déjà en unités réelles, multiples de unit_step)
+/* Références produit les plus vendues du mois en cours, calculées une
+   fois au chargement (et reste en cache pour le reste de la session) à
+   partir des commandes du mois — section catalogue automatique
+   "🔥 Top des ventes ce mois", entièrement distincte du "Meilleures
+   ventes" manuel (qui reste basé sur la case "featured" cochée par
+   Fuaad et n'est jamais touché par ce calcul). */
+let topSellerRefs = [];
 /* Nom du client et du magasin saisis par Fuaad lui-même dans la fenêtre
    d'accueil de l'admin, avant que le client ne parcoure le catalogue.
    Quand ces valeurs sont renseignées, l'étape "Votre nom" du tunnel de
@@ -342,6 +349,7 @@ async function loadAllData() {
     settings = settRes.data || settings;
     reducedCommissionShops = settings.reduced_commission_shops || [];
     dismissedNotifications = new Set(settings.dismissed_notifications || []);
+    shopMapPoints = settings.shop_map_points || [];
     theme = Object.assign({}, DEFAULT_THEME, settings.theme_settings || {});
     savedTheme = Object.assign({}, theme);
     applyThemeToPage();
@@ -363,6 +371,7 @@ async function loadAllData() {
     renderHomeTiles();
     updateCartUI();
     startOrderPolling();
+    computeTopSellersForCatalogue();
   } catch (e) {
     console.error('Erreur de chargement', e);
     document.getElementById('loadingState').innerHTML =
@@ -427,6 +436,7 @@ let knownOrderIds = new Set();
    pas explicitement supprimée par Fuaad. */
 let knownOrdersLog = [];
 let dismissedNotifications = new Set();
+let shopMapPoints = []; // [{ name, lat, lng }]
 /* Mois actuellement affiché dans les onglets Commissions / Ventes —
    indépendant l'un de l'autre pour que naviguer dans l'un ne déplace
    pas l'autre par surprise. */
@@ -438,6 +448,35 @@ let ventesViewYear, ventesViewMonth;
   commissionsViewMonth = ventesViewMonth = now.getMonth();
 })();
 let orderPollingStarted = false;
+
+/* Nettement plus doux que playNotificationSound (qui signale une
+   nouvelle commande, donc volontairement plus marquant) : un petit
+   arpège ascendant à 3 notes, joué une fois à l'ouverture de l'admin —
+   une touche d'élégance discrète plutôt qu'une alerte. */
+function playAdminEntranceChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const playTone = (freq, startTime, duration, peakGain) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, startTime);
+      gain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+    const now = ctx.currentTime;
+    playTone(523.25, now, 0.2, 0.12);        // Do
+    playTone(659.25, now + 0.1, 0.22, 0.12); // Mi
+    playTone(783.99, now + 0.2, 0.32, 0.14); // Sol
+  } catch (e) {
+    console.warn('Son indisponible', e);
+  }
+}
 
 function playNotificationSound() {
   try {
@@ -614,6 +653,16 @@ function renderGrid() {
       html += `<div class="section-title featured-title">⭐ Meilleures ventes</div><div class="grid">`;
       featured.forEach(p => html += productCardHtml(p, bulkEligible));
       html += `</div>`;
+    }
+    if (topSellerRefs.length > 0) {
+      const topSellers = topSellerRefs
+        .map(ref => visibleProducts.find(p => p.ref === ref))
+        .filter(Boolean);
+      if (topSellers.length > 0) {
+        html += `<div class="section-title top-sellers-title">🔥 Top des ventes ce mois</div><div class="grid">`;
+        topSellers.forEach(p => html += productCardHtml(p, bulkEligible));
+        html += `</div>`;
+      }
     }
     const promoItems = visibleProducts.filter(p => p.isPromo);
     if (promoItems.length && theme.showPromoSection) {
@@ -1385,6 +1434,63 @@ function sendOrderNotificationEmail(orderNumber, clientName, shopName, items, to
   });
 }
 
+/* Seuils de chiffre d'affaires mensuel (TTC) qui déclenchent une
+   célébration la première fois qu'ils sont dépassés dans le mois.
+   Suivi en mémoire (pas persisté) : si la page est rechargée, le seuil
+   peut se redéclencher une fois — c'est un compromis volontaire pour
+   rester simple, l'effet recherché est ponctuel et sans conséquence. */
+const REVENUE_MILESTONES = [500, 1000, 2000, 5000, 10000];
+let milestonesHitThisSession = new Set();
+let monthRevenueRunningTotal = 0; // approximation locale, voir checkForCelebrationTriggers
+
+/* Célèbre, uniquement côté admin, deux types d'évènements après la
+   confirmation d'une commande : (1) la toute première commande du jour
+   calendaire, et (2) le franchissement d'un palier de chiffre
+   d'affaires mensuel (calculé en cumulant localement les commandes
+   confirmées pendant cette session — une approximation volontairement
+   simple plutôt qu'un aller-retour serveur, car l'effet est cosmétique
+   et non critique). N'est jamais visible côté client. */
+function checkForCelebrationTriggers(totalWithTva) {
+  if (!adminUnlocked) return;
+
+  const todayStr = new Date().toDateString();
+  const ordersToday = knownOrdersLog.filter(o => new Date(o.created_at).toDateString() === todayStr);
+  if (ordersToday.length === 1) {
+    // Cette commande qu'on vient d'ajouter EST la première du jour.
+    showCelebrationModal('🌅', 'Première commande du jour !', 'Bonne journée de ventes qui commence.');
+    return; // évite d'empiler deux célébrations sur la même commande
+  }
+
+  const now = new Date();
+  monthRevenueRunningTotal += totalWithTva;
+  for (const milestone of REVENUE_MILESTONES) {
+    const key = `${now.getFullYear()}-${now.getMonth()}-${milestone}`;
+    if (milestonesHitThisSession.has(key)) continue;
+    if (monthRevenueRunningTotal >= milestone) {
+      milestonesHitThisSession.add(key);
+      showCelebrationModal('🎉', `${milestone}€ ce mois-ci !`, 'Un nouveau palier vient d\'être franchi.');
+      break;
+    }
+  }
+}
+
+function showCelebrationModal(emoji, title, subtitle) {
+  const modal = document.getElementById('celebrationModal');
+  if (!modal) return;
+  document.getElementById('celebrationEmoji').textContent = emoji;
+  document.getElementById('celebrationTitle').textContent = title;
+  document.getElementById('celebrationSubtitle').textContent = subtitle;
+  modal.classList.add('show');
+  document.getElementById('celebrationOverlay').classList.add('show');
+  setTimeout(() => hideCelebrationModal(), 3200);
+}
+function hideCelebrationModal() {
+  const modal = document.getElementById('celebrationModal');
+  if (!modal) return;
+  modal.classList.remove('show');
+  document.getElementById('celebrationOverlay').classList.remove('show');
+}
+
 async function submitOrder(clientName, shopName) {
   const { total, count, bulkEligible } = cartTotal();
   const tva = total * TVA_RATE;
@@ -1433,6 +1539,7 @@ async function submitOrder(clientName, shopName) {
     knownOrdersLog = [{ id: insertedOrder.id, order_number: orderNumber, client_name: clientName, shop_name: shopName, created_at: nowIso }].concat(knownOrdersLog);
     knownOrderIds.add(insertedOrder.id);
     renderAdminNotifications();
+    checkForCelebrationTriggers(totalWithTva);
 
     document.getElementById('successOrderNum').textContent = `Commande n°${orderNumber}`;
     cart = {};
@@ -1541,11 +1648,75 @@ function setupClientPromptModal() {
   });
 }
 
+/* Affiche le "Wosam du mois" (certificat de fin de mois) une seule
+   fois, juste après le changement de mois calendaire — détecté en
+   comparant le mois actuel à settings.last_award_month, persisté côté
+   serveur pour ne jamais réapparaître deux fois pour le même mois. */
+async function checkMonthlyAward() {
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${now.getMonth()}`;
+  if (settings.last_award_month === currentMonthKey) return;
+
+  // On célèbre le mois qui vient de se terminer (le mois précédent),
+  // pas le mois en cours qui vient juste de commencer.
+  let prevMonth = now.getMonth() - 1, prevYear = now.getFullYear();
+  if (prevMonth < 0) { prevMonth = 11; prevYear--; }
+
+  // Si c'est la toute première fois qu'on ouvre l'admin (pas de valeur
+  // précédente), on ne célèbre rien rétroactivement — on mémorise juste
+  // le mois actuel pour que la prochaine transition de mois déclenche
+  // normalement le certificat.
+  if (settings.last_award_month) {
+    try {
+      const orders = await fetchOrdersForMonth(prevYear, prevMonth);
+      if (orders.length > 0) {
+        let totalRevenue = 0, totalCommission = 0;
+        const salesByRef = new Map();
+        orders.forEach(o => {
+          totalRevenue += o.total_with_tva || 0;
+          totalCommission += calculateOrderCommission(o).amount;
+          (o.items || []).forEach(item => {
+            if (!item.ref) return;
+            const existing = salesByRef.get(item.ref) || { name: item.name, qty: 0 };
+            existing.qty += item.qty || 0;
+            salesByRef.set(item.ref, existing);
+          });
+        });
+        const topProduct = Array.from(salesByRef.values()).sort((a, b) => b.qty - a.qty)[0];
+        showMonthlyAwardModal(MONTH_NAMES_FR[prevMonth], prevYear, totalRevenue, totalCommission, topProduct);
+      }
+    } catch (e) {
+      console.warn('Calcul du wosam du mois échoué', e);
+    }
+  }
+
+  settings.last_award_month = currentMonthKey;
+  try {
+    await supabaseClient.from('settings').update({ last_award_month: currentMonthKey }).eq('id', 1);
+  } catch (e) {
+    console.warn('Enregistrement du mois du wosam échoué', e);
+  }
+}
+
+function showMonthlyAwardModal(monthName, year, revenue, commission, topProduct) {
+  document.getElementById('awardMonthLabel').textContent = `${monthName} ${year}`;
+  document.getElementById('awardRevenue').textContent = fmtPrice(revenue);
+  document.getElementById('awardCommission').textContent = fmtPrice(commission);
+  document.getElementById('awardTopProduct').textContent = topProduct ? `${topProduct.name} (${topProduct.qty} vendus)` : '—';
+  document.getElementById('monthlyAwardModal').classList.add('show');
+  document.getElementById('awardOverlay').classList.add('show');
+}
+function hideMonthlyAwardModal() {
+  document.getElementById('monthlyAwardModal').classList.remove('show');
+  document.getElementById('awardOverlay').classList.remove('show');
+}
+
 function unlockAdminPanel() {
   adminUnlocked = true;
   saveAdminUnlockState(true);
   document.getElementById('adminLockScreen').style.display = 'none';
   document.getElementById('adminPanel').style.display = 'block';
+  playAdminEntranceChime();
   renderAdminProductList();
   renderAdminCatList();
   renderAdminOrderList();
@@ -1553,6 +1724,9 @@ function unlockAdminPanel() {
   prefillSettings();
   prefillThemeControls();
   showClientPromptModal();
+  const dateEl = document.getElementById('adminSignatureDate');
+  if (dateEl) dateEl.textContent = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  checkMonthlyAward();
 }
 
 function setupAdminLock() {
@@ -1589,7 +1763,7 @@ function setupAdminTabs() {
     btn.addEventListener('click', async () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      ['orders', 'products', 'categories', 'notifications', 'commissions', 'ventes', 'settings'].forEach(t => {
+      ['orders', 'products', 'categories', 'notifications', 'commissions', 'ventes', 'vip', 'carte', 'settings'].forEach(t => {
         const panel = document.getElementById('tab' + capitalize(t));
         if (t === btn.dataset.tab) {
           panel.style.display = 'block';
@@ -1617,6 +1791,12 @@ function setupAdminTabs() {
       }
       if (btn.dataset.tab === 'ventes') {
         renderVentesTab();
+      }
+      if (btn.dataset.tab === 'vip') {
+        renderVipTab();
+      }
+      if (btn.dataset.tab === 'carte') {
+        renderCarteTab();
       }
     });
   });
@@ -2226,6 +2406,28 @@ async function renderCommissionsTab() {
   document.getElementById('commissionTotalAmount').textContent = fmtPrice(totalCommission);
   document.getElementById('commissionTotalSub').textContent = `${orders.length} commande${orders.length !== 1 ? 's' : ''} ce mois-ci`;
 
+  // Comparaison avec le mois précédent — calculée à la volée (pas de
+  // cache) pour rester toujours exacte si une commande est ajoutée ou
+  // modifiée après coup.
+  try {
+    let prevMonth = commissionsViewMonth - 1, prevYear = commissionsViewYear;
+    if (prevMonth < 0) { prevMonth = 11; prevYear--; }
+    const prevOrders = await fetchOrdersForMonth(prevYear, prevMonth);
+    const prevTotal = prevOrders.reduce((sum, o) => sum + calculateOrderCommission(o).amount, 0);
+    const comparisonEl = document.getElementById('commissionComparison');
+    if (prevTotal > 0) {
+      const pctChange = ((totalCommission - prevTotal) / prevTotal) * 100;
+      const isUp = pctChange >= 0;
+      comparisonEl.style.display = 'flex';
+      comparisonEl.className = `commission-comparison ${isUp ? 'up' : 'down'}`;
+      comparisonEl.innerHTML = `<span>${isUp ? '📈' : '📉'} ${isUp ? '+' : ''}${pctChange.toFixed(0)}%</span><span class="commission-comparison-sub">vs ${MONTH_NAMES_FR[prevMonth]} (${fmtPrice(prevTotal)})</span>`;
+    } else {
+      comparisonEl.style.display = 'none';
+    }
+  } catch (e) {
+    console.warn('Comparaison mensuelle échouée', e);
+  }
+
   if (rows.length === 0) {
     listEl.innerHTML = `<div class="empty-state"><span class="glyph">💶</span><h3>Aucune commande</h3><p>Aucune commande sur ce mois pour le moment.</p></div>`;
   } else {
@@ -2318,6 +2520,33 @@ function setupCommissionsTab() {
    nombre de lots) — cart/submitOrder stocke toujours la quantité réelle,
    donc un lot de 12 vendu une fois compte bien pour 12 ici, comme
    demandé explicitement ("le nombre de pièces même si c'était un lot"). */
+/* Calcule automatiquement les références les plus vendues du mois en
+   cours, pour la section catalogue "🔥 Top des ventes ce mois". Tourne
+   en arrière-plan après l'affichage initial (ne bloque jamais le
+   premier rendu) et redessine la grille une fois le calcul terminé. */
+async function computeTopSellersForCatalogue() {
+  try {
+    const now = new Date();
+    const orders = await fetchOrdersForMonth(now.getFullYear(), now.getMonth());
+    const salesByRef = new Map();
+    orders.forEach(o => {
+      (o.items || []).forEach(item => {
+        if (!item.ref) return;
+        salesByRef.set(item.ref, (salesByRef.get(item.ref) || 0) + (item.qty || 0));
+      });
+    });
+    topSellerRefs = Array.from(salesByRef.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([ref]) => ref);
+    if (topSellerRefs.length > 0) {
+      renderGrid();
+    }
+  } catch (e) {
+    console.warn('Calcul du top des ventes échoué', e);
+  }
+}
+
 async function renderVentesTab() {
   document.getElementById('ventesMonthLabel').textContent = `${MONTH_NAMES_FR[ventesViewMonth]} ${ventesViewYear}`;
   const listEl = document.getElementById('ventesProductsList');
@@ -2355,6 +2584,238 @@ async function renderVentesTab() {
       <div class="ventes-product-qty">${r.qty}</div>
     </div>
   `).join('');
+}
+
+/* Récupère TOUTES les commandes existantes (pas seulement un mois),
+   page par page pour éviter le même problème de requête trop lourde
+   rencontré précédemment avec fetchAllProductsFromDB. */
+async function fetchAllOrdersEver() {
+  let all = [];
+  let from = 0;
+  const pageSize = 200;
+  while (true) {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('shop_name, total_with_tva, created_at')
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all = all.concat(data);
+    if (data.length < pageSize) break;
+    from += data.length;
+  }
+  return all;
+}
+
+const INACTIVE_SHOP_DAYS = 30;
+
+function renderInactiveShops(orders) {
+  const list = document.getElementById('inactiveShopsList');
+  if (!list) return;
+
+  const lastOrderByShop = new Map();
+  orders.forEach(o => {
+    if (!o.shop_name) return;
+    const key = o.shop_name.trim().toLowerCase();
+    const date = new Date(o.created_at);
+    const existing = lastOrderByShop.get(key);
+    if (!existing || date > existing.date) {
+      lastOrderByShop.set(key, { displayName: o.shop_name.trim(), date });
+    }
+  });
+
+  const now = new Date();
+  const inactive = Array.from(lastOrderByShop.values())
+    .map(s => ({ ...s, daysSince: Math.floor((now - s.date) / (1000 * 60 * 60 * 24)) }))
+    .filter(s => s.daysSince > INACTIVE_SHOP_DAYS)
+    .sort((a, b) => b.daysSince - a.daysSince);
+
+  if (inactive.length === 0) {
+    list.innerHTML = `<div class="empty-state"><span class="glyph">✨</span><h3>Tout va bien</h3><p>Tous vos magasins ont commandé récemment.</p></div>`;
+    return;
+  }
+
+  list.innerHTML = inactive.map(s => `
+    <div class="inactive-shop-row">
+      <div class="inactive-shop-name">${escapeHtml(s.displayName)}</div>
+      <div class="inactive-shop-days">${s.daysSince} jours</div>
+    </div>
+  `).join('');
+}
+
+async function renderVipTab() {
+  const list = document.getElementById('vipShopsList');
+  list.innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
+  let orders;
+  try {
+    orders = await fetchAllOrdersEver();
+  } catch (e) {
+    console.error(e);
+    list.innerHTML = `<div class="empty-state"><span class="glyph">⚠️</span><h3>Erreur</h3><p>${escapeHtml(e.message || '')}</p></div>`;
+    return;
+  }
+
+  const totalsByShop = new Map(); // clé normalisée -> { displayName, total, count }
+  orders.forEach(o => {
+    if (!o.shop_name) return;
+    const key = o.shop_name.trim().toLowerCase();
+    const existing = totalsByShop.get(key) || { displayName: o.shop_name.trim(), total: 0, count: 0 };
+    existing.total += o.total_with_tva || 0;
+    existing.count += 1;
+    totalsByShop.set(key, existing);
+  });
+
+  const ranked = Array.from(totalsByShop.values()).sort((a, b) => b.total - a.total);
+  renderInactiveShops(orders);
+
+  if (ranked.length === 0) {
+    list.innerHTML = `<div class="empty-state"><span class="glyph">🏆</span><h3>Aucun classement</h3><p>Dès qu'un magasin aura passé une commande, il apparaîtra ici.</p></div>`;
+    return;
+  }
+
+  const medals = ['🥇', '🥈', '🥉'];
+  list.innerHTML = ranked.map((shop, idx) => `
+    <div class="vip-shop-row ${idx < 3 ? 'top3' : ''}">
+      <div class="vip-shop-medal">${medals[idx] || (idx + 1)}</div>
+      <div class="vip-shop-info">
+        <div class="vip-shop-name">${escapeHtml(shop.displayName)}</div>
+        <div class="vip-shop-sub">${shop.count} commande${shop.count !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="vip-shop-total">${fmtPrice(shop.total)}</div>
+    </div>
+  `).join('');
+}
+
+let shopMapInstance = null; // instance Leaflet réutilisée (la créer deux fois sur le même <div> lève une erreur)
+let shopMapMarkersLayer = null;
+
+async function renderCarteTab() {
+  if (typeof L === 'undefined') {
+    document.getElementById('shopMapContainer').innerHTML = `<div class="empty-state"><span class="glyph">📡</span><h3>Carte indisponible</h3><p>Vérifiez votre connexion internet et rouvrez cet onglet.</p></div>`;
+    renderMapShopsList();
+    return;
+  }
+  // Initialise la carte une seule fois ; les appels suivants se
+  // contentent de mettre à jour les marqueurs.
+  if (!shopMapInstance) {
+    shopMapInstance = L.map('shopMapContainer').setView([48.8566, 2.3522], 12); // Paris
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap',
+      maxZoom: 19
+    }).addTo(shopMapInstance);
+    shopMapMarkersLayer = L.layerGroup().addTo(shopMapInstance);
+    // Leaflet a besoin d'un recalcul de taille après l'ouverture du
+    // tiroir (la carte est créée alors que son conteneur était caché,
+    // donc sa taille n'était pas connue) — sinon la carte reste coupée
+    // ou mal centrée.
+    setTimeout(() => shopMapInstance.invalidateSize(), 200);
+  } else {
+    setTimeout(() => shopMapInstance.invalidateSize(), 50);
+  }
+
+  shopMapMarkersLayer.clearLayers();
+
+  let totalsByShop = new Map();
+  try {
+    const orders = await fetchAllOrdersEver();
+    orders.forEach(o => {
+      if (!o.shop_name) return;
+      const key = o.shop_name.trim().toLowerCase();
+      totalsByShop.set(key, (totalsByShop.get(key) || 0) + (o.total_with_tva || 0));
+    });
+  } catch (e) {
+    console.warn('Chargement des totaux pour la carte échoué', e);
+  }
+
+  shopMapPoints.forEach(point => {
+    const key = point.name.trim().toLowerCase();
+    const total = totalsByShop.get(key) || 0;
+    // Rayon entre 8 et 28px selon le total dépensé — purement visuel,
+    // plafonné pour qu'un très gros total ne déborde pas de la carte.
+    const radius = Math.min(28, 8 + Math.sqrt(total) * 0.8);
+    const marker = L.circleMarker([point.lat, point.lng], {
+      radius,
+      color: '#D89A2C',
+      fillColor: '#D89A2C',
+      fillOpacity: 0.65,
+      weight: 2
+    }).bindPopup(`<strong>${point.name}</strong><br>${fmtPrice(total)} au total`);
+    shopMapMarkersLayer.addLayer(marker);
+  });
+
+  renderMapShopsList();
+}
+
+function renderMapShopsList() {
+  const list = document.getElementById('mapShopsList');
+  if (!list) return;
+  if (shopMapPoints.length === 0) {
+    list.innerHTML = `<p class="notifications-intro">Aucun magasin positionné pour le moment.</p>`;
+    return;
+  }
+  list.innerHTML = shopMapPoints.map((p, idx) => `
+    <div class="map-shop-row">
+      <div>
+        <div class="map-shop-row-name">${escapeHtml(p.name)}</div>
+        <div class="map-shop-row-coords">${p.lat}, ${p.lng}</div>
+      </div>
+      <button class="stock-alert-dismiss" data-remove-map-idx="${idx}">✕</button>
+    </div>
+  `).join('');
+  list.querySelectorAll('[data-remove-map-idx]').forEach(btn => {
+    btn.addEventListener('click', () => removeMapShop(parseInt(btn.dataset.removeMapIdx, 10)));
+  });
+}
+
+async function persistMapPoints() {
+  try {
+    const { error } = await supabaseClient.from('settings').update({ shop_map_points: shopMapPoints }).eq('id', 1);
+    if (error) throw error;
+  } catch (e) {
+    console.error(e);
+    showToast('⚠️ Erreur lors de l\'enregistrement');
+  }
+}
+
+async function removeMapShop(idx) {
+  shopMapPoints.splice(idx, 1);
+  await persistMapPoints();
+  renderCarteTab();
+}
+
+function setupCarteTab() {
+  document.getElementById('saveMapShopBtn').addEventListener('click', async () => {
+    const name = document.getElementById('mapShopNameInput').value.trim();
+    const lat = parseFloat(document.getElementById('mapShopLatInput').value);
+    const lng = parseFloat(document.getElementById('mapShopLngInput').value);
+    if (!name) { showToast('Indiquez le nom du magasin'); return; }
+    if (isNaN(lat) || isNaN(lng)) { showToast('Latitude/longitude invalides'); return; }
+
+    const existingIdx = shopMapPoints.findIndex(p => p.name.trim().toLowerCase() === name.toLowerCase());
+    if (existingIdx >= 0) shopMapPoints[existingIdx] = { name, lat, lng };
+    else shopMapPoints.push({ name, lat, lng });
+
+    await persistMapPoints();
+    document.getElementById('mapShopNameInput').value = '';
+    document.getElementById('mapShopLatInput').value = '';
+    document.getElementById('mapShopLngInput').value = '';
+    showToast(`✓ ${name} positionné sur la carte`);
+    renderCarteTab();
+  });
+}
+
+function setupPresentationMode() {
+  document.getElementById('closeAwardModalBtn').addEventListener('click', hideMonthlyAwardModal);
+  document.getElementById('presentationModeBtn').addEventListener('click', () => {
+    document.body.classList.add('presentation-mode');
+    closeDrawer('adminDrawer');
+    document.getElementById('overlay').classList.remove('show');
+    showToast('🖥️ Mode présentation activé');
+  });
+  document.getElementById('presentationExitBtn').addEventListener('click', () => {
+    document.body.classList.remove('presentation-mode');
+    showToast('Mode présentation désactivé');
+  });
 }
 
 function setupVentesTab() {
@@ -3578,6 +4039,8 @@ function init() {
   setupClientPromptModal();
   setupCommissionsTab();
   setupVentesTab();
+  setupCarteTab();
+  setupPresentationMode();
   setupLogoUpload();
   setupImageUpload();
   setupImageCropper();
