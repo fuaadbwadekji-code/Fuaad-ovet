@@ -212,12 +212,38 @@ document.getElementById('btnRun').addEventListener('click', async () => {
       is_promo: false
     };
 
-    const { error } = await sb.from('products').upsert(row, { onConflict: 'ref' });
+    // Vérifier si un produit avec cette ref existe déjà (pour éviter les doublons,
+    // car la colonne ref n'a pas de contrainte unique en base)
+    const { data: existingRow, error: checkError } = await sb
+      .from('products')
+      .select('id')
+      .eq('ref', p.ref)
+      .maybeSingle();
+
+    if (checkError) {
+      log(`❌ ${p.ref} — erreur vérification: ${checkError.message}`, 'err');
+      errorCount++;
+      continue;
+    }
+
+    let error;
+    if (existingRow) {
+      // déjà présent : on met à jour cette ligne précise par son id réel
+      const { error: updateError } = await sb.from('products')
+        .update({ name: p.name, price: p.price, category_id: RESOLVED[p.catKey] })
+        .eq('id', existingRow.id);
+      error = updateError;
+      if (!error) log(`🔄 ${p.ref} — déjà existant, mis à jour`, 'ok');
+    } else {
+      const { error: insertError } = await sb.from('products').insert(row);
+      error = insertError;
+      if (!error) log(`✅ ${p.ref} — ${p.name} ajouté (${p.price.toFixed(2)}€)`, 'ok');
+    }
+
     if (error) {
       log(`❌ ${p.ref} — ${error.message}`, 'err');
       errorCount++;
     } else {
-      log(`✅ ${p.ref} — ${p.name} ajouté (${p.price.toFixed(2)}€)`, 'ok');
       successCount++;
     }
   }
