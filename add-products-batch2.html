@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>OVET — Ajout produits Batch 2</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 0 16px; background:#f5f5f5; }
+  h1 { font-size: 20px; }
+  button { padding: 10px 18px; font-size: 15px; margin: 6px 6px 6px 0; border-radius: 8px; border: none; cursor: pointer; }
+  #btnCheck { background:#2563eb; color:white; }
+  #btnRun { background:#16a34a; color:white; }
+  #btnRun:disabled { background:#9ca3af; cursor:not-allowed; }
+  table { border-collapse: collapse; width: 100%; margin-top: 16px; background:white; font-size: 13px; }
+  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+  th { background: #eee; }
+  .ok { color: #16a34a; font-weight:bold; }
+  .err { color: #dc2626; font-weight:bold; }
+  .warn { color:#d97706; font-weight:bold; }
+  #log { background:#111; color:#0f0; font-family: monospace; font-size: 12px; padding: 12px; border-radius: 8px; height: 260px; overflow-y: auto; margin-top: 16px; white-space: pre-wrap; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; background:#eee; font-size:12px; margin-right:6px;}
+</style>
+</head>
+<body>
+
+<h1>🛒 OVET — Ajout Batch 2 (23 produits)</h1>
+<p>Cette page vérifie d'abord les catégories existantes, crée les catégories manquantes si nécessaire, puis insère les 23 nouveaux produits avec <code>upsert()</code> (aucun produit existant ne sera modifié sauf même <code>ref</code>).</p>
+
+<button id="btnCheck">1️⃣ Vérifier les catégories</button>
+<button id="btnRun" disabled>2️⃣ Ajouter les 23 produits</button>
+
+<div id="catStatus"></div>
+<table id="previewTable" style="display:none">
+  <thead><tr><th>Ref</th><th>Nom</th><th>Prix</th><th>Catégorie (slug)</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<div id="log">En attente... cliquez sur "Vérifier les catégories" pour commencer.</div>
+
+<script>
+const SUPABASE_URL = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_X95sZEaadGOpz9b4PkJvAA_Wq1K_aN9';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+function log(msg, cls) {
+  const el = document.getElementById('log');
+  const span = document.createElement('div');
+  if (cls) span.className = cls;
+  span.textContent = msg;
+  el.appendChild(span);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ---- Définition des catégories requises pour ce batch ----
+// name = ce qu'on cherche dans la table categories (insensible à la casse, recherche par mot-clé)
+// fallbackId = slug à utiliser SI la catégorie n'existe pas et doit être créée
+const REQUIRED_CATEGORIES = [
+  { key: 'magnets',       searchTerms: ['magnet'],                         fallbackId: 'cat-magnets-unified',           fallbackName: 'Magnets' },
+  { key: 'portescles',    searchTerms: ['porte-clé', 'porte clé', 'porte-cles'], fallbackId: 'cat-portes-cles-unified',  fallbackName: 'Porte-clés' },
+  { key: 'assiette',      searchTerms: ['assiette', 'résine'],              fallbackId: 'cat-assiette-resine',           fallbackName: 'Assiette Résine' },
+  { key: 'portefeuilles', searchTerms: ['portefeuille', 'sac'],             fallbackId: 'cat-portefeuilles-sacs-unified',fallbackName: 'Portefeuilles / Sacs' },
+  { key: 'boites',        searchTerms: ['boîte', 'boite', 'miroir'],        fallbackId: 'cat-boites',                    fallbackName: 'Boîtes' },
+  { key: 'tubes',         searchTerms: ['tube'],                           fallbackId: 'cat-tubes',                     fallbackName: 'Tubes' },
+];
+
+// résolu après vérification : key -> category_id réel à utiliser
+let RESOLVED = {};
+
+function uid(prefix) {
+  return prefix + '-' + crypto.randomUUID();
+}
+
+// ---- ÉTAPE 1 : vérifier les catégories ----
+document.getElementById('btnCheck').addEventListener('click', async () => {
+  log('🔍 Lecture de la table categories...');
+  const { data: cats, error } = await sb.from('categories').select('id, name').order('sort_order');
+  if (error) {
+    log('❌ Erreur lecture categories: ' + error.message, 'err');
+    return;
+  }
+  log(`✅ ${cats.length} catégories trouvées dans la base.`);
+  cats.forEach(c => log('   - ' + c.id + '  (' + c.name + ')'));
+
+  const statusEl = document.getElementById('catStatus');
+  statusEl.innerHTML = '<h3>Résultat de la vérification :</h3>';
+
+  for (const req of REQUIRED_CATEGORIES) {
+    const match = cats.find(c =>
+      req.searchTerms.some(term => c.name.toLowerCase().includes(term.toLowerCase()) || c.id.toLowerCase().includes(term.toLowerCase()))
+    );
+    if (match) {
+      RESOLVED[req.key] = match.id;
+      statusEl.innerHTML += `<div class="pill">✅ ${req.fallbackName} → trouvée : <b>${match.id}</b></div><br>`;
+      log(`✅ Catégorie "${req.fallbackName}" trouvée → ${match.id}`, 'ok');
+    } else {
+      RESOLVED[req.key] = req.fallbackId;
+      statusEl.innerHTML += `<div class="pill">⚠️ ${req.fallbackName} → absente, sera créée : <b>${req.fallbackId}</b></div><br>`;
+      log(`⚠️ Catégorie "${req.fallbackName}" absente → sera créée avec id "${req.fallbackId}"`, 'warn');
+    }
+  }
+
+  buildPreview();
+  document.getElementById('btnRun').disabled = false;
+  log('👉 Vérifiez le tableau de prévisualisation puis cliquez sur "Ajouter les 23 produits".');
+});
+
+// ---- Définition des 23 produits ----
+function getProducts() {
+  return [
+    // Magnets métal
+    { ref: 'MA126-4', name: 'Magnet métal France/Paris monuments drapeau', price: 1.00, catKey: 'magnets' },
+
+    // Porte-clés
+    { ref: 'PC161-ME', name: 'Porte-clé rond Métro Paris + cœur I Love Paris', price: 1.00, catKey: 'portescles' },
+    { ref: 'PC161-CH', name: 'Porte-clé rond Chat Noir + cœur I Love Paris', price: 1.00, catKey: 'portescles' },
+    { ref: 'PC161-JO', name: 'Porte-clé rond Joconde + cœur I Love Paris', price: 1.00, catKey: 'portescles' },
+
+    // Horloge
+    { ref: 'UI0008', name: 'Horloge résine façon bois 7 monuments 18cm', price: 4.00, catKey: 'assiette' },
+
+    // Porte-monnaie forme arc
+    { ref: 'PM2531', name: 'Porte-monnaie forme arc Paris chats nuit étoilée', price: 0.60, catKey: 'portefeuilles' },
+    { ref: 'PM2534', name: 'Porte-monnaie forme arc Paris fleurs bleues', price: 0.60, catKey: 'portefeuilles' },
+    { ref: 'PM2535', name: 'Porte-monnaie forme arc Paris fleurs noir et blanc', price: 0.60, catKey: 'portefeuilles' },
+    { ref: 'PM2536', name: 'Porte-monnaie forme arc Paris monuments croquis', price: 0.60, catKey: 'portefeuilles' },
+    { ref: 'PM2538', name: 'Porte-monnaie forme arc Welcome Paris chats love', price: 0.60, catKey: 'portefeuilles' },
+    { ref: 'PM2511', name: 'Porte-monnaie forme arc Paris monuments couleur', price: 0.60, catKey: 'portefeuilles' },
+
+    // Trousses à crayons
+    { ref: 'TR1886', name: 'Trousse à crayons Paris café et croissants', price: 1.00, catKey: 'portefeuilles' },
+    { ref: 'TR1881', name: 'Trousse à crayons Paris nuit étoilée chats', price: 1.00, catKey: 'portefeuilles' },
+    { ref: 'TR1888', name: 'Trousse à crayons Welcome Paris chats love', price: 1.00, catKey: 'portefeuilles' },
+
+    // Boîtes pilule / miroir
+    { ref: 'BP1421', name: 'Boîte pilule rectangulaire miroir Paris chats pont', price: 0.70, catKey: 'boites' },
+    { ref: 'BP1422', name: 'Boîte pilule rectangulaire miroir Paris violet fleurs', price: 0.70, catKey: 'boites' },
+    { ref: 'BP1423', name: 'Boîte pilule rectangulaire miroir Paris monuments croquis', price: 0.70, catKey: 'boites' },
+    { ref: 'BP1424', name: 'Boîte pilule rectangulaire miroir Paris ratatouille café', price: 0.70, catKey: 'boites' },
+    { ref: 'BP1425', name: 'Boîte pilule rectangulaire miroir Paris chats Notre Dame', price: 0.70, catKey: 'boites' },
+    { ref: 'BP1426', name: 'Boîte pilule rectangulaire miroir Paris Arc de Triomphe', price: 0.70, catKey: 'boites' },
+
+    // Miroirs ronds
+    { ref: 'MIR33341', name: 'Miroir rond PM Paris chats noir et blanc', price: 1.10, catKey: 'boites' },
+    { ref: 'MIR33342', name: 'Miroir rond PM Paris monuments coucher de soleil', price: 1.10, catKey: 'boites' },
+    { ref: 'MIR33343', name: 'Miroir rond PM Paris monuments croquis cœurs', price: 1.10, catKey: 'boites' },
+
+    // Tubes cartonnés
+    { ref: 'TUB43', name: 'Tube cartonné 43cm', price: 0.70, catKey: 'tubes' },
+    { ref: 'TUB50', name: 'Tube cartonné 50cm', price: 0.80, catKey: 'tubes' },
+    { ref: 'TUB64', name: 'Tube cartonné 64cm', price: 0.95, catKey: 'tubes' },
+    { ref: 'TUB75', name: 'Tube cartonné 75cm', price: 1.20, catKey: 'tubes' },
+  ];
+}
+
+function buildPreview() {
+  const products = getProducts();
+  const tbody = document.querySelector('#previewTable tbody');
+  tbody.innerHTML = '';
+  products.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${p.ref}</td><td>${p.name}</td><td>${p.price.toFixed(2)}€</td><td>${RESOLVED[p.catKey]}</td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('previewTable').style.display = '';
+}
+
+// ---- ÉTAPE 2 : insertion ----
+document.getElementById('btnRun').addEventListener('click', async () => {
+  document.getElementById('btnRun').disabled = true;
+  log('--- DÉBUT DE L\'INSERTION ---');
+
+  // 2a. créer les catégories manquantes (celles dont RESOLVED[key] == fallbackId ET qui n'existaient pas)
+  const { data: existingCats } = await sb.from('categories').select('id');
+  const existingIds = new Set(existingCats.map(c => c.id));
+
+  for (const req of REQUIRED_CATEGORIES) {
+    const idToUse = RESOLVED[req.key];
+    if (!existingIds.has(idToUse)) {
+      log(`➕ Création de la catégorie manquante: ${idToUse} (${req.fallbackName})`);
+      const { error } = await sb.from('categories').insert({
+        id: idToUse,
+        name: req.fallbackName,
+        sort_order: 999
+      });
+      if (error) {
+        log(`❌ Erreur création catégorie ${idToUse}: ${error.message}`, 'err');
+      } else {
+        log(`✅ Catégorie créée: ${idToUse}`, 'ok');
+        existingIds.add(idToUse);
+      }
+    }
+  }
+
+  // 2b. insérer les produits un par un avec upsert sur ref
+  const products = getProducts();
+  let successCount = 0, errorCount = 0;
+
+  for (const p of products) {
+    const row = {
+      id: uid('prod'),
+      ref: p.ref,
+      name: p.name,
+      price: p.price,
+      category_id: RESOLVED[p.catKey],
+      image: null,
+      sort_order: 0,
+      unit_step: 1,
+      unit_label: null,
+      out_of_stock: false,
+      featured: false,
+      is_new: true,
+      is_promo: false
+    };
+
+    const { error } = await sb.from('products').upsert(row, { onConflict: 'ref' });
+    if (error) {
+      log(`❌ ${p.ref} — ${error.message}`, 'err');
+      errorCount++;
+    } else {
+      log(`✅ ${p.ref} — ${p.name} ajouté (${p.price.toFixed(2)}€)`, 'ok');
+      successCount++;
+    }
+  }
+
+  log(`--- TERMINÉ : ${successCount} ajoutés, ${errorCount} erreurs ---`, errorCount ? 'err' : 'ok');
+  if (errorCount === 0) {
+    log('🎉 Tous les produits ont été ajoutés avec succès. Pensez à ajouter les images via Supabase Storage puis mettre à jour le champ "image" de chaque produit.', 'ok');
+  }
+});
+</script>
+</body>
+</html>
