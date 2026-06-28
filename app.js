@@ -397,6 +397,7 @@ async function loadAllData() {
     }
     dismissedNotifications = new Set((settings.dismissed_notifications || []).map(String));
     shopMapPoints = settings.shop_map_points || [];
+    commissionLedger = settings.commission_ledger || [];
     theme = Object.assign({}, DEFAULT_THEME, settings.theme_settings || {});
     savedTheme = Object.assign({}, theme);
     applyThemeToPage();
@@ -484,6 +485,13 @@ let knownOrderIds = new Set();
 let knownOrdersLog = [];
 let dismissedNotifications = new Set();
 let shopMapPoints = []; // [{ name, lat, lng }]
+/* Registre permanent des commissions : chaque commande confirmée y
+   inscrit sa commission UNE FOIS, de façon définitive — même si la
+   commande d'origine est ensuite supprimée définitivement de la table
+   "orders", sa commission reste comptée ici. C'est la correction
+   demandée explicitement : la commission se fige au moment de la
+   confirmation, pas recalculée à la volée en relisant les commandes. */
+let commissionLedger = [];
 /* Mois actuellement affiché dans les onglets Commissions / Ventes —
    indépendant l'un de l'autre pour que naviguer dans l'un ne déplace
    pas l'autre par surprise. */
@@ -1589,6 +1597,27 @@ async function submitOrder(clientName, shopName) {
     knownOrdersLog = [{ id: insertedOrder.id, order_number: orderNumber, client_name: clientName, shop_name: shopName, created_at: nowIso }].concat(knownOrdersLog);
     knownOrderIds.add(insertedOrder.id);
     renderAdminNotifications();
+
+    // Fige la commission de cette commande dans le registre permanent,
+    // AVANT toute possibilité d'archivage ou de suppression future de
+    // la commande elle-même — la commission, une fois gagnée, ne doit
+    // jamais disparaître même si la commande est supprimée plus tard.
+    const commissionInfo = calculateOrderCommission({ shop_name: shopName, total_with_tva: totalWithTva });
+    commissionLedger.push({
+      orderId: insertedOrder.id,
+      orderNumber,
+      clientName,
+      shopName,
+      amount: commissionInfo.amount,
+      rate: commissionInfo.rate,
+      createdAt: nowIso
+    });
+    try {
+      await supabaseClient.from('settings').update({ commission_ledger: commissionLedger }).eq('id', 1);
+    } catch (e) {
+      console.error('Enregistrement de la commission échoué', e);
+    }
+
     checkForCelebrationTriggers(totalWithTva);
     if (adminUnlocked) playAdminEntranceChime();
 
@@ -2438,46 +2467,38 @@ async function renderCommissionsTab() {
   const monthNav = document.querySelector('#tabCommissions .month-nav');
   const comparisonEl = document.getElementById('commissionComparison');
   const listEl = document.getElementById('commissionOrdersList');
-  listEl.innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
 
-  let orders;
-  try {
-    if (commissionsShowingTotal) {
-      monthNav.style.display = 'none';
-      comparisonEl.style.display = 'none';
-      document.getElementById('commissionsMonthLabel').textContent = 'Total général';
-      orders = await fetchAllOrdersFullForCommissions();
-    } else {
-      monthNav.style.display = 'flex';
-      document.getElementById('commissionsMonthLabel').textContent = `${MONTH_NAMES_FR[commissionsViewMonth]} ${commissionsViewYear}`;
-      orders = await fetchOrdersForMonth(commissionsViewYear, commissionsViewMonth);
-    }
-  } catch (e) {
-    console.error(e);
-    listEl.innerHTML = `<div class="empty-state"><span class="glyph">⚠️</span><h3>Erreur</h3><p>${escapeHtml(e.message || '')}</p></div>`;
-    return;
+  let entries;
+  if (commissionsShowingTotal) {
+    monthNav.style.display = 'none';
+    comparisonEl.style.display = 'none';
+    document.getElementById('commissionsMonthLabel').textContent = 'Total général';
+    entries = commissionLedger.slice();
+  } else {
+    monthNav.style.display = 'flex';
+    document.getElementById('commissionsMonthLabel').textContent = `${MONTH_NAMES_FR[commissionsViewMonth]} ${commissionsViewYear}`;
+    const { start, end } = getMonthBoundaries(commissionsViewYear, commissionsViewMonth);
+    entries = commissionLedger.filter(e => {
+      const d = new Date(e.createdAt);
+      return d >= start && d <= end;
+    });
   }
 
-  let totalCommission = 0;
-  const rows = orders.map(o => {
-    const { amount, rate } = calculateOrderCommission(o);
-    totalCommission += amount;
-    return { o, amount, rate };
-  }).sort((a, b) => new Date(b.o.created_at) - new Date(a.o.created_at));
+  entries = entries.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const totalCommission = entries.reduce((sum, e) => sum + e.amount, 0);
 
   document.getElementById('commissionTotalAmount').textContent = fmtPrice(totalCommission);
-  document.getElementById('commissionTotalSub').textContent = `${orders.length} commande${orders.length !== 1 ? 's' : ''} ce mois-ci`;
+  document.getElementById('commissionTotalSub').textContent = `${entries.length} commande${entries.length !== 1 ? 's' : ''}${commissionsShowingTotal ? ' au total' : ' ce mois-ci'}`;
 
-  // Comparaison avec le mois précédent — uniquement pertinente en mode
-  // "vue par mois" ; calculée à la volée (pas de cache) pour rester
-  // toujours exacte si une commande est ajoutée ou modifiée après coup.
+  // Comparaison avec le mois précédent — uniquement pertinente en vue
+  // par mois, calculée directement depuis le registre permanent.
   if (!commissionsShowingTotal) {
-  try {
     let prevMonth = commissionsViewMonth - 1, prevYear = commissionsViewYear;
     if (prevMonth < 0) { prevMonth = 11; prevYear--; }
-    const prevOrders = await fetchOrdersForMonth(prevYear, prevMonth);
-    const prevTotal = prevOrders.reduce((sum, o) => sum + calculateOrderCommission(o).amount, 0);
-    const comparisonEl = document.getElementById('commissionComparison');
+    const { start: prevStart, end: prevEnd } = getMonthBoundaries(prevYear, prevMonth);
+    const prevTotal = commissionLedger
+      .filter(e => { const d = new Date(e.createdAt); return d >= prevStart && d <= prevEnd; })
+      .reduce((sum, e) => sum + e.amount, 0);
     if (prevTotal > 0) {
       const pctChange = ((totalCommission - prevTotal) / prevTotal) * 100;
       const isUp = pctChange >= 0;
@@ -2487,24 +2508,21 @@ async function renderCommissionsTab() {
     } else {
       comparisonEl.style.display = 'none';
     }
-  } catch (e) {
-    console.warn('Comparaison mensuelle échouée', e);
-  }
   }
 
-  if (rows.length === 0) {
-    listEl.innerHTML = `<div class="empty-state"><span class="glyph">💶</span><h3>Aucune commande</h3><p>Aucune commande sur ce mois pour le moment.</p></div>`;
+  if (entries.length === 0) {
+    listEl.innerHTML = `<div class="empty-state"><span class="glyph">💶</span><h3>Aucune commande</h3><p>Aucune commission enregistrée pour cette période.</p></div>`;
   } else {
-    listEl.innerHTML = rows.map(({ o, amount, rate }) => {
-      const dateStr = new Date(o.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-      const isReduced = rate !== DEFAULT_COMMISSION_RATE;
+    listEl.innerHTML = entries.map(e => {
+      const dateStr = new Date(e.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      const isReduced = e.rate !== DEFAULT_COMMISSION_RATE;
       return `
       <div class="commission-order-row">
         <div class="commission-order-info">
-          <div class="commission-order-name">Commande n°${escapeHtml(o.order_number)} — ${escapeHtml(o.client_name)}</div>
-          <div class="commission-order-sub">${o.shop_name ? escapeHtml(o.shop_name) + ' · ' : ''}${dateStr} · Total ${fmtPrice(o.total_with_tva)} ${isReduced ? `· taux réduit (${rate}%)` : ''}</div>
+          <div class="commission-order-name">Commande n°${escapeHtml(e.orderNumber)} — ${escapeHtml(e.clientName)}</div>
+          <div class="commission-order-sub">${e.shopName ? escapeHtml(e.shopName) + ' · ' : ''}${dateStr} ${isReduced ? `· taux spécial (${e.rate}%)` : ''}</div>
         </div>
-        <div class="commission-order-amount">${fmtPrice(amount)}</div>
+        <div class="commission-order-amount">${fmtPrice(e.amount)}</div>
       </div>`;
     }).join('');
   }
