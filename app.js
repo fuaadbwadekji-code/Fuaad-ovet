@@ -22,10 +22,46 @@ const TVA_RATE = 0.20; // 20% — appliqué uniquement au moment de la confirmat
    insensible à la casse et aux espaces superflus pour éviter qu'une
    différence de saisie ("Eva souvenirs" vs "Eva Souvenirs") fasse
    rater l'exception. */
+/* Distance de Levenshtein simple — nombre minimal de modifications
+   (ajout/suppression/changement d'une lettre) pour passer d'un mot à
+   l'autre. Utilisée pour tolérer une petite faute de frappe dans le
+   nom d'un magasin sans pour autant rater le taux spécial auquel il a
+   droit. */
+function levenshteinDistance(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
 function getCommissionRateForShop(shopName) {
   const normalized = (shopName || '').trim().toLowerCase();
-  const isReduced = reducedCommissionShops.some(s => s.trim().toLowerCase() === normalized);
-  return isReduced ? SPECIAL_COMMISSION_RATE : DEFAULT_COMMISSION_RATE;
+  if (!normalized) return DEFAULT_COMMISSION_RATE;
+
+  // Correspondance exacte (cas normal, le nom est saisi correctement).
+  if (reducedCommissionShops.some(s => s.trim().toLowerCase() === normalized)) {
+    return SPECIAL_COMMISSION_RATE;
+  }
+
+  // Tolérance à une petite faute de frappe : autorise jusqu'à 1
+  // caractère de différence pour les noms courts, jusqu'à 2 pour les
+  // noms plus longs — évite qu'une faute de frappe fasse rater le taux
+  // spécial, sans pour autant faire correspondre des noms réellement
+  // différents entre eux.
+  const isFuzzyMatch = reducedCommissionShops.some(s => {
+    const candidate = s.trim().toLowerCase();
+    const maxAllowedDistance = candidate.length > 10 ? 2 : 1;
+    return levenshteinDistance(candidate, normalized) <= maxAllowedDistance;
+  });
+  return isFuzzyMatch ? SPECIAL_COMMISSION_RATE : DEFAULT_COMMISSION_RATE;
 }
 
 /* Calcule les bornes exactes (début et fin) d'un mois calendaire donné.
@@ -2839,6 +2875,55 @@ async function removeMapShop(idx) {
   renderCarteTab();
 }
 
+let addressAutocompleteTimer = null;
+let selectedAddressCoords = null; // { lat, lng } rempli quand une suggestion est cliquée
+
+function setupAddressAutocomplete() {
+  const input = document.getElementById('mapShopAddressInput');
+  const box = document.getElementById('addressSuggestionsBox');
+
+  input.addEventListener('input', () => {
+    selectedAddressCoords = null; // l'utilisateur retape, l'ancienne sélection n'est plus valide
+    const query = input.value.trim();
+    clearTimeout(addressAutocompleteTimer);
+    if (query.length < 3) {
+      box.classList.remove('show');
+      box.innerHTML = '';
+      return;
+    }
+    // Attend une courte pause dans la frappe avant d'interroger
+    // Nominatim — évite une requête à chaque lettre tapée.
+    addressAutocompleteTimer = setTimeout(async () => {
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`;
+        const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
+        const results = await res.json();
+        if (!results || results.length === 0) {
+          box.innerHTML = `<div class="address-suggestion-item" style="opacity:0.6;">Aucun résultat</div>`;
+          box.classList.add('show');
+          return;
+        }
+        box.innerHTML = results.map((r, idx) => `<div class="address-suggestion-item" data-suggestion-idx="${idx}">${escapeHtml(r.display_name)}</div>`).join('');
+        box.classList.add('show');
+        box.querySelectorAll('[data-suggestion-idx]').forEach((el, idx) => {
+          el.addEventListener('click', () => {
+            input.value = results[idx].display_name;
+            selectedAddressCoords = { lat: parseFloat(results[idx].lat), lng: parseFloat(results[idx].lon) };
+            box.classList.remove('show');
+          });
+        });
+      } catch (e) {
+        console.warn('Autocomplete adresse échoué', e);
+      }
+    }, 450);
+  });
+
+  // Cache la liste si on clique ailleurs sur la page.
+  document.addEventListener('click', (e) => {
+    if (e.target !== input) box.classList.remove('show');
+  });
+}
+
 function setupCarteTab() {
   document.getElementById('saveMapShopBtn').addEventListener('click', async () => {
     const name = document.getElementById('mapShopNameInput').value.trim();
@@ -2848,22 +2933,27 @@ function setupCarteTab() {
 
     const btn = document.getElementById('saveMapShopBtn');
     const originalLabel = btn.textContent;
-    btn.textContent = '⏳ Recherche de l\'adresse…';
     btn.disabled = true;
 
     try {
-      // Nominatim (OpenStreetMap) : service de géocodage gratuit, sans
-      // clé d'API — convertit une adresse en texte libre en
-      // coordonnées GPS exploitables sur la carte.
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
-      const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
-      const results = await res.json();
-      if (!results || results.length === 0) {
-        showToast('⚠️ Adresse introuvable, vérifiez l\'orthographe');
-        return;
+      let lat, lng;
+      if (selectedAddressCoords) {
+        // L'utilisateur a cliqué une suggestion : les coordonnées sont
+        // déjà connues, pas besoin de refaire un appel à Nominatim.
+        lat = selectedAddressCoords.lat;
+        lng = selectedAddressCoords.lng;
+      } else {
+        btn.textContent = '⏳ Recherche de l\'adresse…';
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+        const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
+        const results = await res.json();
+        if (!results || results.length === 0) {
+          showToast('⚠️ Adresse introuvable, vérifiez l\'orthographe');
+          return;
+        }
+        lat = parseFloat(results[0].lat);
+        lng = parseFloat(results[0].lon);
       }
-      const lat = parseFloat(results[0].lat);
-      const lng = parseFloat(results[0].lon);
 
       const existingIdx = shopMapPoints.findIndex(p => p.name.trim().toLowerCase() === name.toLowerCase());
       const point = { name, lat, lng, address };
@@ -2873,6 +2963,7 @@ function setupCarteTab() {
       await persistMapPoints();
       document.getElementById('mapShopNameInput').value = '';
       document.getElementById('mapShopAddressInput').value = '';
+      selectedAddressCoords = null;
       showToast(`✓ ${name} localisé et ajouté à la carte`);
       renderCarteTab();
     } catch (e) {
@@ -4111,6 +4202,7 @@ function init() {
   setupCommissionsTab();
   setupVentesTab();
   setupCarteTab();
+  setupAddressAutocomplete();
   setupAwardModal();
   setupLogoUpload();
   setupImageUpload();
