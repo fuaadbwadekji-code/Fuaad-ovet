@@ -945,6 +945,28 @@ button{font-family:inherit;cursor:pointer;}
 .add-cat-row button{background:var(--mustard);color:var(--navy-deep);border:none;border-radius:6px;padding:0 16px;font-size:13px;font-weight:700;}
 
 .tab-row{display:flex;gap:5px;margin-bottom:16px;background:var(--paper);border-radius:10px;padding:4px;overflow-x:auto;box-shadow:0 1px 6px rgba(20,20,30,0.06);border:1px solid rgba(20,20,30,0.06);}
+.tab-badge{
+  display:inline-block;background:var(--brick);color:#fff;font-size:10.5px;font-weight:700;
+  min-width:17px;height:17px;border-radius:9px;padding:0 4px;line-height:17px;
+  vertical-align:top;margin-left:1px;
+}
+.notifications-intro{font-size:12.5px;color:var(--brass);line-height:1.5;margin:0 2px 14px;}
+.stock-alert-card{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(255,255,255,0.7);border:1px solid var(--glass-border-soft);
+  border-radius:12px;padding:10px;margin-bottom:8px;
+}
+.stock-alert-card.zero{background:rgba(178,59,46,0.07);border-color:rgba(178,59,46,0.25);}
+.stock-alert-card img{width:46px;height:46px;object-fit:contain;background:#fff;border-radius:8px;flex-shrink:0;}
+.stock-alert-info{flex:1;min-width:0;}
+.stock-alert-name{font-size:13px;font-weight:700;color:var(--ink);}
+.stock-alert-ref{font-size:11px;color:var(--brass);}
+.stock-alert-qty{font-size:12px;font-weight:600;margin-top:2px;color:var(--mustard-deep);}
+.stock-alert-card.zero .stock-alert-qty{color:var(--brick);}
+.stock-alert-dismiss{
+  background:rgba(140,112,72,0.1);border:none;color:var(--brass);
+  width:26px;height:26px;border-radius:50%;font-size:13px;flex-shrink:0;
+}
 @keyframes tabFadeIn{
   0%{opacity:0;transform:translateY(8px);}
   100%{opacity:1;transform:translateY(0);}
@@ -1371,6 +1393,7 @@ button{font-family:inherit;cursor:pointer;}
         <button class="tab-btn active" data-tab="orders">Commandes</button>
         <button class="tab-btn" data-tab="products">Produits</button>
         <button class="tab-btn" data-tab="categories">Catégories</button>
+        <button class="tab-btn" data-tab="notifications">🔔 <span id="notificationsTabBadge" class="tab-badge" style="display:none;">0</span></button>
         <button class="tab-btn" data-tab="settings">Réglages</button>
       </div>
 
@@ -1401,6 +1424,12 @@ button{font-family:inherit;cursor:pointer;}
           <input type="text" id="newCatInput" placeholder="Nouvelle catégorie…">
           <button id="addCatBtn">Ajouter</button>
         </div>
+      </div>
+
+      <div id="tabNotifications" style="display:none;">
+        <div class="admin-section-label">🔔 Alertes de stock bas</div>
+        <p class="notifications-intro">Un produit apparaît ici dès que son stock atteint 20 ou moins. Une alerte reste affichée jusqu'à ce que vous la supprimiez vous-même avec le ✕.</p>
+        <div id="adminNotificationsList"></div>
       </div>
 
       <div id="tabSettings" style="display:none;">
@@ -1736,6 +1765,11 @@ button{font-family:inherit;cursor:pointer;}
       <input type="number" step="0.01" id="formPrice" placeholder="1.00">
     </div>
     <div class="form-group">
+      <label>Stock (quantité disponible)</label>
+      <input type="number" step="1" min="0" id="formStock" placeholder="Ex. 50">
+      <div class="form-hint">Diminue automatiquement à chaque commande confirmée. Laissez vide si vous ne suivez pas le stock de ce produit.</div>
+    </div>
+    <div class="form-group">
       <label>Catégorie</label>
       <select id="formCategory"></select>
     </div>
@@ -1815,6 +1849,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20260628e"></script>
+<script src="app.js?v=20260628f"></script>
 </body>
 </html>

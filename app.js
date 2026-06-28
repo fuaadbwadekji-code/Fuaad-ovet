@@ -17,6 +17,13 @@ const TVA_RATE = 0.20; // 20% — appliqué uniquement au moment de la confirmat
 let categories = [];
 let products = [];
 let settings = { shop_name: 'Souvenirs de Paris', whatsapp: '', email: '', admin_pin: '1234', next_order_number: 1 };
+/* IDs des alertes de stock bas que Fuaad a explicitement supprimées
+   dans l'onglet Notifications. Une alerte supprimée ne réapparaît
+   jamais tant que le stock ne repasse pas au-dessus du seuil puis
+   redescend (ce qui correspond à un nouvel événement, pas la même
+   alerte). Persisté côté serveur pour survivre à un rechargement. */
+let dismissedStockAlerts = new Set();
+const LOW_STOCK_THRESHOLD = 20;
 
 /* Réglages d'apparence personnalisables depuis l'admin (onglet Réglages
    → Thème). Stockés en JSON dans settings.theme_settings et appliqués
@@ -256,7 +263,8 @@ function mapDbProductToLocal(p) {
     categoryId: p.category_id, image: p.image, sortOrder: p.sort_order || 0,
     unitStep: p.unit_step || 1, unitLabel: p.unit_label || '',
     outOfStock: !!p.out_of_stock, featured: !!p.featured,
-    hidden: !!p.hidden, isNew: !!p.is_new, isPromo: !!p.is_promo
+    hidden: !!p.hidden, isNew: !!p.is_new, isPromo: !!p.is_promo,
+    stock: (p.stock != null) ? Number(p.stock) : null
   };
 }
 
@@ -299,6 +307,7 @@ async function loadAllData() {
       coverImage: c.cover_image || null
     }));
     settings = settRes.data || settings;
+    dismissedStockAlerts = new Set(settings.dismissed_stock_alerts || []);
     theme = Object.assign({}, DEFAULT_THEME, settings.theme_settings || {});
     savedTheme = Object.assign({}, theme);
     applyThemeToPage();
@@ -1359,6 +1368,23 @@ async function submitOrder(clientName, shopName) {
 
     sendOrderNotificationEmail(orderNumber, clientName, shopName, items, totalWithTva);
 
+    // Décrémente le stock de chaque produit suivi (stock non nul), sans
+    // jamais descendre sous 0. Volontairement après l'enregistrement de
+    // la commande : la commande elle-même ne doit jamais échouer ou
+    // être bloquée à cause d'un souci de mise à jour du stock.
+    for (const id of Object.keys(cart)) {
+      const p = products.find(x => x.id === id);
+      if (!p || p.stock == null) continue;
+      const newStock = Math.max(0, p.stock - cart[id]);
+      try {
+        const { error: stockErr } = await supabaseClient.from('products').update({ stock: newStock }).eq('id', id);
+        if (!stockErr) p.stock = newStock;
+      } catch (e) {
+        console.warn('Mise à jour du stock échouée pour', p.ref, e);
+      }
+    }
+    renderAdminNotifications();
+
     document.getElementById('successOrderNum').textContent = `Commande n°${orderNumber}`;
     cart = {};
     updateCartUI();
@@ -1474,6 +1500,7 @@ function unlockAdminPanel() {
   renderAdminProductList();
   renderAdminCatList();
   renderAdminOrderList();
+  renderAdminNotifications();
   prefillSettings();
   prefillThemeControls();
   showClientPromptModal();
@@ -1513,7 +1540,7 @@ function setupAdminTabs() {
     btn.addEventListener('click', async () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      ['orders', 'products', 'categories', 'settings'].forEach(t => {
+      ['orders', 'products', 'categories', 'notifications', 'settings'].forEach(t => {
         const panel = document.getElementById('tab' + capitalize(t));
         if (t === btn.dataset.tab) {
           panel.style.display = 'block';
@@ -1532,6 +1559,9 @@ function setupAdminTabs() {
       // avec une copie locale obsolète.
       if (btn.dataset.tab === 'products') {
         await refreshAdminProducts();
+      }
+      if (btn.dataset.tab === 'notifications') {
+        renderAdminNotifications();
       }
     });
   });
@@ -2025,6 +2055,100 @@ async function moveCategory(categoryId, action) {
     console.error(e);
     showToast('⚠️ Erreur lors de l\'enregistrement de l\'ordre');
   }
+}
+
+/* Construit la liste des alertes de stock bas, regroupées par
+   catégorie. Un produit apparaît si stock != null et stock <= seuil,
+   SAUF si Fuaad a déjà supprimé cette alerte précise (même produit, au
+   même niveau de stock observé) — la clé de suppression inclut le
+   niveau de stock pour qu'un nouvel épuisement après réassort déclenche
+   une alerte fraîche plutôt que de rester silencieux pour toujours. */
+function getLowStockAlerts() {
+  const alerts = [];
+  products.forEach(p => {
+    if (p.stock == null || p.stock > LOW_STOCK_THRESHOLD) return;
+    const alertKey = `${p.id}:${p.stock}`;
+    if (dismissedStockAlerts.has(alertKey)) return;
+    alerts.push(p);
+  });
+  return alerts;
+}
+
+function renderAdminNotifications() {
+  const list = document.getElementById('adminNotificationsList');
+  if (!list) return;
+  const alerts = getLowStockAlerts();
+  const badge = document.getElementById('notificationsTabBadge');
+  if (badge) {
+    if (alerts.length > 0) { badge.textContent = alerts.length; badge.style.display = 'inline-block'; }
+    else badge.style.display = 'none';
+  }
+
+  if (alerts.length === 0) {
+    list.innerHTML = `<div class="empty-state"><span class="glyph">🔔</span><h3>Aucune alerte</h3><p>Tous vos produits suivis ont un stock suffisant (plus de ${LOW_STOCK_THRESHOLD}).</p></div>`;
+    return;
+  }
+
+  let html = '';
+  categories.forEach(cat => {
+    const items = alerts.filter(p => p.categoryId === cat.id);
+    if (items.length === 0) return;
+    html += `<div class="section-title">${escapeHtml(cat.name)}</div>`;
+    items.forEach(p => {
+      const isZero = p.stock === 0;
+      html += `
+      <div class="stock-alert-card ${isZero ? 'zero' : ''}">
+        <img src="${p.image || ''}" alt="">
+        <div class="stock-alert-info">
+          <div class="stock-alert-name">${escapeHtml(p.name)}</div>
+          <div class="stock-alert-ref">Réf. ${escapeHtml(p.ref)}</div>
+          <div class="stock-alert-qty">${isZero ? '⚠️ Stock épuisé' : `🟡 Stock bas : ${p.stock} restant${p.stock > 1 ? 's' : ''}`}</div>
+        </div>
+        <button class="stock-alert-dismiss" data-dismiss-id="${p.id}" data-dismiss-stock="${p.stock}">✕</button>
+      </div>`;
+    });
+  });
+  const orphanAlerts = alerts.filter(p => !categories.some(c => c.id === p.categoryId));
+  if (orphanAlerts.length > 0) {
+    html += `<div class="section-title">Autres</div>`;
+    orphanAlerts.forEach(p => {
+      const isZero = p.stock === 0;
+      html += `
+      <div class="stock-alert-card ${isZero ? 'zero' : ''}">
+        <img src="${p.image || ''}" alt="">
+        <div class="stock-alert-info">
+          <div class="stock-alert-name">${escapeHtml(p.name)}</div>
+          <div class="stock-alert-ref">Réf. ${escapeHtml(p.ref)}</div>
+          <div class="stock-alert-qty">${isZero ? '⚠️ Stock épuisé' : `🟡 Stock bas : ${p.stock} restant${p.stock > 1 ? 's' : ''}`}</div>
+        </div>
+        <button class="stock-alert-dismiss" data-dismiss-id="${p.id}" data-dismiss-stock="${p.stock}">✕</button>
+      </div>`;
+    });
+  }
+
+  list.innerHTML = html;
+  list.querySelectorAll('[data-dismiss-id]').forEach(btn => {
+    btn.addEventListener('click', () => dismissStockAlert(btn.dataset.dismissId, parseInt(btn.dataset.dismissStock, 10)));
+  });
+}
+
+/* Supprime définitivement une alerte précise (produit + niveau de
+   stock observé) — persisté côté serveur pour ne jamais réapparaître
+   après un rechargement, comme demandé explicitement. */
+async function dismissStockAlert(productId, stockLevel) {
+  const alertKey = `${productId}:${stockLevel}`;
+  dismissedStockAlerts.add(alertKey);
+  try {
+    const { error } = await supabaseClient
+      .from('settings')
+      .update({ dismissed_stock_alerts: Array.from(dismissedStockAlerts) })
+      .eq('id', 1);
+    if (error) throw error;
+  } catch (e) {
+    console.error(e);
+    showToast('⚠️ Erreur lors de la suppression de l\'alerte');
+  }
+  renderAdminNotifications();
 }
 
 function renderAdminCatList() {
@@ -2865,6 +2989,7 @@ function openProductForm(productId) {
     document.getElementById('formName').value = p.name;
     document.getElementById('formRef').value = p.ref;
     document.getElementById('formPrice').value = p.price;
+    document.getElementById('formStock').value = (p.stock != null) ? p.stock : '';
     document.getElementById('formCategory').value = p.categoryId;
     document.getElementById('outOfStockToggle').checked = !!p.outOfStock;
     document.getElementById('featuredToggle').checked = !!p.featured;
@@ -2895,6 +3020,7 @@ function openProductForm(productId) {
     document.getElementById('formName').value = '';
     document.getElementById('formRef').value = '';
     document.getElementById('formPrice').value = '';
+    document.getElementById('formStock').value = '';
     if (categories.length) document.getElementById('formCategory').value = categories[0].id;
     document.getElementById('outOfStockToggle').checked = false;
     document.getElementById('featuredToggle').checked = false;
@@ -3077,6 +3203,8 @@ function setupProductFormSave() {
     const name = document.getElementById('formName').value.trim();
     const ref = document.getElementById('formRef').value.trim();
     const price = parseFloat(document.getElementById('formPrice').value);
+    const stockRaw = document.getElementById('formStock').value.trim();
+    const stock = stockRaw === '' ? null : Math.max(0, parseInt(stockRaw, 10));
     const categoryId = document.getElementById('formCategory').value;
     const outOfStock = document.getElementById('outOfStockToggle').checked;
     const featured = document.getElementById('featuredToggle').checked;
@@ -3126,24 +3254,24 @@ function setupProductFormSave() {
       if (editingProductId) {
         const { error } = await supabaseClient.from('products').update({
           name, ref, price, category_id: categoryId, image: finalImageUrl,
-          unit_step: unitStep, unit_label: unitLabel,
+          unit_step: unitStep, unit_label: unitLabel, stock: stock,
           out_of_stock: outOfStock, featured: featured, is_new: isNew, is_promo: isPromo
         }).eq('id', editingProductId);
         if (error) throw error;
         const p = products.find(x => x.id === editingProductId);
         p.name = name; p.ref = ref; p.price = price; p.categoryId = categoryId;
-        p.image = finalImageUrl; p.unitStep = unitStep; p.unitLabel = unitLabel;
+        p.image = finalImageUrl; p.unitStep = unitStep; p.unitLabel = unitLabel; p.stock = stock;
         p.outOfStock = outOfStock; p.featured = featured; p.isNew = isNew; p.isPromo = isPromo;
         showToast('Produit mis à jour');
       } else {
         const newId = uid('prod');
         const { error } = await supabaseClient.from('products').insert({
           id: newId, ref, name, price, category_id: categoryId, image: finalImageUrl,
-          unit_step: unitStep, unit_label: unitLabel, sort_order: products.length + 1,
+          unit_step: unitStep, unit_label: unitLabel, sort_order: products.length + 1, stock: stock,
           out_of_stock: outOfStock, featured: featured, is_new: isNew, is_promo: isPromo
         });
         if (error) throw error;
-        products.push({ id: newId, ref, name, price, categoryId, image: finalImageUrl, unitStep, unitLabel, outOfStock, featured, isNew, isPromo, hidden: false });
+        products.push({ id: newId, ref, name, price, categoryId, image: finalImageUrl, unitStep, unitLabel, stock, outOfStock, featured, isNew, isPromo, hidden: false });
         showToast('Produit ajouté');
       }
       closeDrawer('productFormDrawer');
