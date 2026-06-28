@@ -13,17 +13,51 @@ if (typeof emailjs !== 'undefined' && EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.
 /* ---------- Constantes ---------- */
 const TVA_RATE = 0.20; // 20% — appliqué uniquement au moment de la confirmation de commande
 
+/* Calcule la commission de Fuaad sur une commande. Décision explicite :
+   la commission se calcule sur le "Total à payer" (TTC, TVA incluse),
+   PAS sur le sous-total HT — c'est un choix délibéré de Fuaad, pas une
+   erreur de calcul comptable.
+   Les magasins de la liste reducedCommissionShops bénéficient d'un taux
+   réduit (0,05% au lieu de 5% par défaut). La comparaison de noms est
+   insensible à la casse et aux espaces superflus pour éviter qu'une
+   différence de saisie ("Eva souvenirs" vs "Eva Souvenirs") fasse
+   rater l'exception. */
+function getCommissionRateForShop(shopName) {
+  const normalized = (shopName || '').trim().toLowerCase();
+  const isReduced = reducedCommissionShops.some(s => s.trim().toLowerCase() === normalized);
+  return isReduced ? REDUCED_COMMISSION_RATE : DEFAULT_COMMISSION_RATE;
+}
+
+/* Calcule les bornes exactes (début et fin) d'un mois calendaire donné.
+   Utilise l'arithmétique native des dates JavaScript — qui connaît déjà
+   le nombre de jours de chaque mois, y compris février lors d'une année
+   bissextile — plutôt qu'un nombre de jours codé en dur, pour ne jamais
+   se tromper quel que soit le mois ou l'année. */
+function getMonthBoundaries(year, monthIndex /* 0-11 */) {
+  const start = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+  // Le jour 0 du mois suivant est toujours le dernier jour du mois
+  // demandé — fonctionne pour tous les mois, 28/29/30/31 jours inclus.
+  const end = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+  return { start, end };
+}
+
+function calculateOrderCommission(order) {
+  const rate = getCommissionRateForShop(order.shop_name);
+  const totalWithTva = order.total_with_tva != null ? order.total_with_tva : order.total;
+  return { amount: +(totalWithTva * rate / 100).toFixed(2), rate };
+}
+
 /* ---------- État ---------- */
 let categories = [];
 let products = [];
 let settings = { shop_name: 'Souvenirs de Paris', whatsapp: '', email: '', admin_pin: '1234', next_order_number: 1 };
-/* IDs des alertes de stock bas que Fuaad a explicitement supprimées
-   dans l'onglet Notifications. Une alerte supprimée ne réapparaît
-   jamais tant que le stock ne repasse pas au-dessus du seuil puis
-   redescend (ce qui correspond à un nouvel événement, pas la même
-   alerte). Persisté côté serveur pour survivre à un rechargement. */
-let dismissedStockAlerts = new Set();
-const LOW_STOCK_THRESHOLD = 20;
+/* Taux de commission de Fuaad sur chaque commande, calculé sur le
+   Total à payer (TVA incluse), comme décidé explicitement — voir
+   calculateOrderCommission(). Certains magasins (liste personnalisable
+   depuis l'admin) ont un taux réduit spécial. */
+const DEFAULT_COMMISSION_RATE = 5;      // %
+const REDUCED_COMMISSION_RATE = 0.05;   // % — pour les magasins de la liste ci-dessous
+let reducedCommissionShops = []; // noms de magasins (insensible à la casse) bénéficiant du taux réduit
 
 /* Réglages d'apparence personnalisables depuis l'admin (onglet Réglages
    → Thème). Stockés en JSON dans settings.theme_settings et appliqués
@@ -263,8 +297,7 @@ function mapDbProductToLocal(p) {
     categoryId: p.category_id, image: p.image, sortOrder: p.sort_order || 0,
     unitStep: p.unit_step || 1, unitLabel: p.unit_label || '',
     outOfStock: !!p.out_of_stock, featured: !!p.featured,
-    hidden: !!p.hidden, isNew: !!p.is_new, isPromo: !!p.is_promo,
-    stock: (p.stock != null) ? Number(p.stock) : null
+    hidden: !!p.hidden, isNew: !!p.is_new, isPromo: !!p.is_promo
   };
 }
 
@@ -307,7 +340,8 @@ async function loadAllData() {
       coverImage: c.cover_image || null
     }));
     settings = settRes.data || settings;
-    dismissedStockAlerts = new Set(settings.dismissed_stock_alerts || []);
+    reducedCommissionShops = settings.reduced_commission_shops || [];
+    dismissedNotifications = new Set(settings.dismissed_notifications || []);
     theme = Object.assign({}, DEFAULT_THEME, settings.theme_settings || {});
     savedTheme = Object.assign({}, theme);
     applyThemeToPage();
@@ -387,6 +421,22 @@ function renderCategoryStrip() {
    Notifications — nouvelle commande (son + alerte interne)
    ========================================================= */
 let knownOrderIds = new Set();
+/* Journal permanent des commandes pour l'onglet Notifications — distinct
+   de knownOrderIds (qui sert uniquement à détecter les nouvelles
+   commandes pour le son/bandeau). Une entrée y reste tant qu'elle n'est
+   pas explicitement supprimée par Fuaad. */
+let knownOrdersLog = [];
+let dismissedNotifications = new Set();
+/* Mois actuellement affiché dans les onglets Commissions / Ventes —
+   indépendant l'un de l'autre pour que naviguer dans l'un ne déplace
+   pas l'autre par surprise. */
+let commissionsViewYear, commissionsViewMonth;
+let ventesViewYear, ventesViewMonth;
+(() => {
+  const now = new Date();
+  commissionsViewYear = ventesViewYear = now.getFullYear();
+  commissionsViewMonth = ventesViewMonth = now.getMonth();
+})();
 let orderPollingStarted = false;
 
 function playNotificationSound() {
@@ -445,20 +495,26 @@ async function checkForNewOrders() {
     if (knownOrderIds.size === 0) {
       // premier chargement : juste mémoriser, ne pas notifier rétroactivement
       data.forEach(o => knownOrderIds.add(o.id));
+      knownOrdersLog = data.slice();
       return;
     }
 
     const newOnes = data.filter(o => !knownOrderIds.has(o.id));
     newOnes.forEach(o => knownOrderIds.add(o.id));
 
-    // La notification (son + bandeau) ne doit apparaître que côté
-    // administrateur — un client en train de parcourir le catalogue ne
-    // doit jamais voir ni entendre l'arrivée d'une commande d'un autre
-    // client.
+    // La notification (son + bandeau + entrée permanente dans l'onglet
+    // Notifications) ne doit apparaître que côté administrateur — un
+    // client en train de parcourir le catalogue ne doit jamais voir ni
+    // entendre l'arrivée d'une commande d'un autre client. C'est aussi
+    // ce qui couvre le cas demandé : si quelqu'un d'autre (un collègue)
+    // passe une commande pendant que l'admin est ouvert sur la
+    // tablette, Fuaad en est notifié comme s'il l'avait reçue lui-même.
     if (newOnes.length > 0 && adminUnlocked) {
       playNotificationSound();
       newOnes.forEach(o => showNewOrderBanner(o));
+      knownOrdersLog = newOnes.concat(knownOrdersLog);
       renderAdminOrderList();
+      renderAdminNotifications();
     }
   } catch (e) {
     console.warn('Vérification des commandes échouée', e);
@@ -1347,7 +1403,7 @@ async function submitOrder(clientName, shopName) {
     // numéro de commande séquentiel atomique
     const orderNumber = String(settings.next_order_number || 1);
 
-    const { error: insertError } = await supabaseClient.from('orders').insert({
+    const { data: insertedOrder, error: insertError } = await supabaseClient.from('orders').insert({
       order_number: orderNumber,
       client_name: clientName,
       shop_name: shopName || null,
@@ -1356,7 +1412,7 @@ async function submitOrder(clientName, shopName) {
       tva: +tva.toFixed(2),
       total_with_tva: +totalWithTva.toFixed(2),
       status: 'nouvelle'
-    });
+    }).select().single();
     if (insertError) throw insertError;
 
     const { error: updateError } = await supabaseClient
@@ -1368,21 +1424,14 @@ async function submitOrder(clientName, shopName) {
 
     sendOrderNotificationEmail(orderNumber, clientName, shopName, items, totalWithTva);
 
-    // Décrémente le stock de chaque produit suivi (stock non nul), sans
-    // jamais descendre sous 0. Volontairement après l'enregistrement de
-    // la commande : la commande elle-même ne doit jamais échouer ou
-    // être bloquée à cause d'un souci de mise à jour du stock.
-    for (const id of Object.keys(cart)) {
-      const p = products.find(x => x.id === id);
-      if (!p || p.stock == null) continue;
-      const newStock = Math.max(0, p.stock - cart[id]);
-      try {
-        const { error: stockErr } = await supabaseClient.from('products').update({ stock: newStock }).eq('id', id);
-        if (!stockErr) p.stock = newStock;
-      } catch (e) {
-        console.warn('Mise à jour du stock échouée pour', p.ref, e);
-      }
-    }
+    // Inscrit cette commande dans le journal permanent des
+    // notifications, qu'elle vienne d'un client en ligne ou de
+    // quelqu'un (Fuaad, un collègue) utilisant directement la tablette
+    // admin — c'est précisément le scénario demandé : être notifié
+    // même quand quelqu'un d'autre passe une commande à sa place.
+    const nowIso = new Date().toISOString();
+    knownOrdersLog = [{ id: insertedOrder.id, order_number: orderNumber, client_name: clientName, shop_name: shopName, created_at: nowIso }].concat(knownOrdersLog);
+    knownOrderIds.add(insertedOrder.id);
     renderAdminNotifications();
 
     document.getElementById('successOrderNum').textContent = `Commande n°${orderNumber}`;
@@ -1540,7 +1589,7 @@ function setupAdminTabs() {
     btn.addEventListener('click', async () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      ['orders', 'products', 'categories', 'notifications', 'settings'].forEach(t => {
+      ['orders', 'products', 'categories', 'notifications', 'commissions', 'ventes', 'settings'].forEach(t => {
         const panel = document.getElementById('tab' + capitalize(t));
         if (t === btn.dataset.tab) {
           panel.style.display = 'block';
@@ -1562,6 +1611,12 @@ function setupAdminTabs() {
       }
       if (btn.dataset.tab === 'notifications') {
         renderAdminNotifications();
+      }
+      if (btn.dataset.tab === 'commissions') {
+        renderCommissionsTab();
+      }
+      if (btn.dataset.tab === 'ventes') {
+        renderVentesTab();
       }
     });
   });
@@ -2057,98 +2112,262 @@ async function moveCategory(categoryId, action) {
   }
 }
 
-/* Construit la liste des alertes de stock bas, regroupées par
-   catégorie. Un produit apparaît si stock != null et stock <= seuil,
-   SAUF si Fuaad a déjà supprimé cette alerte précise (même produit, au
-   même niveau de stock observé) — la clé de suppression inclut le
-   niveau de stock pour qu'un nouvel épuisement après réassort déclenche
-   une alerte fraîche plutôt que de rester silencieux pour toujours. */
-function getLowStockAlerts() {
-  const alerts = [];
-  products.forEach(p => {
-    if (p.stock == null || p.stock > LOW_STOCK_THRESHOLD) return;
-    const alertKey = `${p.id}:${p.stock}`;
-    if (dismissedStockAlerts.has(alertKey)) return;
-    alerts.push(p);
-  });
-  return alerts;
+/* Construit la liste des notifications de nouvelles commandes, les
+   plus récentes en premier. Une commande apparaît ici dès sa
+   confirmation et y reste — même après que la commande elle-même soit
+   archivée ou supprimée dans l'onglet Commandes — jusqu'à ce que Fuaad
+   supprime explicitement la notification elle-même avec le ✕. */
+function getOrderNotifications() {
+  return knownOrdersLog
+    .filter(o => !dismissedNotifications.has(o.id))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
 function renderAdminNotifications() {
   const list = document.getElementById('adminNotificationsList');
   if (!list) return;
-  const alerts = getLowStockAlerts();
+  const notifs = getOrderNotifications();
   const badge = document.getElementById('notificationsTabBadge');
   if (badge) {
-    if (alerts.length > 0) { badge.textContent = alerts.length; badge.style.display = 'inline-block'; }
+    if (notifs.length > 0) { badge.textContent = notifs.length; badge.style.display = 'inline-block'; }
     else badge.style.display = 'none';
   }
 
-  if (alerts.length === 0) {
-    list.innerHTML = `<div class="empty-state"><span class="glyph">🔔</span><h3>Aucune alerte</h3><p>Tous vos produits suivis ont un stock suffisant (plus de ${LOW_STOCK_THRESHOLD}).</p></div>`;
+  if (notifs.length === 0) {
+    list.innerHTML = `<div class="empty-state"><span class="glyph">🔔</span><h3>Aucune notification</h3><p>Les nouvelles commandes apparaîtront ici, même si quelqu'un d'autre les passe à votre place.</p></div>`;
     return;
   }
 
   let html = '';
-  categories.forEach(cat => {
-    const items = alerts.filter(p => p.categoryId === cat.id);
-    if (items.length === 0) return;
-    html += `<div class="section-title">${escapeHtml(cat.name)}</div>`;
-    items.forEach(p => {
-      const isZero = p.stock === 0;
-      html += `
-      <div class="stock-alert-card ${isZero ? 'zero' : ''}">
-        <img src="${p.image || ''}" alt="">
-        <div class="stock-alert-info">
-          <div class="stock-alert-name">${escapeHtml(p.name)}</div>
-          <div class="stock-alert-ref">Réf. ${escapeHtml(p.ref)}</div>
-          <div class="stock-alert-qty">${isZero ? '⚠️ Stock épuisé' : `🟡 Stock bas : ${p.stock} restant${p.stock > 1 ? 's' : ''}`}</div>
-        </div>
-        <button class="stock-alert-dismiss" data-dismiss-id="${p.id}" data-dismiss-stock="${p.stock}">✕</button>
-      </div>`;
-    });
+  notifs.forEach(o => {
+    const dateStr = new Date(o.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    html += `
+    <div class="order-notif-card">
+      <div class="order-notif-icon">🛍️</div>
+      <div class="order-notif-info">
+        <div class="order-notif-title">Commande n°${escapeHtml(o.order_number)} — ${escapeHtml(o.client_name)}</div>
+        <div class="order-notif-sub">${o.shop_name ? escapeHtml(o.shop_name) + ' · ' : ''}${dateStr}</div>
+      </div>
+      <button class="stock-alert-dismiss" data-dismiss-notif-id="${o.id}">✕</button>
+    </div>`;
   });
-  const orphanAlerts = alerts.filter(p => !categories.some(c => c.id === p.categoryId));
-  if (orphanAlerts.length > 0) {
-    html += `<div class="section-title">Autres</div>`;
-    orphanAlerts.forEach(p => {
-      const isZero = p.stock === 0;
-      html += `
-      <div class="stock-alert-card ${isZero ? 'zero' : ''}">
-        <img src="${p.image || ''}" alt="">
-        <div class="stock-alert-info">
-          <div class="stock-alert-name">${escapeHtml(p.name)}</div>
-          <div class="stock-alert-ref">Réf. ${escapeHtml(p.ref)}</div>
-          <div class="stock-alert-qty">${isZero ? '⚠️ Stock épuisé' : `🟡 Stock bas : ${p.stock} restant${p.stock > 1 ? 's' : ''}`}</div>
-        </div>
-        <button class="stock-alert-dismiss" data-dismiss-id="${p.id}" data-dismiss-stock="${p.stock}">✕</button>
-      </div>`;
-    });
-  }
 
   list.innerHTML = html;
-  list.querySelectorAll('[data-dismiss-id]').forEach(btn => {
-    btn.addEventListener('click', () => dismissStockAlert(btn.dataset.dismissId, parseInt(btn.dataset.dismissStock, 10)));
+  list.querySelectorAll('[data-dismiss-notif-id]').forEach(btn => {
+    btn.addEventListener('click', () => dismissOrderNotification(btn.dataset.dismissNotifId));
   });
 }
 
-/* Supprime définitivement une alerte précise (produit + niveau de
-   stock observé) — persisté côté serveur pour ne jamais réapparaître
-   après un rechargement, comme demandé explicitement. */
-async function dismissStockAlert(productId, stockLevel) {
-  const alertKey = `${productId}:${stockLevel}`;
-  dismissedStockAlerts.add(alertKey);
+/* Supprime définitivement une notification de commande — persisté
+   côté serveur pour ne jamais réapparaître après un rechargement. */
+async function dismissOrderNotification(orderId) {
+  dismissedNotifications.add(orderId);
   try {
     const { error } = await supabaseClient
       .from('settings')
-      .update({ dismissed_stock_alerts: Array.from(dismissedStockAlerts) })
+      .update({ dismissed_notifications: Array.from(dismissedNotifications) })
       .eq('id', 1);
     if (error) throw error;
   } catch (e) {
     console.error(e);
-    showToast('⚠️ Erreur lors de la suppression de l\'alerte');
+    showToast('⚠️ Erreur lors de la suppression de la notification');
   }
   renderAdminNotifications();
+}
+
+/* Récupère TOUTES les commandes (page par page, pour ne jamais
+   plafonner silencieusement si un mois est très chargé) dont la date de
+   création tombe dans les bornes exactes du mois demandé. Utilisé à la
+   fois par l'onglet Commissions et l'onglet Ventes. */
+async function fetchOrdersForMonth(year, monthIndex) {
+  const { start, end } = getMonthBoundaries(year, monthIndex);
+  let all = [];
+  let from = 0;
+  const pageSize = 200;
+  while (true) {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('*')
+      .gte('created_at', start.toISOString())
+      .lte('created_at', end.toISOString())
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all = all.concat(data);
+    if (data.length < pageSize) break;
+    from += data.length;
+  }
+  return all;
+}
+
+const MONTH_NAMES_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+async function renderCommissionsTab() {
+  document.getElementById('commissionsMonthLabel').textContent = `${MONTH_NAMES_FR[commissionsViewMonth]} ${commissionsViewYear}`;
+  const listEl = document.getElementById('commissionOrdersList');
+  listEl.innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
+
+  let orders;
+  try {
+    orders = await fetchOrdersForMonth(commissionsViewYear, commissionsViewMonth);
+  } catch (e) {
+    console.error(e);
+    listEl.innerHTML = `<div class="empty-state"><span class="glyph">⚠️</span><h3>Erreur</h3><p>${escapeHtml(e.message || '')}</p></div>`;
+    return;
+  }
+
+  let totalCommission = 0;
+  const rows = orders.map(o => {
+    const { amount, rate } = calculateOrderCommission(o);
+    totalCommission += amount;
+    return { o, amount, rate };
+  }).sort((a, b) => new Date(b.o.created_at) - new Date(a.o.created_at));
+
+  document.getElementById('commissionTotalAmount').textContent = fmtPrice(totalCommission);
+  document.getElementById('commissionTotalSub').textContent = `${orders.length} commande${orders.length !== 1 ? 's' : ''} ce mois-ci`;
+
+  if (rows.length === 0) {
+    listEl.innerHTML = `<div class="empty-state"><span class="glyph">💶</span><h3>Aucune commande</h3><p>Aucune commande sur ce mois pour le moment.</p></div>`;
+  } else {
+    listEl.innerHTML = rows.map(({ o, amount, rate }) => {
+      const dateStr = new Date(o.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      const isReduced = rate !== DEFAULT_COMMISSION_RATE;
+      return `
+      <div class="commission-order-row">
+        <div class="commission-order-info">
+          <div class="commission-order-name">Commande n°${escapeHtml(o.order_number)} — ${escapeHtml(o.client_name)}</div>
+          <div class="commission-order-sub">${o.shop_name ? escapeHtml(o.shop_name) + ' · ' : ''}${dateStr} · Total ${fmtPrice(o.total_with_tva)} ${isReduced ? `· taux réduit (${rate}%)` : ''}</div>
+        </div>
+        <div class="commission-order-amount">${fmtPrice(amount)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  renderReducedShopsList();
+}
+
+function renderReducedShopsList() {
+  const el = document.getElementById('reducedShopsList');
+  if (!el) return;
+  if (reducedCommissionShops.length === 0) {
+    el.innerHTML = `<p class="notifications-intro">Aucun magasin à taux réduit pour le moment.</p>`;
+    return;
+  }
+  el.innerHTML = reducedCommissionShops.map((shop, idx) => `
+    <div class="reduced-shop-row">
+      <span>${escapeHtml(shop)}</span>
+      <button class="stock-alert-dismiss" data-remove-reduced-idx="${idx}">✕</button>
+    </div>
+  `).join('');
+  el.querySelectorAll('[data-remove-reduced-idx]').forEach(btn => {
+    btn.addEventListener('click', () => removeReducedShop(parseInt(btn.dataset.removeReducedIdx, 10)));
+  });
+}
+
+async function persistReducedShops() {
+  try {
+    const { error } = await supabaseClient.from('settings').update({ reduced_commission_shops: reducedCommissionShops }).eq('id', 1);
+    if (error) throw error;
+  } catch (e) {
+    console.error(e);
+    showToast('⚠️ Erreur lors de l\'enregistrement');
+  }
+}
+
+async function addReducedShop(name) {
+  name = name.trim();
+  if (!name) return;
+  if (reducedCommissionShops.some(s => s.trim().toLowerCase() === name.toLowerCase())) {
+    showToast('Ce magasin est déjà dans la liste');
+    return;
+  }
+  reducedCommissionShops.push(name);
+  await persistReducedShops();
+  renderReducedShopsList();
+  renderCommissionsTab();
+  showToast(`✓ ${name} ajouté au taux réduit`);
+}
+
+async function removeReducedShop(idx) {
+  reducedCommissionShops.splice(idx, 1);
+  await persistReducedShops();
+  renderReducedShopsList();
+  renderCommissionsTab();
+}
+
+function setupCommissionsTab() {
+  document.getElementById('commissionsPrevMonthBtn').addEventListener('click', () => {
+    commissionsViewMonth--;
+    if (commissionsViewMonth < 0) { commissionsViewMonth = 11; commissionsViewYear--; }
+    renderCommissionsTab();
+  });
+  document.getElementById('commissionsNextMonthBtn').addEventListener('click', () => {
+    commissionsViewMonth++;
+    if (commissionsViewMonth > 11) { commissionsViewMonth = 0; commissionsViewYear++; }
+    renderCommissionsTab();
+  });
+  document.getElementById('addReducedShopBtn').addEventListener('click', () => {
+    const input = document.getElementById('newReducedShopInput');
+    addReducedShop(input.value);
+    input.value = '';
+  });
+}
+
+/* Agrège, pour le mois sélectionné, le nombre total d'unités vendues
+   par référence produit. items[].qty est déjà en unités réelles (pas en
+   nombre de lots) — cart/submitOrder stocke toujours la quantité réelle,
+   donc un lot de 12 vendu une fois compte bien pour 12 ici, comme
+   demandé explicitement ("le nombre de pièces même si c'était un lot"). */
+async function renderVentesTab() {
+  document.getElementById('ventesMonthLabel').textContent = `${MONTH_NAMES_FR[ventesViewMonth]} ${ventesViewYear}`;
+  const listEl = document.getElementById('ventesProductsList');
+  listEl.innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
+
+  let orders;
+  try {
+    orders = await fetchOrdersForMonth(ventesViewYear, ventesViewMonth);
+  } catch (e) {
+    console.error(e);
+    listEl.innerHTML = `<div class="empty-state"><span class="glyph">⚠️</span><h3>Erreur</h3><p>${escapeHtml(e.message || '')}</p></div>`;
+    return;
+  }
+
+  const salesByRef = new Map(); // ref -> { name, qty }
+  orders.forEach(o => {
+    (o.items || []).forEach(item => {
+      const key = item.ref || item.name;
+      const existing = salesByRef.get(key) || { name: item.name, ref: item.ref, qty: 0 };
+      existing.qty += item.qty || 0;
+      salesByRef.set(key, existing);
+    });
+  });
+
+  const rows = Array.from(salesByRef.values()).sort((a, b) => b.qty - a.qty);
+
+  if (rows.length === 0) {
+    listEl.innerHTML = `<div class="empty-state"><span class="glyph">📦</span><h3>Aucune vente</h3><p>Aucune commande sur ce mois pour le moment.</p></div>`;
+    return;
+  }
+
+  listEl.innerHTML = rows.map(r => `
+    <div class="ventes-product-row">
+      <div class="ventes-product-name">${escapeHtml(r.name)}<span class="ventes-product-ref">Réf. ${escapeHtml(r.ref || '—')}</span></div>
+      <div class="ventes-product-qty">${r.qty}</div>
+    </div>
+  `).join('');
+}
+
+function setupVentesTab() {
+  document.getElementById('ventesPrevMonthBtn').addEventListener('click', () => {
+    ventesViewMonth--;
+    if (ventesViewMonth < 0) { ventesViewMonth = 11; ventesViewYear--; }
+    renderVentesTab();
+  });
+  document.getElementById('ventesNextMonthBtn').addEventListener('click', () => {
+    ventesViewMonth++;
+    if (ventesViewMonth > 11) { ventesViewMonth = 0; ventesViewYear++; }
+    renderVentesTab();
+  });
 }
 
 function renderAdminCatList() {
@@ -2989,7 +3208,6 @@ function openProductForm(productId) {
     document.getElementById('formName').value = p.name;
     document.getElementById('formRef').value = p.ref;
     document.getElementById('formPrice').value = p.price;
-    document.getElementById('formStock').value = (p.stock != null) ? p.stock : '';
     document.getElementById('formCategory').value = p.categoryId;
     document.getElementById('outOfStockToggle').checked = !!p.outOfStock;
     document.getElementById('featuredToggle').checked = !!p.featured;
@@ -3020,7 +3238,6 @@ function openProductForm(productId) {
     document.getElementById('formName').value = '';
     document.getElementById('formRef').value = '';
     document.getElementById('formPrice').value = '';
-    document.getElementById('formStock').value = '';
     if (categories.length) document.getElementById('formCategory').value = categories[0].id;
     document.getElementById('outOfStockToggle').checked = false;
     document.getElementById('featuredToggle').checked = false;
@@ -3203,8 +3420,6 @@ function setupProductFormSave() {
     const name = document.getElementById('formName').value.trim();
     const ref = document.getElementById('formRef').value.trim();
     const price = parseFloat(document.getElementById('formPrice').value);
-    const stockRaw = document.getElementById('formStock').value.trim();
-    const stock = stockRaw === '' ? null : Math.max(0, parseInt(stockRaw, 10));
     const categoryId = document.getElementById('formCategory').value;
     const outOfStock = document.getElementById('outOfStockToggle').checked;
     const featured = document.getElementById('featuredToggle').checked;
@@ -3254,24 +3469,24 @@ function setupProductFormSave() {
       if (editingProductId) {
         const { error } = await supabaseClient.from('products').update({
           name, ref, price, category_id: categoryId, image: finalImageUrl,
-          unit_step: unitStep, unit_label: unitLabel, stock: stock,
+          unit_step: unitStep, unit_label: unitLabel,
           out_of_stock: outOfStock, featured: featured, is_new: isNew, is_promo: isPromo
         }).eq('id', editingProductId);
         if (error) throw error;
         const p = products.find(x => x.id === editingProductId);
         p.name = name; p.ref = ref; p.price = price; p.categoryId = categoryId;
-        p.image = finalImageUrl; p.unitStep = unitStep; p.unitLabel = unitLabel; p.stock = stock;
+        p.image = finalImageUrl; p.unitStep = unitStep; p.unitLabel = unitLabel;
         p.outOfStock = outOfStock; p.featured = featured; p.isNew = isNew; p.isPromo = isPromo;
         showToast('Produit mis à jour');
       } else {
         const newId = uid('prod');
         const { error } = await supabaseClient.from('products').insert({
           id: newId, ref, name, price, category_id: categoryId, image: finalImageUrl,
-          unit_step: unitStep, unit_label: unitLabel, sort_order: products.length + 1, stock: stock,
+          unit_step: unitStep, unit_label: unitLabel, sort_order: products.length + 1,
           out_of_stock: outOfStock, featured: featured, is_new: isNew, is_promo: isPromo
         });
         if (error) throw error;
-        products.push({ id: newId, ref, name, price, categoryId, image: finalImageUrl, unitStep, unitLabel, stock, outOfStock, featured, isNew, isPromo, hidden: false });
+        products.push({ id: newId, ref, name, price, categoryId, image: finalImageUrl, unitStep, unitLabel, outOfStock, featured, isNew, isPromo, hidden: false });
         showToast('Produit ajouté');
       }
       closeDrawer('productFormDrawer');
@@ -3361,6 +3576,8 @@ function init() {
   setupSettingsSave();
   setupThemeControls();
   setupClientPromptModal();
+  setupCommissionsTab();
+  setupVentesTab();
   setupLogoUpload();
   setupImageUpload();
   setupImageCropper();
