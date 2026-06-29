@@ -1017,6 +1017,16 @@ button{font-family:inherit;cursor:pointer;}
 }
 .month-nav-label{font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--ink);min-width:140px;text-align:center;}
 
+.period-switch{
+  display:flex;background:var(--paper);border-radius:10px;padding:4px;margin-bottom:14px;
+  border:1px solid rgba(20,20,30,0.06);
+}
+.period-switch-btn{
+  flex:1;background:none;border:none;padding:9px 6px;border-radius:8px;
+  font-size:12.5px;font-weight:700;color:var(--brass);
+}
+.period-switch-btn.active{background:var(--mustard);color:var(--navy-deep);}
+
 .commission-summary-box{
   background:linear-gradient(135deg, var(--mustard-deep), var(--mustard));
   border-radius:18px;padding:22px 18px;text-align:center;color:#fff;margin-bottom:18px;
@@ -1101,6 +1111,21 @@ button{font-family:inherit;cursor:pointer;}
 }
 .map-shop-row-name{font-weight:700;color:var(--ink);}
 .map-shop-row-coords{font-size:11px;color:var(--brass);}
+
+.reorganiser-grid{
+  display:grid;grid-template-columns:repeat(auto-fill, minmax(110px, 1fr));
+  gap:10px;margin-top:14px;
+}
+.reorganiser-grid .ticket{
+  transform:scale(1);font-size:11px;cursor:grab;
+  transition:opacity .15s, box-shadow .15s;
+}
+.reorganiser-grid .ticket .ticket-img-wrap{height:90px;}
+.reorganiser-grid .ticket .t-name{font-size:11px;}
+.reorganiser-grid .ticket .t-ref{font-size:9.5px;}
+.reorganiser-grid .ticket.dragging{opacity:0.4;}
+.reorganiser-grid .ticket.drag-over{box-shadow:0 0 0 3px var(--mustard);}
+.reorganiser-grid .ticket *{pointer-events:none;}
 
 /* Modales de célébration / wosam du mois — réutilisent le même
    habillage visuel que .client-prompt-modal pour rester cohérent. */
@@ -1588,6 +1613,7 @@ button{font-family:inherit;cursor:pointer;}
         <button class="tab-btn" data-tab="ventes">📦</button>
         <button class="tab-btn" data-tab="vip">🏆</button>
         <button class="tab-btn" data-tab="carte">🗺️</button>
+        <button class="tab-btn" data-tab="reorganiser">🗂</button>
         <button class="tab-btn" data-tab="settings">Réglages</button>
       </div>
       </div>
@@ -1634,7 +1660,11 @@ button{font-family:inherit;cursor:pointer;}
           <div class="month-nav-label" id="commissionsMonthLabel">—</div>
           <button id="commissionsNextMonthBtn" class="month-nav-btn">›</button>
         </div>
-        <button class="btn-secondary" id="commissionsToggleTotalBtn" style="padding:8px;font-size:12px;margin-bottom:14px;">📊 Voir le total général (toutes périodes)</button>
+        <div class="period-switch" id="periodSwitch">
+          <button class="period-switch-btn active" data-period="week">Semaine</button>
+          <button class="period-switch-btn" data-period="month">Mois</button>
+          <button class="period-switch-btn" data-period="total">Total</button>
+        </div>
         <div class="commission-summary-box">
           <div class="commission-summary-total" id="commissionTotalAmount">0,00 €</div>
           <div class="commission-summary-sub" id="commissionTotalSub">0 commande</div>
@@ -1687,6 +1717,16 @@ button{font-family:inherit;cursor:pointer;}
         </div>
         <button class="btn-primary" id="saveMapShopBtn" style="margin-top:6px;">📍 Localiser et enregistrer</button>
         <div id="mapShopsList" style="margin-top:16px;"></div>
+      </div>
+
+      <div id="tabReorganiser" style="display:none;">
+        <div class="admin-section-label">🗂 Réorganiser les produits</div>
+        <p class="notifications-intro">Choisissez une catégorie, puis faites glisser une carte pour changer l'ordre d'affichage — exactement comme dans le catalogue, en plus petit.</p>
+        <div class="form-group">
+          <label>Catégorie</label>
+          <select id="reorganiserCategorySelect"></select>
+        </div>
+        <div id="reorganiserGrid" class="reorganiser-grid"></div>
       </div>
 
       <div id="tabSettings" style="display:none;">
@@ -2043,6 +2083,18 @@ button{font-family:inherit;cursor:pointer;}
       <select id="formCategory"></select>
     </div>
     <div class="form-group">
+      <label>Taille (optionnel — pour les vêtements)</label>
+      <select id="formSize">
+        <option value="">Aucune</option>
+        <option value="XS">XS</option>
+        <option value="S">S</option>
+        <option value="M">M</option>
+        <option value="L">L</option>
+        <option value="XL">XL</option>
+        <option value="XXL">XXL</option>
+      </select>
+    </div>
+    <div class="form-group">
       <label>Vente</label>
       <div class="unit-toggle">
         <button type="button" id="unitToggleUnit" class="active">À l'unité</button>
@@ -2120,6 +2172,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="config.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=20260629b"></script>
+<script src="app.js?v=20260629d"></script>
 </body>
 </html>

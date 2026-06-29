@@ -69,6 +69,23 @@ function getCommissionRateForShop(shopName) {
    le nombre de jours de chaque mois, y compris février lors d'une année
    bissextile — plutôt qu'un nombre de jours codé en dur, pour ne jamais
    se tromper quel que soit le mois ou l'année. */
+/* Calcule les bornes exactes (lundi 00:00 à dimanche 23:59) de la
+   semaine calendaire contenant une date donnée. Gère correctement les
+   semaines à cheval sur deux mois ou deux années, en se basant sur
+   l'arithmétique native des dates plutôt qu'un calcul de jours fixe. */
+function getWeekBoundaries(referenceDate) {
+  const d = new Date(referenceDate);
+  const dayOfWeek = d.getDay(); // 0 = dimanche, 1 = lundi, ...
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const start = new Date(d);
+  start.setDate(d.getDate() + diffToMonday);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
 function getMonthBoundaries(year, monthIndex /* 0-11 */) {
   const start = new Date(year, monthIndex, 1, 0, 0, 0, 0);
   // Le jour 0 du mois suivant est toujours le dernier jour du mois
@@ -345,7 +362,7 @@ function mapDbProductToLocal(p) {
   return {
     id: p.id, ref: p.ref, name: p.name, price: Number(p.price),
     categoryId: p.category_id, image: p.image, sortOrder: p.sort_order || 0,
-    unitStep: p.unit_step || 1, unitLabel: p.unit_label || '',
+    unitStep: p.unit_step || 1, unitLabel: p.unit_label || '', size: p.size || '',
     outOfStock: !!p.out_of_stock, featured: !!p.featured,
     hidden: !!p.hidden, isNew: !!p.is_new, isPromo: !!p.is_promo
   };
@@ -499,7 +516,8 @@ let commissionLedger = [];
    indépendant l'un de l'autre pour que naviguer dans l'un ne déplace
    pas l'autre par surprise. */
 let commissionsViewYear, commissionsViewMonth;
-let commissionsShowingTotal = false; // bascule "Total général" (toutes périodes, sans découpage par mois)
+let commissionsPeriodMode = 'week'; // 'week' | 'month' | 'total'
+let commissionsWeekOffset = 0; // 0 = semaine en cours, -1 = semaine précédente, etc.
 let ventesViewYear, ventesViewMonth;
 (() => {
   const now = new Date();
@@ -769,6 +787,7 @@ function productCardHtml(p, bulkEligible) {
   const lots = p.unitStep > 1 ? Math.round(qty / p.unitStep) : qty;
   const img = p.image || '';
   const unitTag = p.unitStep > 1 ? `<span class="t-unit">📦 Lot de ${p.unitStep}</span>` : '';
+  const sizeTag = p.size ? `<span class="t-unit">📏 Taille ${escapeHtml(p.size)}</span>` : '';
   bulkEligible = bulkEligible || getBulkEligibleCategories();
   const effectivePrice = getEffectivePrice(p, bulkEligible);
   const isBulk = effectivePrice !== p.price;
@@ -789,6 +808,7 @@ function productCardHtml(p, bulkEligible) {
           <div class="t-name">${escapeHtml(p.name)}</div>
           <div class="t-ref">Réf. ${escapeHtml(p.ref)}</div>
           ${unitTag}
+          ${sizeTag}
         </div>
       </div>
       <div class="perf-seam"></div>
@@ -810,6 +830,7 @@ function productCardHtml(p, bulkEligible) {
         <div class="t-name">${escapeHtml(p.name)}</div>
         <div class="t-ref">Réf. ${escapeHtml(p.ref)}</div>
         ${unitTag}
+        ${sizeTag}
       </div>
     </div>
     <div class="perf-seam"></div>
@@ -1806,7 +1827,6 @@ function unlockAdminPanel() {
   renderAdminNotifications();
   prefillSettings();
   prefillThemeControls();
-  showClientPromptModal();
   const dateEl = document.getElementById('adminSignatureDate');
   if (dateEl) dateEl.textContent = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   checkMonthlyAward();
@@ -1846,7 +1866,7 @@ function setupAdminTabs() {
     btn.addEventListener('click', async () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      ['orders', 'products', 'categories', 'notifications', 'commissions', 'ventes', 'vip', 'carte', 'settings'].forEach(t => {
+      ['orders', 'products', 'categories', 'notifications', 'commissions', 'ventes', 'vip', 'carte', 'reorganiser', 'settings'].forEach(t => {
         const panel = document.getElementById('tab' + capitalize(t));
         if (t === btn.dataset.tab) {
           panel.style.display = 'block';
@@ -1880,6 +1900,10 @@ function setupAdminTabs() {
       }
       if (btn.dataset.tab === 'carte') {
         renderCarteTab();
+      }
+      if (btn.dataset.tab === 'reorganiser') {
+        renderReorganiserCategoryOptions();
+        renderReorganiserGrid();
       }
     });
   });
@@ -1915,7 +1939,7 @@ async function refreshAdminProducts() {
    une entrée pour cette commande, sinon le taux qui serait appliqué
    automatiquement par défaut (avant toute bascule manuelle). */
 function getCommissionBadgeText(order) {
-  const entry = commissionLedger.find(e => e.orderId === order.id);
+  const entry = commissionLedger.find(e => String(e.orderId) === String(order.id));
   if (entry) return `${entry.rate}% — ${fmtPrice(entry.amount)} (toucher pour changer)`;
   const { rate } = calculateOrderCommission(order);
   return `${rate}% (taux par défaut — toucher pour fixer)`;
@@ -1928,7 +1952,7 @@ function getCommissionBadgeText(order) {
    n'existait pas encore) l'entrée correspondante dans le registre
    permanent des commissions, recalculée sur le Sous-total HT. */
 async function toggleOrderCommissionRate(orderId, montantHT, shopName) {
-  const existingIdx = commissionLedger.findIndex(e => e.orderId === orderId);
+  const existingIdx = commissionLedger.findIndex(e => String(e.orderId) === String(orderId));
   const currentRate = existingIdx >= 0 ? commissionLedger[existingIdx].rate : calculateOrderCommission({ shop_name: shopName, total: montantHT }).rate;
   const newRate = currentRate === 2 ? 0.5 : 2;
   const newAmount = +(montantHT * newRate / 100).toFixed(2);
@@ -2126,12 +2150,23 @@ async function renderArchivedOrderList() {
           <span class="oc-total">${fmtPrice(totalWithTva)}</span>
           <span class="status-pill ${o.status}">${o.status === 'nouvelle' ? 'Nouvelle' : o.status === 'en_cours' ? 'En cours' : 'Terminée'}</span>
         </div>
+        <div class="oc-commission-row">
+          <span class="oc-commission-label">💰 Commission appliquée :</span>
+          <button class="oc-commission-toggle" data-commission-order-id="${o.id}" data-order-ht="${o.total}" data-order-shop="${escapeHtml(o.shop_name || '')}">
+            ${getCommissionBadgeText(o)}
+          </button>
+        </div>
         <button class="copy-order-btn" data-unarchiveorder="${o.id}" style="background:var(--mustard-deep, var(--mustard));">↺ Désarchiver</button>
         <button class="delete-order-btn" data-delorder="${o.id}">🗑 Supprimer définitivement</button>
       </div>`;
     });
     list.innerHTML = html;
     observeCardsForScrollReveal('.order-card');
+    list.querySelectorAll('[data-commission-order-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        toggleOrderCommissionRate(btn.dataset.commissionOrderId, parseFloat(btn.dataset.orderHt), btn.dataset.orderShop);
+      });
+    });
     list.querySelectorAll('[data-unarchiveorder]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const { error } = await supabaseClient.from('orders').update({ archived: false }).eq('id', btn.dataset.unarchiveorder);
@@ -2531,46 +2566,51 @@ async function renderCommissionsTab() {
   const comparisonEl = document.getElementById('commissionComparison');
   const listEl = document.getElementById('commissionOrdersList');
 
-  let entries;
-  if (commissionsShowingTotal) {
+  let entries, periodLabel, comparisonPrevLabel, prevTotal = null;
+
+  if (commissionsPeriodMode === 'total') {
     monthNav.style.display = 'none';
-    comparisonEl.style.display = 'none';
-    document.getElementById('commissionsMonthLabel').textContent = 'Total général';
+    periodLabel = 'Total général';
     entries = commissionLedger.slice();
-  } else {
+  } else if (commissionsPeriodMode === 'week') {
     monthNav.style.display = 'flex';
-    document.getElementById('commissionsMonthLabel').textContent = `${MONTH_NAMES_FR[commissionsViewMonth]} ${commissionsViewYear}`;
+    const refDate = new Date();
+    refDate.setDate(refDate.getDate() + commissionsWeekOffset * 7);
+    const { start, end } = getWeekBoundaries(refDate);
+    periodLabel = `${start.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} – ${end.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}`;
+    entries = commissionLedger.filter(e => { const d = new Date(e.createdAt); return d >= start && d <= end; });
+    const prevRef = new Date(refDate); prevRef.setDate(prevRef.getDate() - 7);
+    const { start: pStart, end: pEnd } = getWeekBoundaries(prevRef);
+    prevTotal = commissionLedger.filter(e => { const d = new Date(e.createdAt); return d >= pStart && d <= pEnd; }).reduce((s, e) => s + e.amount, 0);
+    comparisonPrevLabel = 'la semaine précédente';
+  } else { // 'month'
+    monthNav.style.display = 'flex';
+    periodLabel = `${MONTH_NAMES_FR[commissionsViewMonth]} ${commissionsViewYear}`;
     const { start, end } = getMonthBoundaries(commissionsViewYear, commissionsViewMonth);
-    entries = commissionLedger.filter(e => {
-      const d = new Date(e.createdAt);
-      return d >= start && d <= end;
-    });
+    entries = commissionLedger.filter(e => { const d = new Date(e.createdAt); return d >= start && d <= end; });
+    let prevMonth = commissionsViewMonth - 1, prevYear = commissionsViewYear;
+    if (prevMonth < 0) { prevMonth = 11; prevYear--; }
+    const { start: pStart, end: pEnd } = getMonthBoundaries(prevYear, prevMonth);
+    prevTotal = commissionLedger.filter(e => { const d = new Date(e.createdAt); return d >= pStart && d <= pEnd; }).reduce((s, e) => s + e.amount, 0);
+    comparisonPrevLabel = MONTH_NAMES_FR[prevMonth];
   }
 
+  document.getElementById('commissionsMonthLabel').textContent = periodLabel;
   entries = entries.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const totalCommission = entries.reduce((sum, e) => sum + e.amount, 0);
 
   document.getElementById('commissionTotalAmount').textContent = fmtPrice(totalCommission);
-  document.getElementById('commissionTotalSub').textContent = `${entries.length} commande${entries.length !== 1 ? 's' : ''}${commissionsShowingTotal ? ' au total' : ' ce mois-ci'}`;
+  const periodWord = commissionsPeriodMode === 'total' ? 'au total' : commissionsPeriodMode === 'week' ? 'cette semaine' : 'ce mois-ci';
+  document.getElementById('commissionTotalSub').textContent = `${entries.length} commande${entries.length !== 1 ? 's' : ''} ${periodWord}`;
 
-  // Comparaison avec le mois précédent — uniquement pertinente en vue
-  // par mois, calculée directement depuis le registre permanent.
-  if (!commissionsShowingTotal) {
-    let prevMonth = commissionsViewMonth - 1, prevYear = commissionsViewYear;
-    if (prevMonth < 0) { prevMonth = 11; prevYear--; }
-    const { start: prevStart, end: prevEnd } = getMonthBoundaries(prevYear, prevMonth);
-    const prevTotal = commissionLedger
-      .filter(e => { const d = new Date(e.createdAt); return d >= prevStart && d <= prevEnd; })
-      .reduce((sum, e) => sum + e.amount, 0);
-    if (prevTotal > 0) {
-      const pctChange = ((totalCommission - prevTotal) / prevTotal) * 100;
-      const isUp = pctChange >= 0;
-      comparisonEl.style.display = 'flex';
-      comparisonEl.className = `commission-comparison ${isUp ? 'up' : 'down'}`;
-      comparisonEl.innerHTML = `<span>${isUp ? '📈' : '📉'} ${isUp ? '+' : ''}${pctChange.toFixed(0)}%</span><span class="commission-comparison-sub">vs ${MONTH_NAMES_FR[prevMonth]} (${fmtPrice(prevTotal)})</span>`;
-    } else {
-      comparisonEl.style.display = 'none';
-    }
+  if (prevTotal != null && prevTotal > 0) {
+    const pctChange = ((totalCommission - prevTotal) / prevTotal) * 100;
+    const isUp = pctChange >= 0;
+    comparisonEl.style.display = 'flex';
+    comparisonEl.className = `commission-comparison ${isUp ? 'up' : 'down'}`;
+    comparisonEl.innerHTML = `<span>${isUp ? '📈' : '📉'} ${isUp ? '+' : ''}${pctChange.toFixed(0)}%</span><span class="commission-comparison-sub">vs ${comparisonPrevLabel} (${fmtPrice(prevTotal)})</span>`;
+  } else {
+    comparisonEl.style.display = 'none';
   }
 
   if (entries.length === 0) {
@@ -2602,7 +2642,7 @@ async function renderCommissionsTab() {
    Fuaad pour pouvoir corriger une commission erronée sans devoir
    toucher à la commande elle-même. */
 async function deleteCommissionEntry(orderId) {
-  commissionLedger = commissionLedger.filter(e => e.orderId !== orderId);
+  commissionLedger = commissionLedger.filter(e => String(e.orderId) !== String(orderId));
   try {
     await supabaseClient.from('settings').update({ commission_ledger: commissionLedger }).eq('id', 1);
     showToast('✓ Commission supprimée');
@@ -2664,21 +2704,29 @@ async function removeReducedShop(idx) {
 
 function setupCommissionsTab() {
   document.getElementById('commissionsPrevMonthBtn').addEventListener('click', () => {
-    commissionsViewMonth--;
-    if (commissionsViewMonth < 0) { commissionsViewMonth = 11; commissionsViewYear--; }
+    if (commissionsPeriodMode === 'week') {
+      commissionsWeekOffset--;
+    } else if (commissionsPeriodMode === 'month') {
+      commissionsViewMonth--;
+      if (commissionsViewMonth < 0) { commissionsViewMonth = 11; commissionsViewYear--; }
+    }
     renderCommissionsTab();
   });
   document.getElementById('commissionsNextMonthBtn').addEventListener('click', () => {
-    commissionsViewMonth++;
-    if (commissionsViewMonth > 11) { commissionsViewMonth = 0; commissionsViewYear++; }
+    if (commissionsPeriodMode === 'week') {
+      commissionsWeekOffset++;
+    } else if (commissionsPeriodMode === 'month') {
+      commissionsViewMonth++;
+      if (commissionsViewMonth > 11) { commissionsViewMonth = 0; commissionsViewYear++; }
+    }
     renderCommissionsTab();
   });
-  document.getElementById('commissionsToggleTotalBtn').addEventListener('click', () => {
-    commissionsShowingTotal = !commissionsShowingTotal;
-    document.getElementById('commissionsToggleTotalBtn').textContent = commissionsShowingTotal
-      ? '📅 Revenir à la vue par mois'
-      : '📊 Voir le total général (toutes périodes)';
-    renderCommissionsTab();
+  document.querySelectorAll('#periodSwitch .period-switch-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      commissionsPeriodMode = btn.dataset.period;
+      document.querySelectorAll('#periodSwitch .period-switch-btn').forEach(b => b.classList.toggle('active', b === btn));
+      renderCommissionsTab();
+    });
   });
   document.getElementById('addReducedShopBtn').addEventListener('click', () => {
     const input = document.getElementById('newReducedShopInput');
@@ -3023,6 +3071,85 @@ function setupAddressAutocomplete() {
   document.addEventListener('click', (e) => {
     if (e.target !== input) box.classList.remove('show');
   });
+}
+
+/* Remplit le sélecteur de catégorie de l'onglet Réorganiser et affiche
+   les produits de la catégorie choisie, sous forme de vraies cartes du
+   catalogue (productCardHtml), juste rétrécies par CSS — pour que
+   Fuaad voie exactement à quoi ressemblera le catalogue, pas une liste
+   abstraite. */
+function renderReorganiserCategoryOptions() {
+  const select = document.getElementById('reorganiserCategorySelect');
+  select.innerHTML = categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+}
+
+function renderReorganiserGrid() {
+  const select = document.getElementById('reorganiserCategorySelect');
+  const grid = document.getElementById('reorganiserGrid');
+  const catId = select.value;
+  if (!catId) { grid.innerHTML = ''; return; }
+
+  const catProducts = products
+    .filter(p => p.categoryId === catId)
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+  if (catProducts.length === 0) {
+    grid.innerHTML = `<div class="empty-state"><span class="glyph">📦</span><h3>Aucun produit</h3><p>Cette catégorie est vide.</p></div>`;
+    return;
+  }
+
+  const bulkEligible = getBulkEligibleCategories();
+  grid.innerHTML = catProducts.map(p => productCardHtml(p, bulkEligible)).join('');
+  observeCardsForScrollReveal('.ticket');
+
+  // Active le glisser-déposer natif (HTML5 Drag and Drop) sur chaque
+  // carte affichée.
+  grid.querySelectorAll('.ticket').forEach(card => {
+    card.draggable = true;
+    card.addEventListener('dragstart', () => card.classList.add('dragging'));
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      grid.querySelectorAll('.ticket').forEach(c => c.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (!card.classList.contains('dragging')) card.classList.add('drag-over');
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      const draggedCard = grid.querySelector('.ticket.dragging');
+      if (!draggedCard || draggedCard === card) return;
+
+      // Réordonne le DOM visuellement tout de suite (avant l'amenée à
+      // bien de l'enregistrement) pour un retour instantané.
+      const allCards = Array.from(grid.querySelectorAll('.ticket'));
+      const draggedIdx = allCards.indexOf(draggedCard);
+      const targetIdx = allCards.indexOf(card);
+      if (draggedIdx < targetIdx) card.after(draggedCard);
+      else card.before(draggedCard);
+
+      // Recalcule et persiste un sort_order pour CHAQUE produit de
+      // cette catégorie, dans son nouvel ordre visuel — garantit un
+      // ordre cohérent même après un mélange de plusieurs glissers.
+      const newOrderIds = Array.from(grid.querySelectorAll('.ticket')).map(c => c.dataset.id);
+      for (let i = 0; i < newOrderIds.length; i++) {
+        const p = products.find(x => x.id === newOrderIds[i]);
+        if (p) p.sortOrder = i;
+        try {
+          await supabaseClient.from('products').update({ sort_order: i }).eq('id', newOrderIds[i]);
+        } catch (err) {
+          console.error('Échec de l\'enregistrement de l\'ordre', err);
+        }
+      }
+      showToast('✓ Ordre mis à jour');
+    });
+  });
+}
+
+function setupReorganiserTab() {
+  document.getElementById('reorganiserCategorySelect').addEventListener('change', renderReorganiserGrid);
 }
 
 function setupCarteTab() {
@@ -3933,6 +4060,7 @@ function openProductForm(productId) {
     document.getElementById('formRef').value = p.ref;
     document.getElementById('formPrice').value = p.price;
     document.getElementById('formCategory').value = p.categoryId;
+    document.getElementById('formSize').value = p.size || '';
     document.getElementById('outOfStockToggle').checked = !!p.outOfStock;
     document.getElementById('featuredToggle').checked = !!p.featured;
     document.getElementById('newToggle').checked = !!p.isNew;
@@ -3963,6 +4091,7 @@ function openProductForm(productId) {
     document.getElementById('formRef').value = '';
     document.getElementById('formPrice').value = '';
     if (categories.length) document.getElementById('formCategory').value = categories[0].id;
+    document.getElementById('formSize').value = '';
     document.getElementById('outOfStockToggle').checked = false;
     document.getElementById('featuredToggle').checked = false;
     document.getElementById('newToggle').checked = false;
@@ -4145,6 +4274,7 @@ function setupProductFormSave() {
     const ref = document.getElementById('formRef').value.trim();
     const price = parseFloat(document.getElementById('formPrice').value);
     const categoryId = document.getElementById('formCategory').value;
+    const size = document.getElementById('formSize').value;
     const outOfStock = document.getElementById('outOfStockToggle').checked;
     const featured = document.getElementById('featuredToggle').checked;
     const isNew = document.getElementById('newToggle').checked;
@@ -4193,24 +4323,24 @@ function setupProductFormSave() {
       if (editingProductId) {
         const { error } = await supabaseClient.from('products').update({
           name, ref, price, category_id: categoryId, image: finalImageUrl,
-          unit_step: unitStep, unit_label: unitLabel,
+          unit_step: unitStep, unit_label: unitLabel, size: size,
           out_of_stock: outOfStock, featured: featured, is_new: isNew, is_promo: isPromo
         }).eq('id', editingProductId);
         if (error) throw error;
         const p = products.find(x => x.id === editingProductId);
         p.name = name; p.ref = ref; p.price = price; p.categoryId = categoryId;
-        p.image = finalImageUrl; p.unitStep = unitStep; p.unitLabel = unitLabel;
+        p.image = finalImageUrl; p.unitStep = unitStep; p.unitLabel = unitLabel; p.size = size;
         p.outOfStock = outOfStock; p.featured = featured; p.isNew = isNew; p.isPromo = isPromo;
         showToast('Produit mis à jour');
       } else {
         const newId = uid('prod');
         const { error } = await supabaseClient.from('products').insert({
           id: newId, ref, name, price, category_id: categoryId, image: finalImageUrl,
-          unit_step: unitStep, unit_label: unitLabel, sort_order: products.length + 1,
+          unit_step: unitStep, unit_label: unitLabel, size: size, sort_order: products.length + 1,
           out_of_stock: outOfStock, featured: featured, is_new: isNew, is_promo: isPromo
         });
         if (error) throw error;
-        products.push({ id: newId, ref, name, price, categoryId, image: finalImageUrl, unitStep, unitLabel, outOfStock, featured, isNew, isPromo, hidden: false });
+        products.push({ id: newId, ref, name, price, categoryId, image: finalImageUrl, unitStep, unitLabel, size, outOfStock, featured, isNew, isPromo, hidden: false });
         showToast('Produit ajouté');
       }
       closeDrawer('productFormDrawer');
@@ -4303,6 +4433,7 @@ function init() {
   setupCommissionsTab();
   setupVentesTab();
   setupCarteTab();
+  setupReorganiserTab();
   setupAddressAutocomplete();
   setupAwardModal();
   setupLogoUpload();
