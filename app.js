@@ -168,6 +168,11 @@ const DEFAULT_THEME = {
   chipGap: 9,              // 4-18px : espace entre les chips de catégorie
   cartIconSize: 48,        // 38-60px : taille de l'icône panier
   lotLabelSize: 11.5,      // 9-15px : taille du texte "Lot de X"
+  sizeBadgeDiameter: 30,    // 22-44px : diamètre du badge rond de taille (XS/S/M/L/XL)
+  sizeBadgeFontSize: 13,    // 9-18px : taille du texte dans le badge de taille
+  sizeBadgeBg: '#1B2A45',   // couleur de fond du badge de taille
+  sizeBadgeText: '#D89A2C', // couleur du texte du badge de taille
+  sizeBadgeBorder: '#D89A2C', // couleur de la bordure du badge de taille
   imageRadius: 0,          // 0-20px : arrondi des photos produit elles-mêmes
   pressScale: 8,           // 0-20 : intensité de l'effet d'appui (% de réduction)
   bgImageOpacity: 100,      // 0-100 : opacité de la photo de fond (Paris ou personnalisée)
@@ -787,7 +792,7 @@ function productCardHtml(p, bulkEligible) {
   const lots = p.unitStep > 1 ? Math.round(qty / p.unitStep) : qty;
   const img = p.image || '';
   const unitTag = p.unitStep > 1 ? `<span class="t-unit">📦 Lot de ${p.unitStep}</span>` : '';
-  const sizeTag = p.size ? `<span class="t-unit">📏 Taille ${escapeHtml(p.size)}</span>` : '';
+  const sizeCornerBadge = p.size ? `<div class="size-corner-badge">${escapeHtml(p.size)}</div>` : '';
   bulkEligible = bulkEligible || getBulkEligibleCategories();
   const effectivePrice = getEffectivePrice(p, bulkEligible);
   const isBulk = effectivePrice !== p.price;
@@ -802,13 +807,13 @@ function productCardHtml(p, bulkEligible) {
         <div class="ticket-img-wrap" data-detailid="${p.id}">
           <img src="${img}" alt="${escapeHtml(p.name)}" loading="lazy">
           <span class="stamp">RÉF<br>${escapeHtml(p.ref)}</span>
+          ${sizeCornerBadge}
           <div class="stock-banner">Rupture de stock</div>
         </div>
         <div class="ticket-body">
           <div class="t-name">${escapeHtml(p.name)}</div>
           <div class="t-ref">Réf. ${escapeHtml(p.ref)}</div>
           ${unitTag}
-          ${sizeTag}
         </div>
       </div>
       <div class="perf-seam"></div>
@@ -825,12 +830,12 @@ function productCardHtml(p, bulkEligible) {
       <div class="ticket-img-wrap" data-detailid="${p.id}">
         <img src="${img}" alt="${escapeHtml(p.name)}" loading="lazy">
         <span class="stamp">RÉF<br>${escapeHtml(p.ref)}</span>
+        ${sizeCornerBadge}
       </div>
       <div class="ticket-body">
         <div class="t-name">${escapeHtml(p.name)}</div>
         <div class="t-ref">Réf. ${escapeHtml(p.ref)}</div>
         ${unitTag}
-        ${sizeTag}
       </div>
     </div>
     <div class="perf-seam"></div>
@@ -3101,11 +3106,46 @@ function renderReorganiserGrid() {
   const bulkEligible = getBulkEligibleCategories();
   grid.innerHTML = catProducts.map(p => productCardHtml(p, bulkEligible)).join('');
   observeCardsForScrollReveal('.ticket');
+  setupReorganiserDragAndDrop(grid);
+}
 
-  // Active le glisser-déposer natif (HTML5 Drag and Drop) sur chaque
-  // carte affichée.
+/* Glisser-déposer fonctionnant à la fois à la souris (HTML5 Drag and
+   Drop natif) ET au toucher (tablette/mobile) — l'API HTML5 native ne
+   répond pas du tout aux gestes tactiles sans implémentation
+   spécifique, ce qui empêchait Fuaad de réorganiser ses produits sur
+   sa tablette. La version tactile recrée manuellement le même
+   comportement : suit le doigt, détecte la carte survolée, et
+   persiste le nouvel ordre de la même façon que la version souris. */
+function setupReorganiserDragAndDrop(grid) {
+  let touchDraggedCard = null;
+  let touchGhost = null;
+
+  async function persistNewOrder() {
+    const newOrderIds = Array.from(grid.querySelectorAll('.ticket')).map(c => c.dataset.id);
+    for (let i = 0; i < newOrderIds.length; i++) {
+      const p = products.find(x => x.id === newOrderIds[i]);
+      if (p) p.sortOrder = i;
+      try {
+        await supabaseClient.from('products').update({ sort_order: i }).eq('id', newOrderIds[i]);
+      } catch (err) {
+        console.error('Échec de l\'enregistrement de l\'ordre', err);
+      }
+    }
+    showToast('✓ Ordre mis à jour');
+  }
+
+  function cardUnderPoint(x, y, exclude) {
+    const cards = Array.from(grid.querySelectorAll('.ticket')).filter(c => c !== exclude);
+    return cards.find(c => {
+      const r = c.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    });
+  }
+
   grid.querySelectorAll('.ticket').forEach(card => {
     card.draggable = true;
+
+    // --- Souris (HTML5 Drag and Drop natif, fonctionne déjà bien) ---
     card.addEventListener('dragstart', () => card.classList.add('dragging'));
     card.addEventListener('dragend', () => {
       card.classList.remove('dragging');
@@ -3121,29 +3161,51 @@ function renderReorganiserGrid() {
       card.classList.remove('drag-over');
       const draggedCard = grid.querySelector('.ticket.dragging');
       if (!draggedCard || draggedCard === card) return;
-
-      // Réordonne le DOM visuellement tout de suite (avant l'amenée à
-      // bien de l'enregistrement) pour un retour instantané.
       const allCards = Array.from(grid.querySelectorAll('.ticket'));
       const draggedIdx = allCards.indexOf(draggedCard);
       const targetIdx = allCards.indexOf(card);
       if (draggedIdx < targetIdx) card.after(draggedCard);
       else card.before(draggedCard);
+      await persistNewOrder();
+    });
 
-      // Recalcule et persiste un sort_order pour CHAQUE produit de
-      // cette catégorie, dans son nouvel ordre visuel — garantit un
-      // ordre cohérent même après un mélange de plusieurs glissers.
-      const newOrderIds = Array.from(grid.querySelectorAll('.ticket')).map(c => c.dataset.id);
-      for (let i = 0; i < newOrderIds.length; i++) {
-        const p = products.find(x => x.id === newOrderIds[i]);
-        if (p) p.sortOrder = i;
-        try {
-          await supabaseClient.from('products').update({ sort_order: i }).eq('id', newOrderIds[i]);
-        } catch (err) {
-          console.error('Échec de l\'enregistrement de l\'ordre', err);
-        }
+    // --- Toucher (tablette/mobile) — implémentation manuelle ---
+    let touchStartTimer = null;
+    card.addEventListener('touchstart', (e) => {
+      // Un petit délai avant d'activer le mode "glisser" évite de
+      // capturer un simple scroll vertical de la page comme un début
+      // de glissé.
+      touchStartTimer = setTimeout(() => {
+        touchDraggedCard = card;
+        card.classList.add('dragging');
+      }, 150);
+    }, { passive: true });
+
+    card.addEventListener('touchmove', (e) => {
+      if (!touchDraggedCard) { clearTimeout(touchStartTimer); return; }
+      e.preventDefault(); // empêche le scroll de la page une fois le glissé engagé
+      const touch = e.touches[0];
+      grid.querySelectorAll('.ticket').forEach(c => c.classList.remove('drag-over'));
+      const target = cardUnderPoint(touch.clientX, touch.clientY, touchDraggedCard);
+      if (target) target.classList.add('drag-over');
+    }, { passive: false });
+
+    card.addEventListener('touchend', async (e) => {
+      clearTimeout(touchStartTimer);
+      if (!touchDraggedCard) return;
+      const touch = e.changedTouches[0];
+      const target = cardUnderPoint(touch.clientX, touch.clientY, touchDraggedCard);
+      touchDraggedCard.classList.remove('dragging');
+      grid.querySelectorAll('.ticket').forEach(c => c.classList.remove('drag-over'));
+      if (target && target !== touchDraggedCard) {
+        const allCards = Array.from(grid.querySelectorAll('.ticket'));
+        const draggedIdx = allCards.indexOf(touchDraggedCard);
+        const targetIdx = allCards.indexOf(target);
+        if (draggedIdx < targetIdx) target.after(touchDraggedCard);
+        else target.before(touchDraggedCard);
+        await persistNewOrder();
       }
-      showToast('✓ Ordre mis à jour');
+      touchDraggedCard = null;
     });
   });
 }
@@ -3577,6 +3639,11 @@ function applyThemeToPage() {
   r.setProperty('--chip-gap', `${t.chipGap != null ? t.chipGap : 9}px`);
   r.setProperty('--cart-icon-size', `${t.cartIconSize != null ? t.cartIconSize : 48}px`);
   r.setProperty('--lot-label-size', `${t.lotLabelSize != null ? t.lotLabelSize : 11.5}px`);
+  r.setProperty('--size-badge-diameter', `${t.sizeBadgeDiameter != null ? t.sizeBadgeDiameter : 30}px`);
+  r.setProperty('--size-badge-font-size', `${t.sizeBadgeFontSize != null ? t.sizeBadgeFontSize : 13}px`);
+  r.setProperty('--size-badge-bg', t.sizeBadgeBg || '#1B2A45');
+  r.setProperty('--size-badge-text', t.sizeBadgeText || '#D89A2C');
+  r.setProperty('--size-badge-border', t.sizeBadgeBorder || '#D89A2C');
   r.setProperty('--image-radius', `${t.imageRadius != null ? t.imageRadius : 0}px`);
   r.setProperty('--press-scale', `${1 - (t.pressScale != null ? t.pressScale : 8) / 100}`);
   r.setProperty('--bg-image-opacity', String((t.bgImageOpacity != null ? t.bgImageOpacity : 100) / 100));
@@ -3712,6 +3779,13 @@ function prefillThemeControls() {
   document.getElementById('valRefSize').textContent = theme.refSize + 'px';
   document.getElementById('themeLotLabelSize').value = theme.lotLabelSize;
   document.getElementById('valLotLabelSize').textContent = theme.lotLabelSize + 'px';
+  document.getElementById('themeSizeBadgeDiameter').value = theme.sizeBadgeDiameter != null ? theme.sizeBadgeDiameter : 30;
+  document.getElementById('valSizeBadgeDiameter').textContent = (theme.sizeBadgeDiameter != null ? theme.sizeBadgeDiameter : 30) + 'px';
+  document.getElementById('themeSizeBadgeFontSize').value = theme.sizeBadgeFontSize != null ? theme.sizeBadgeFontSize : 13;
+  document.getElementById('valSizeBadgeFontSize').textContent = (theme.sizeBadgeFontSize != null ? theme.sizeBadgeFontSize : 13) + 'px';
+  document.getElementById('themeSizeBadgeBg').value = theme.sizeBadgeBg || '#1B2A45';
+  document.getElementById('themeSizeBadgeText').value = theme.sizeBadgeText || '#D89A2C';
+  document.getElementById('themeSizeBadgeBorder').value = theme.sizeBadgeBorder || '#D89A2C';
   document.getElementById('themeFontHeading').value = theme.fontHeading;
   document.getElementById('themeFontBody').value = theme.fontBody;
 
@@ -3779,6 +3853,11 @@ function readThemeFromControls() {
     lineHeight: parseInt(document.getElementById('themeLineHeight').value, 10),
     refSize: parseInt(document.getElementById('themeRefSize').value, 10),
     lotLabelSize: parseFloat(document.getElementById('themeLotLabelSize').value),
+    sizeBadgeDiameter: parseFloat(document.getElementById('themeSizeBadgeDiameter').value),
+    sizeBadgeFontSize: parseFloat(document.getElementById('themeSizeBadgeFontSize').value),
+    sizeBadgeBg: document.getElementById('themeSizeBadgeBg').value,
+    sizeBadgeText: document.getElementById('themeSizeBadgeText').value,
+    sizeBadgeBorder: document.getElementById('themeSizeBadgeBorder').value,
     fontHeading: document.getElementById('themeFontHeading').value,
     fontBody: document.getElementById('themeFontBody').value,
 
@@ -3878,6 +3957,8 @@ function setupThemeControls() {
     ['themeLineHeight', 'valLineHeight', '%'],
     ['themeRefSize', 'valRefSize', 'px'],
     ['themeLotLabelSize', 'valLotLabelSize', 'px'],
+    ['themeSizeBadgeDiameter', 'valSizeBadgeDiameter', 'px'],
+    ['themeSizeBadgeFontSize', 'valSizeBadgeFontSize', 'px'],
     ['themeButtonRadius', 'valButtonRadius', 'px'],
     ['themeAddBtnSize', 'valAddBtnSize', 'px'],
     ['themeDrawerCloseSize', 'valDrawerCloseSize', 'px'],
@@ -3898,6 +3979,10 @@ function setupThemeControls() {
       label.textContent = input.value + unit;
       livePreviewStyleOnly();
     });
+  });
+
+  ['themeSizeBadgeBg', 'themeSizeBadgeText', 'themeSizeBadgeBorder'].forEach(id => {
+    document.getElementById(id).addEventListener('input', livePreviewStyleOnly);
   });
 
   // Les bascules Promo/Nouveauté et leurs libellés changent du texte et
