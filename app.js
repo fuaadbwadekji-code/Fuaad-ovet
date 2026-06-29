@@ -1952,7 +1952,11 @@ async function toggleOrderCommissionRate(orderId, montantHT, shopName) {
     console.error(e);
     showToast('⚠️ Erreur lors de l\'enregistrement');
   }
-  renderAdminOrderList();
+  // Mise à jour ciblée du seul bouton concerné — jamais un
+  // ré-affichage complet de la liste, qui ferait sauter le défilement
+  // en haut de page et donnerait l'impression que rien ne change.
+  const btn = document.querySelector(`[data-commission-order-id="${orderId}"]`);
+  if (btn) btn.textContent = `${newRate}% — ${fmtPrice(newAmount)} (toucher pour changer)`;
 }
 
 async function renderAdminOrderList() {
@@ -2582,11 +2586,31 @@ async function renderCommissionsTab() {
           <div class="commission-order-sub">${e.shopName ? escapeHtml(e.shopName) + ' · ' : ''}${dateStr} ${isReduced ? `· taux spécial (${e.rate}%)` : ''}</div>
         </div>
         <div class="commission-order-amount">${fmtPrice(e.amount)}</div>
+        <button class="stock-alert-dismiss" data-delete-commission-id="${e.orderId}" title="Supprimer cette commission">✕</button>
       </div>`;
     }).join('');
+    listEl.querySelectorAll('[data-delete-commission-id]').forEach(btn => {
+      btn.addEventListener('click', () => deleteCommissionEntry(btn.dataset.deleteCommissionId));
+    });
   }
 
   renderReducedShopsList();
+}
+
+/* Supprime définitivement l'entrée de commission d'une commande
+   précise dans le registre permanent — demandé explicitement par
+   Fuaad pour pouvoir corriger une commission erronée sans devoir
+   toucher à la commande elle-même. */
+async function deleteCommissionEntry(orderId) {
+  commissionLedger = commissionLedger.filter(e => e.orderId !== orderId);
+  try {
+    await supabaseClient.from('settings').update({ commission_ledger: commissionLedger }).eq('id', 1);
+    showToast('✓ Commission supprimée');
+  } catch (e) {
+    console.error(e);
+    showToast('⚠️ Erreur lors de la suppression');
+  }
+  renderCommissionsTab();
 }
 
 function renderReducedShopsList() {
