@@ -79,8 +79,11 @@ function getMonthBoundaries(year, monthIndex /* 0-11 */) {
 
 function calculateOrderCommission(order) {
   const rate = getCommissionRateForShop(order.shop_name);
-  const totalWithTva = order.total_with_tva != null ? order.total_with_tva : order.total;
-  return { amount: +(totalWithTva * rate / 100).toFixed(2), rate };
+  // Base de calcul = Sous-total HT (hors taxes), PAS le Total TTC —
+  // conforme aux conditions du contrat de Fuaad : la TVA collectée
+  // n'est pas un revenu sur lequel une commission est due.
+  const montantHT = order.total != null ? order.total : order.total_with_tva;
+  return { amount: +(montantHT * rate / 100).toFixed(2), rate };
 }
 
 /* ---------- État ---------- */
@@ -96,7 +99,7 @@ const SPECIAL_COMMISSION_RATE = 0.5;    // % — uniquement pour les magasins de
 let reducedCommissionShops = [
   'NK STEINKERQUE', 'MONDIAL SOUVENIRS', 'ANVERS TISSUS', 'BM SOUVENIRS',
   'AU PARIS MONTMARTRE', 'SACRE SOUVENIRS', 'CHARMRS SOUVENIRS', 'LE CHAT NOIR',
-  'SACRE CŒUR SOUVENIRS', 'ART TABLEAUX', 'ART ATAK', 'WORLD SOUVENIRS'
+  'ART TABLEAUX', 'ART ATAK', 'WORLD SOUVENIRS', 'PARIS FOR EVER'
 ]; // noms de magasins (insensible à la casse) bénéficiant du taux spécial 0,5%
 
 /* Réglages d'apparence personnalisables depuis l'admin (onglet Réglages
@@ -1907,6 +1910,51 @@ async function refreshAdminProducts() {
 /* =========================================================
    ADMIN — Commandes
    ========================================================= */
+/* Texte affiché sur le bouton de commission d'une commande : reflète
+   le taux réellement figé dans le registre permanent s'il existe déjà
+   une entrée pour cette commande, sinon le taux qui serait appliqué
+   automatiquement par défaut (avant toute bascule manuelle). */
+function getCommissionBadgeText(order) {
+  const entry = commissionLedger.find(e => e.orderId === order.id);
+  if (entry) return `${entry.rate}% — ${fmtPrice(entry.amount)} (toucher pour changer)`;
+  const { rate } = calculateOrderCommission(order);
+  return `${rate}% (taux par défaut — toucher pour fixer)`;
+}
+
+/* Bascule manuellement le taux de commission d'UNE commande précise
+   entre 2% et 0,5%, indépendamment du nom du magasin — exactement la
+   fonctionnalité demandée : Fuaad choisit lui-même le taux d'une
+   commande en particulier d'un simple geste. Met à jour (ou crée s'il
+   n'existait pas encore) l'entrée correspondante dans le registre
+   permanent des commissions, recalculée sur le Sous-total HT. */
+async function toggleOrderCommissionRate(orderId, montantHT, shopName) {
+  const existingIdx = commissionLedger.findIndex(e => e.orderId === orderId);
+  const currentRate = existingIdx >= 0 ? commissionLedger[existingIdx].rate : calculateOrderCommission({ shop_name: shopName, total: montantHT }).rate;
+  const newRate = currentRate === 2 ? 0.5 : 2;
+  const newAmount = +(montantHT * newRate / 100).toFixed(2);
+
+  if (existingIdx >= 0) {
+    commissionLedger[existingIdx].rate = newRate;
+    commissionLedger[existingIdx].amount = newAmount;
+  } else {
+    // Commande passée avant la mise en place du registre permanent :
+    // on crée son entrée maintenant, avec le taux choisi ici.
+    commissionLedger.push({
+      orderId, orderNumber: '?', clientName: '', shopName,
+      amount: newAmount, rate: newRate, createdAt: new Date().toISOString()
+    });
+  }
+
+  try {
+    await supabaseClient.from('settings').update({ commission_ledger: commissionLedger }).eq('id', 1);
+    showToast(`✓ Commission fixée à ${newRate}% (${fmtPrice(newAmount)})`);
+  } catch (e) {
+    console.error(e);
+    showToast('⚠️ Erreur lors de l\'enregistrement');
+  }
+  renderAdminOrderList();
+}
+
 async function renderAdminOrderList() {
   const list = document.getElementById('adminOrderList');
   list.innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
@@ -1951,6 +1999,12 @@ async function renderAdminOrderList() {
             <option value="terminee" ${o.status === 'terminee' ? 'selected' : ''}>✅ Terminée</option>
           </select>
         </div>
+        <div class="oc-commission-row">
+          <span class="oc-commission-label">💰 Commission appliquée :</span>
+          <button class="oc-commission-toggle" data-commission-order-id="${o.id}" data-order-ht="${o.total}" data-order-shop="${escapeHtml(o.shop_name || '')}">
+            ${getCommissionBadgeText(o)}
+          </button>
+        </div>
         <div class="oc-notes-wrap">
           <label class="oc-notes-label">📝 Note interne</label>
           <textarea class="oc-notes-input" data-order-id="${o.id}" placeholder="Ex. Appeler le client avant livraison…">${escapeHtml(o.notes || '')}</textarea>
@@ -1964,6 +2018,11 @@ async function renderAdminOrderList() {
     });
     list.innerHTML = html;
     observeCardsForScrollReveal('.order-card');
+    list.querySelectorAll('[data-commission-order-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        toggleOrderCommissionRate(btn.dataset.commissionOrderId, parseFloat(btn.dataset.orderHt), btn.dataset.orderShop);
+      });
+    });
     list.querySelectorAll('.copy-order-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         let items = [];
