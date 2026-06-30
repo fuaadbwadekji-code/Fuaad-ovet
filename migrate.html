@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Migration → Nouveau Supabase</title>
+<style>
+body { font-family: monospace; background: #0a0a0a; color: #00ff00; padding: 20px; }
+h2 { color: #fff; }
+button { background: #00ff00; color: #000; border: none; padding: 10px 20px; font-size: 16px; cursor: pointer; margin: 5px; border-radius: 4px; font-weight: bold; }
+button:disabled { background: #444; color: #888; cursor: not-allowed; }
+#log { background: #111; border: 1px solid #333; padding: 15px; height: 400px; overflow-y: auto; margin-top: 15px; font-size: 12px; }
+.ok { color: #00ff00; }
+.err { color: #ff4444; }
+.info { color: #ffff00; }
+progress { width: 100%; height: 20px; margin: 5px 0; }
+</style>
+</head>
+<body>
+<h2>🚀 Migration → Nouveau Supabase</h2>
+
+<div>
+  <b>Nouveau projet:</b> psjtlgbybpbansstnqdi.supabase.co<br>
+  <b>Ancien projet:</b> ujwjydjjxzlmwuxaoukf.supabase.co
+</div>
+
+<br>
+<button id="btnCats" onclick="migrateCats()">1. Migrer Categories (43)</button>
+<button id="btnProds" onclick="migrateProds()">2. Migrer Produits (896)</button>
+<button id="btnSettings" onclick="migrateSettings()">3. Migrer Settings</button>
+<br><br>
+<div id="progress-info"></div>
+<progress id="prog" value="0" max="100" style="display:none"></progress>
+<div id="log"></div>
+
+<script>
+const NEW_URL = 'https://psjtlgbybpbansstnqdi.supabase.co';
+const NEW_KEY = 'sb_publishable_VCdoLmlBSk5v2WgGtQJdzg_k3FS8_yb';
+const OLD_IMG_BASE = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+
+function log(msg, type='ok') {
+  const el = document.getElementById('log');
+  el.innerHTML += `<div class="${type}">${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function supabaseInsert(table, rows) {
+  const res = await fetch(`${NEW_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': NEW_KEY,
+      'Authorization': `Bearer ${NEW_KEY}`,
+      'Prefer': 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify(rows)
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err);
+  }
+  return res;
+}
+
+const CATEGORIES = [{"id":"cat-tote-bag","name":"Tote Bag )","sort_order":6,"hidden":true,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-sacs-toile-2","name":"Sacs Toile","sort_order":93,"hidden":true,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-miroirs-rect-strass","name":"Miroirs Rectangle Strass","sort_order":52,"hidden":true,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-miroirs-ronds-pm","name":"Miroirs Ronds PM","sort_order":51,"hidden":true,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-tabliers","name":"Tabliers","sort_order":3,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-trousses","name":"Trousses à Crayons","sort_order":16,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-miroirs-ronds","name":"Miroirs Ronds","sort_order":17,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-miroirs-rect","name":"Miroirs Rectangle","sort_order":18,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-portefeuilles-sacs-unified","name":"Portefeuilles & Sacs","sort_order":14,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-sacs","name":"Sacs Shopping","sort_order":5,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-tote-bag-2","name":"Tote Bags","sort_order":6,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-foulards","name":"Foulards","sort_order":7,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-casquettes","name":"Casquettes","sort_order":8,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-beret-adulte-brode","name":"Bérets Adulte Brodés","sort_order":9,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-beret-adulte-uni","name":"Bérets Adulte Unis","sort_order":10,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-beret-enfant-brode","name":"Bérets Enfant Brodés","sort_order":11,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-beret-enfant-uni","name":"Bérets Enfant Unis","sort_order":12,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-magnets-unified","name":"Magnets","sort_order":19,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-magnets-metal","name":"Magnets Métal","sort_order":20,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-portes-cles-unified","name":"Porte-clés","sort_order":21,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-portes-cles-g","name":"Porte-clés G","sort_order":22,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-carnets","name":"Carnets","sort_order":23,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-cadre-photo","name":"Cadres Photo","sort_order":24,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-plaque-rue","name":"Plaques de Rue","sort_order":25,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-monuments","name":"Monuments Résine","sort_order":26,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"b80862e4-80a5-4325-86d2-c56f3fe41e2f","name":"Verres à Shot","sort_order":27,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-boule-neige","name":"Boules de Neige","sort_order":28,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-parapluies","name":"Parapluies & Ponchos","sort_order":29,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-suspension-noel","name":"Suspensions de Noël","sort_order":30,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-tirelire","name":"Tirelires","sort_order":31,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-chaussettes-bebe","name":"Chaussettes Bébé","sort_order":32,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-balle-baseball","name":"Balles Baseball","sort_order":33,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-stylos","name":"Stylos","sort_order":34,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-crayons","name":"Crayons","sort_order":35,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-cartes-jouer","name":"Jeux de Cartes","sort_order":36,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-dessous-verre","name":"Dessous de Verre","sort_order":37,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-briquets","name":"Briquets","sort_order":38,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-gants-cuisine","name":"Gants Cuisine","sort_order":39,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-assiette-resine","name":"Assiettes Résine","sort_order":40,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-drapeaux","name":"Drapeaux","sort_order":41,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-rhw44hc","name":"Magnets Illustrés","sort_order":42,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-tshirts-adulte","name":"T-shirts Adulte","sort_order":43,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-tshirts-enfant","name":"T-shirts Enfant","sort_order":44,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-k7ht5fx","name":"Magnets Timbre","sort_order":45,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-8yjgwht","name":"Magnets Plaque Souple","sort_order":46,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-mffrg4y","name":"Magnets Métal Rectangle","sort_order":47,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-9mwn15b","name":"Magnets Résine Épox","sort_order":48,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-xsjsmna","name":"Magnets Rectangle XL","sort_order":49,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-kqibi9i","name":"Boîtes Pilule","sort_order":50,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null},{"id":"cat-tubes","name":"Tubes Cartonnés","sort_order":53,"hidden":false,"bulk_group_id":null,"bulk_threshold_qty":null,"bulk_price":null}];
+
+async function migrateCats() {
+  document.getElementById('btnCats').disabled = true;
+  log('🚀 Migration des catégories...', 'info');
+  try {
+    await supabaseInsert('categories', CATEGORIES);
+    log(`✅ ${CATEGORIES.length} catégories migrées!`);
+  } catch(e) {
+    log('❌ Erreur: ' + e.message, 'err');
+  }
+  document.getElementById('btnCats').disabled = false;
+}
+
+// Products will be loaded from the page itself via fetch from old Supabase
+async function migrateProds() {
+  document.getElementById('btnProds').disabled = true;
+  const prog = document.getElementById('prog');
+  prog.style.display = 'block';
+  log('📦 Chargement des produits depuis l\'ancien Supabase...', 'info');
+  
+  try {
+    // Fetch all products from OLD Supabase
+    const OLD_URL = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+    const OLD_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqd2p5ZGpqeHpsbXd1eGFvdWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk3NTk2MjEsImV4cCI6MjA2NTMzNTYyMX0.R_0FTBZP9VBN5DPP0B3L5uqFLVKNJkFJd7OWZnN-r5E';
+    
+    // Try fetching from old Supabase
+    let allProducts = [];
+    let from = 0;
+    const batchSize = 100;
+    
+    while(true) {
+      const res = await fetch(`${OLD_URL}/rest/v1/products?select=*&limit=${batchSize}&offset=${from}`, {
+        headers: {
+          'apikey': OLD_KEY,
+          'Authorization': `Bearer ${OLD_KEY}`
+        }
+      });
+      
+      if (!res.ok) {
+        log('⚠️ Ancien Supabase inaccessible, utilisation du backup JSON...', 'info');
+        break;
+      }
+      
+      const batch = await res.json();
+      if (!batch.length) break;
+      allProducts = allProducts.concat(batch);
+      from += batchSize;
+      if (batch.length < batchSize) break;
+    }
+    
+    if (allProducts.length === 0) {
+      log('⚠️ Pas de produits depuis ancien Supabase. Veuillez uploader le fichier backup.', 'err');
+      document.getElementById('btnProds').disabled = false;
+      return;
+    }
+    
+    log(`📋 ${allProducts.length} produits à migrer...`, 'info');
+    
+    // Insert in batches of 50
+    const insertBatch = 50;
+    let inserted = 0;
+    
+    for (let i = 0; i < allProducts.length; i += insertBatch) {
+      const batch = allProducts.slice(i, i + insertBatch);
+      await supabaseInsert('products', batch);
+      inserted += batch.length;
+      prog.value = Math.round((inserted / allProducts.length) * 100);
+      document.getElementById('progress-info').textContent = `${inserted} / ${allProducts.length}`;
+      log(`✅ ${inserted}/${allProducts.length} produits insérés`);
+    }
+    
+    log(`🎉 Migration terminée! ${inserted} produits.`);
+    
+  } catch(e) {
+    log('❌ Erreur: ' + e.message, 'err');
+  }
+  
+  document.getElementById('btnProds').disabled = false;
+}
+
+async function migrateSettings() {
+  document.getElementById('btnSettings').disabled = true;
+  log('⚙️ Migration des settings...', 'info');
+  
+  // First create settings table if needed
+  try {
+    const settings = {"id":1,"shop_name":"Ovet souvenir ~ commercial Fouad","whatsapp":"+33777033977","email":"fuaadbwadekji@gmail.com","admin_pin":"1519","next_order_number":19};
+    await supabaseInsert('settings', [settings]);
+    log('✅ Settings migrés!');
+  } catch(e) {
+    log('❌ Erreur settings: ' + e.message, 'err');
+    log('ℹ️ Créez la table settings manuellement si nécessaire', 'info');
+  }
+  document.getElementById('btnSettings').disabled = false;
+}
+</script>
+</body>
+</html>
