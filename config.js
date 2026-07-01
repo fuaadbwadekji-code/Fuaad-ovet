@@ -1,8 +1,8 @@
 /* =========================================================
    Configuration Supabase
    ========================================================= */
-const SUPABASE_URL = 'https://psjtlgbybpbansstnqdi.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_VCdoLmlBSk5v2WgGtQJdzg_k3FS8_yb';
+const SUPABASE_URL = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_X95sZEaadGOpz9b4PkJvAA_Wq1K_aN9';
 
 /* =========================================================
    Configuration EmailJS (notification par e-mail des commandes)
