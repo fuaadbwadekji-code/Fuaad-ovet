@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Migration Images → GitHub</title>
+<style>
+body { font-family: monospace; background: #0a0a0a; color: #00ff00; padding: 20px; }
+h2 { color: #fff; }
+button { background: #00ff00; color: #000; border: none; padding: 12px 24px; font-size: 16px; cursor: pointer; border-radius: 4px; font-weight: bold; margin: 5px; }
+button:disabled { background: #444; color: #888; cursor: not-allowed; }
+#log { background: #111; border: 1px solid #333; padding: 15px; height: 400px; overflow-y: auto; margin-top: 15px; font-size: 11px; }
+.ok { color: #00ff00; } .err { color: #ff4444; } .info { color: #ffff00; }
+progress { width: 100%; height: 20px; margin: 5px 0; }
+#stats { color: #fff; margin: 10px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+<h2>🚀 Migration Images Supabase → GitHub</h2>
+
+<div id="stats">En attente...</div>
+<progress id="prog" value="0" max="100" style="display:none"></progress>
+<br>
+<button id="btn1" onclick="startMigration()">▶ Démarrer la migration</button>
+<button id="btn2" onclick="updateDBUrls()" disabled>2. Mettre à jour les URLs en DB</button>
+<div id="log"></div>
+
+<script>
+const OLD_URL = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+const OLD_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqd2p5ZGpqeHpsbXd1eGFvdWtmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTg4NjE1NywiZXhwIjoyMDk3NDYyMTU3fQ.ZZavkW9aXdFhJu5TmC3rjgIbrOf6qoNlOGbpR1DK538';
+const NEW_URL = 'https://psjtlgbybpbansstnqdi.supabase.co';
+const NEW_KEY = 'sb_publishable_VCdoLmlBSk5v2WgGtQJdzg_k3FS8_yb';
+const GH_TOKEN = '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';
+const GH_REPO = 'fuaadbwadekji-code/Fuaad-ovet';
+const GH_BRANCH = 'main';
+const GH_FOLDER = 'images';
+
+let urlMapping = {}; // oldUrl -> newUrl
+let allFiles = [];
+
+function log(msg, type='ok') {
+  const el = document.getElementById('log');
+  const time = new Date().toLocaleTimeString();
+  el.innerHTML += `<div class="${type}">[${time}] ${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStats(txt) {
+  document.getElementById('stats').textContent = txt;
+}
+
+// List all files in Supabase Storage
+async function listAllFiles() {
+  log('📋 Récupération de la liste des fichiers...', 'info');
+  let files = [];
+  let offset = 0;
+  const limit = 100;
+  
+  while(true) {
+    const res = await fetch(`${OLD_URL}/storage/v1/object/list/Product-images`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OLD_KEY}`,
+        'apikey': OLD_KEY
+      },
+      body: JSON.stringify({ limit, offset, sortBy: { column: 'name', order: 'asc' } })
+    });
+    
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`List failed: ${err}`);
+    }
+    
+    const batch = await res.json();
+    if (!batch || batch.length === 0) break;
+    files = files.concat(batch);
+    log(`📦 ${files.length} fichiers trouvés...`, 'info');
+    if (batch.length < limit) break;
+    offset += limit;
+  }
+  
+  return files;
+}
+
+// Check if file exists in GitHub
+async function getGitHubFileSha(path) {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${path}`, {
+      headers: { 'Authorization': `token ${GH_TOKEN}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.sha;
+    }
+  } catch(e) {}
+  return null;
+}
+
+// Upload file to GitHub
+async function uploadToGitHub(filename, base64Content) {
+  const path = `${GH_FOLDER}/${filename}`;
+  const sha = await getGitHubFileSha(path);
+  
+  const body = {
+    message: `Add image: ${filename}`,
+    content: base64Content,
+    branch: GH_BRANCH
+  };
+  if (sha) body.sha = sha;
+  
+  const res = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${path}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `token ${GH_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`GitHub upload failed: ${err}`);
+  }
+  
+  return `https://raw.githubusercontent.com/${GH_REPO}/${GH_BRANCH}/${path}`;
+}
+
+// Download from Supabase Storage
+async function downloadFromSupabase(filename) {
+  const res = await fetch(`${OLD_URL}/storage/v1/object/Product-images/${filename}`, {
+    headers: {
+      'Authorization': `Bearer ${OLD_KEY}`,
+      'apikey': OLD_KEY
+    }
+  });
+  
+  if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+  
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function startMigration() {
+  document.getElementById('btn1').disabled = true;
+  document.getElementById('prog').style.display = 'block';
+  
+  try {
+    // List files
+    allFiles = await listAllFiles();
+    log(`✅ ${allFiles.length} fichiers à migrer`, 'info');
+    
+    let done = 0, errors = 0;
+    
+    for (const file of allFiles) {
+      const filename = file.name;
+      if (!filename) continue;
+      
+      try {
+        // Download from old Supabase
+        const base64 = await downloadFromSupabase(filename);
+        
+        // Upload to GitHub
+        const newUrl = await uploadToGitHub(filename, base64);
+        
+        // Map old URL to new URL
+        const oldUrl = `${OLD_URL}/storage/v1/object/public/Product-images/${filename}`;
+        urlMapping[oldUrl] = newUrl;
+        
+        done++;
+        const pct = Math.round(done / allFiles.length * 100);
+        document.getElementById('prog').value = pct;
+        setStats(`${done} / ${allFiles.length} (${errors} erreurs)`);
+        
+        if (done % 10 === 0) log(`✅ ${done}/${allFiles.length} — ${filename}`, 'ok');
+        
+        // Small delay to avoid rate limiting
+        await new Promise(r => setTimeout(r, 100));
+        
+      } catch(e) {
+        errors++;
+        log(`❌ ${filename}: ${e.message}`, 'err');
+      }
+    }
+    
+    log(`🎉 Migration terminée! ${done} images, ${errors} erreurs`, 'info');
+    log(`📊 Mapping: ${Object.keys(urlMapping).length} URLs`, 'info');
+    
+    // Save mapping to localStorage for step 2
+    localStorage.setItem('url_mapping', JSON.stringify(urlMapping));
+    
+    document.getElementById('btn2').disabled = false;
+    
+  } catch(e) {
+    log(`❌ Erreur: ${e.message}`, 'err');
+    document.getElementById('btn1').disabled = false;
+  }
+}
+
+async function updateDBUrls() {
+  document.getElementById('btn2').disabled = true;
+  log('🔄 Mise à jour des URLs en base de données...', 'info');
+  
+  const mapping = JSON.parse(localStorage.getItem('url_mapping') || '{}');
+  if (Object.keys(mapping).length === 0) {
+    log('❌ Pas de mapping trouvé. Relancez la migration.', 'err');
+    return;
+  }
+  
+  try {
+    // Fetch all products from OLD DB
+    let products = [];
+    let from = 0;
+    while(true) {
+      const res = await fetch(`${OLD_URL}/rest/v1/products?select=id,image&limit=100&offset=${from}`, {
+        headers: { 'apikey': OLD_KEY, 'Authorization': `Bearer ${OLD_KEY}` }
+      });
+      const batch = await res.json();
+      if (!batch.length) break;
+      products = products.concat(batch);
+      from += batch.length;
+      if (batch.length < 100) break;
+    }
+    
+    log(`📦 ${products.length} produits à mettre à jour`, 'info');
+    
+    let updated = 0;
+    for (const p of products) {
+      if (!p.image) continue;
+      const newUrl = mapping[p.image];
+      if (!newUrl || newUrl === p.image) continue;
+      
+      // Update in NEW DB
+      const res = await fetch(`${NEW_URL}/rest/v1/products?id=eq.${p.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': NEW_KEY,
+          'Authorization': `Bearer ${NEW_KEY}`
+        },
+        body: JSON.stringify({ image: newUrl })
+      });
+      
+      if (res.ok) updated++;
+    }
+    
+    log(`✅ ${updated} produits mis à jour avec les nouvelles URLs!`, 'ok');
+    log('🎉 MIGRATION COMPLÈTE! Vous pouvez maintenant passer au Free plan.', 'info');
+    
+  } catch(e) {
+    log(`❌ Erreur DB: ${e.message}`, 'err');
+  }
+}
+</script>
+</body>
+</html>
