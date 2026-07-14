@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Update URLs in DB</title>
+<style>
+body { font-family: monospace; background: #0a0a0a; color: #00ff00; padding: 20px; }
+h2 { color: #fff; }
+button { background: #00ff00; color: #000; border: none; padding: 12px 24px; font-size: 16px; cursor: pointer; border-radius: 4px; font-weight: bold; margin: 5px; }
+button:disabled { background: #444; color: #888; }
+#log { background: #111; border: 1px solid #333; padding: 15px; height: 400px; overflow-y: auto; margin-top: 15px; font-size: 11px; }
+.ok { color: #00ff00; } .err { color: #ff4444; } .info { color: #ffff00; }
+progress { width: 100%; height: 20px; margin: 5px 0; }
+#stats { color: #fff; margin: 10px 0; }
+</style>
+</head>
+<body>
+<h2>🔄 Mise à jour des URLs → GitHub</h2>
+<p style="color:#ffff00;">Cette page remplace les URLs Supabase Storage par les URLs GitHub dans la base de données.</p>
+
+<div id="stats">En attente...</div>
+<progress id="prog" value="0" max="100" style="display:none"></progress>
+<button onclick="run()">▶ Mettre à jour les URLs</button>
+<div id="log"></div>
+
+<script>
+const OLD_SUPABASE = 'https://ujwjydjjxzlmwuxaoukf.supabase.co';
+const OLD_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqd2p5ZGpqeHpsbXd1eGFvdWtmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTg4NjE1NywiZXhwIjoyMDk3NDYyMTU3fQ.ZZavkW9aXdFhJu5TmC3rjgIbrOf6qoNlOGbpR1DK538';
+const NEW_SUPABASE = 'https://psjtlgbybpbansstnqdi.supabase.co';
+const NEW_KEY = 'sb_publishable_VCdoLmlBSk5v2WgGtQJdzg_k3FS8_yb';
+const GH_BASE = 'https://raw.githubusercontent.com/fuaadbwadekji-code/Fuaad-ovet/main/images/';
+const OLD_IMG_BASE = `${OLD_SUPABASE}/storage/v1/object/public/Product-images/`;
+
+function log(msg, type='ok') {
+  const el = document.getElementById('log');
+  el.innerHTML += `<div class="${type}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function run() {
+  document.querySelector('button').disabled = true;
+  document.getElementById('prog').style.display = 'block';
+  
+  try {
+    // Fetch all products from OLD DB
+    log('📦 Chargement des produits...', 'info');
+    let products = [];
+    let from = 0;
+    while(true) {
+      const res = await fetch(`${OLD_SUPABASE}/rest/v1/products?select=id,image&limit=100&offset=${from}`, {
+        headers: { 'apikey': OLD_KEY, 'Authorization': `Bearer ${OLD_KEY}` }
+      });
+      const batch = await res.json();
+      if (!batch || batch.length === 0) break;
+      products = products.concat(batch);
+      from += batch.length;
+      if (batch.length < 100) break;
+    }
+    log(`✅ ${products.length} produits chargés`, 'info');
+    
+    let updated = 0, skipped = 0, errors = 0;
+    
+    for (let i = 0; i < products.length; i++) {
+      const p = products[i];
+      if (!p.image || !p.image.includes('supabase.co/storage')) {
+        skipped++;
+        continue;
+      }
+      
+      // Extract filename from old URL
+      const filename = p.image.split('/Product-images/')[1];
+      if (!filename) { skipped++; continue; }
+      
+      // Build new GitHub URL
+      const newUrl = GH_BASE + filename;
+      
+      // Update in NEW DB
+      const res = await fetch(`${NEW_SUPABASE}/rest/v1/products?id=eq.${encodeURIComponent(p.id)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': NEW_KEY,
+          'Authorization': `Bearer ${NEW_KEY}`
+        },
+        body: JSON.stringify({ image: newUrl })
+      });
+      
+      if (res.ok) {
+        updated++;
+      } else {
+        errors++;
+        log(`❌ ${p.id}: ${res.status}`, 'err');
+      }
+      
+      const pct = Math.round((i+1) / products.length * 100);
+      document.getElementById('prog').value = pct;
+      document.getElementById('stats').textContent = `${updated} mis à jour / ${skipped} ignorés / ${errors} erreurs`;
+      
+      if (updated % 50 === 0 && updated > 0) log(`✅ ${updated} produits mis à jour...`);
+      await new Promise(r => setTimeout(r, 50));
+    }
+    
+    log(`🎉 TERMINÉ! ${updated} URLs mises à jour, ${skipped} ignorés, ${errors} erreurs`, 'info');
+    log('✅ Vous pouvez maintenant tester le catalogue sur le nouveau Supabase!', 'ok');
+    
+  } catch(e) {
+    log(`❌ Erreur: ${e.message}`, 'err');
+  }
+  
+  document.querySelector('button').disabled = false;
+}
+</script>
+</body>
+</html>
