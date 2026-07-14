@@ -63,7 +63,7 @@ async function listAllFiles() {
         'Authorization': `Bearer ${OLD_KEY}`,
         'apikey': OLD_KEY
       },
-      body: JSON.stringify({ limit, offset, sortBy: { column: 'name', order: 'asc' } })
+      body: JSON.stringify({ limit, offset, prefix: "", sortBy: { column: "name", order: "asc" } })
     });
     
     if (!res.ok) {
