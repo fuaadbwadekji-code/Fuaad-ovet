@@ -2087,14 +2087,14 @@ async function renderAdminOrderList() {
           <label class="oc-notes-label">📝 Note interne</label>
           <textarea class="oc-notes-input" data-order-id="${o.id}" placeholder="Ex. Appeler le client avant livraison…">${escapeHtml(o.notes || '')}</textarea>
         </div>
-        <button class="copy-order-btn" data-copyitems='${escapeHtml(JSON.stringify(o.items || []))}'>📋 Copier (réf. × qté)</button>
+        <button class="copy-order-btn" data-copyitems='${escapeHtml(JSON.stringify(o.items || []))}'><svg class="ic"><use href="#ic-copy"/></svg> Copier</button>
         <div class="assign-client-wrap" data-order-id="${o.id}">
-          <button class="assign-client-btn" data-assign-order-id="${o.id}" data-assign-order-num="${escapeHtml(o.order_number)}">📤 Envoyer au client</button>
+          <button class="assign-client-btn" data-assign-order-id="${o.id}" data-assign-order-num="${escapeHtml(o.order_number)}"><svg class="ic"><use href="#ic-send"/></svg> Envoyer au client</button>
           <div class="assign-client-results address-suggestions-box"></div>
         </div>
         <div class="oc-action-row">
-          <button class="oc-archive-btn" data-archiveorder="${o.id}">🗂 Archiver</button>
-          <button class="oc-delete-btn" data-delorder-active="${o.id}">🗑 Supprimer</button>
+          <button class="oc-archive-btn" data-archiveorder="${o.id}"><svg class="ic"><use href="#ic-archive"/></svg> Archiver</button>
+          <button class="oc-delete-btn" data-delorder-active="${o.id}"><svg class="ic"><use href="#ic-trash"/></svg> Supprimer</button>
         </div>
       </div>`;
     });
@@ -2216,8 +2216,8 @@ async function renderArchivedOrderList() {
             ${getCommissionBadgeText(o)}
           </button>
         </div>
-        <button class="copy-order-btn" data-unarchiveorder="${o.id}" style="background:var(--mustard-deep, var(--mustard));">↺ Désarchiver</button>
-        <button class="delete-order-btn" data-delorder="${o.id}">🗑 Supprimer définitivement</button>
+        <button class="copy-order-btn" data-unarchiveorder="${o.id}" style="background:var(--mustard-deep, var(--mustard));"><svg class="ic"><use href="#ic-back"/></svg> Désarchiver</button>
+        <button class="delete-order-btn" data-delorder="${o.id}"><svg class="ic"><use href="#ic-trash"/></svg> Suppr. définitivement</button>
       </div>`;
     });
     list.innerHTML = html;
@@ -3370,13 +3370,9 @@ async function showClientProfile(clientName) {
     .order('created_at', { ascending: false });
 
   const client = allKnownClients.find(c => c.name.toLowerCase() === clientName.toLowerCase());
-  const totalSpent = (data || []).reduce((s, o) => s + (o.total_with_tva || 0), 0);
   const orderCount = (data || []).length;
-
-  // Commission totale depuis le registre permanent
-  const clientCommission = commissionLedger
-    .filter(e => String(e.clientName || '').toLowerCase() === clientName.toLowerCase())
-    .reduce((s, e) => s + e.amount, 0);
+  const totalSpent = (data || []).reduce((s, o) => s + (o.total_with_tva || 0), 0);
+  const clientCommission = (data || []).reduce((s, o) => s + calculateOrderCommission(o).amount, 0);
 
   document.getElementById('clientProfileName').textContent = clientName;
   setupMergeUI(clientName);
