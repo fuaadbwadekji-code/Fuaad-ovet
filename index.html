@@ -394,6 +394,34 @@ button{font-family:inherit;cursor:pointer;}
 }
 .ticket-img-wrap img{width:100%;height:100%;object-fit:contain;padding:var(--image-padding, 14px);display:block;}
 .stamp{display:none;}
+.image-preview-overlay{
+  position:fixed;inset:0;z-index:500;
+  background:rgba(10,14,20,0.92);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  display:flex!important;flex-direction:column;align-items:center;justify-content:center;
+  opacity:0;transition:opacity .25s ease;
+  pointer-events:none;
+}
+.image-preview-overlay.show{opacity:1;pointer-events:all;}
+.image-preview-img{
+  max-width:90vw;max-height:75vh;border-radius:16px;
+  box-shadow:0 30px 80px rgba(0,0,0,0.6);
+  transform:scale(0.92);transition:transform .3s cubic-bezier(.22,1.55,.36,1);
+  object-fit:contain;
+}
+.image-preview-overlay.show .image-preview-img{transform:scale(1);}
+.image-preview-caption{
+  margin-top:16px;color:rgba(255,255,255,0.8);font-family:'Fraunces',serif;
+  font-size:15px;font-weight:600;text-align:center;
+}
+.image-preview-close{
+  position:absolute;top:16px;right:16px;
+  background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);
+  border-radius:50%;width:40px;height:40px;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;
+}
+.ticket-img-wrap{cursor:zoom-in;}
 .size-corner-badge{
   position:absolute;top:8px;right:8px;z-index:5;
   width:var(--size-badge-diameter, 30px);height:var(--size-badge-diameter, 30px);
@@ -1433,8 +1461,8 @@ button{font-family:inherit;cursor:pointer;}
 .ic{display:inline-block;width:1em;height:1em;vertical-align:middle;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 .ic-lg{width:1.4em;height:1.4em;}
 .ic-xl{width:1.8em;height:1.8em;}
-.tab-btn .ic{width:18px;height:18px;display:block;margin:0 auto 2px;}
-.tab-btn{display:flex;flex-direction:column;align-items:center;font-size:10px;}
+.tab-btn .ic{width:24px;height:24px;display:block;margin:0 auto 2px;}
+.tab-btn{display:flex;flex-direction:column;align-items:center;font-size:10px;min-width:44px;}
 </style>
 </head>
 <body>
@@ -2305,6 +2333,15 @@ button{font-family:inherit;cursor:pointer;}
 
 <div class="overlay" id="awardOverlay"></div>
 
+<!-- Aperçu image produit (double-clic / double-toucher) -->
+<div id="imagePreviewOverlay" class="image-preview-overlay" style="display:none;" onclick="closeImagePreview()">
+  <button class="image-preview-close" onclick="closeImagePreview()">
+    <svg class="ic ic-lg"><use href="#ic-x"/></svg>
+  </button>
+  <img id="imagePreviewImg" src="" alt="" class="image-preview-img">
+  <div id="imagePreviewCaption" class="image-preview-caption"></div>
+</div>
+
 <!-- Modale : assigner une commande à un client + archiver -->
 <div class="overlay" id="assignClientOverlay"></div>
 <div class="client-prompt-modal" id="assignClientModal">
@@ -2473,6 +2510,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="config.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=20260629o"></script>
+<script src="app.js?v=20260629p"></script>
 </body>
 </html>

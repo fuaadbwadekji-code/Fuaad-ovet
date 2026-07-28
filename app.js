@@ -2072,9 +2072,9 @@ async function renderAdminOrderList() {
         <div class="oc-bottom">
           <span class="oc-total">${fmtPrice(totalWithTva)}</span>
           <select class="status-select" data-order-id="${o.id}">
-            <option value="nouvelle" ${o.status === 'nouvelle' ? 'selected' : ''}>🆕 Nouvelle</option>
-            <option value="en_cours" ${o.status === 'en_cours' ? 'selected' : ''}>⏳ En cours</option>
-            <option value="terminee" ${o.status === 'terminee' ? 'selected' : ''}>✅ Terminée</option>
+            <option value="nouvelle" ${o.status === 'nouvelle' ? 'selected' : ''}><svg class="ic" style="width:13px;height:13px;vertical-align:middle;margin-right:3px;stroke:#D89A2C;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><use href="#ic-plus"/></svg> Nouvelle</option>
+            <option value="en_cours" ${o.status === 'en_cours' ? 'selected' : ''}> En cours</option>
+            <option value="terminee" ${o.status === 'terminee' ? 'selected' : ''}> Terminée</option>
           </select>
         </div>
         <div class="oc-commission-row">
@@ -3404,7 +3404,12 @@ async function showClientProfile(clientName) {
   ordersEl.innerHTML = data.map(o => {
     const dateStr = new Date(o.created_at).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' });
     const items = (o.items || []).map(i => `${i.ref} ×${i.qty}`).join(', ') || '—';
-    const st = o.status === 'nouvelle' ? '🆕' : o.status === 'en_cours' ? '⏳' : '✅';
+    const stIcon = o.status === 'nouvelle'
+      ? '<svg class="ic" style="width:13px;height:13px;stroke:var(--mustard);fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle;"><use href="#ic-plus"/></svg>'
+      : o.status === 'en_cours'
+      ? '<svg class="ic" style="width:13px;height:13px;stroke:#8BC4A8;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle;"><use href="#ic-check"/></svg>'
+      : '<svg class="ic" style="width:13px;height:13px;stroke:#5E7A5E;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle;"><use href="#ic-check"/></svg>';
+    const st = stIcon;
     return `
     <div class="client-order-card" style="cursor:pointer;">
       <div class="client-order-summary" style="display:flex;align-items:center;justify-content:space-between;">
@@ -4994,6 +4999,65 @@ function setupGeneralUI() {
 }
 
 /* ---------- Init ---------- */
+/* ── Aperçu image produit ─────────────────────────────────────────────
+   Double-clic (desktop) ou double-toucher (mobile/tablette) sur
+   n'importe quelle image de produit dans le catalogue ouvre une
+   modale plein-écran avec l'image en grand, le nom du produit, et
+   sa référence. Simple clic sur l'overlay ou le bouton ✕ ferme. */
+
+function openImagePreview(src, name, ref) {
+  const overlay = document.getElementById('imagePreviewOverlay');
+  document.getElementById('imagePreviewImg').src = src;
+  document.getElementById('imagePreviewCaption').textContent = name + (ref ? ' · Réf. ' + ref : '');
+  overlay.style.display = 'flex';
+  requestAnimationFrame(() => overlay.classList.add('show'));
+}
+
+function closeImagePreview() {
+  const overlay = document.getElementById('imagePreviewOverlay');
+  overlay.classList.remove('show');
+  setTimeout(() => { overlay.style.display = 'none'; }, 250);
+}
+
+function setupImagePreview() {
+  // Délégation d'événement sur le conteneur principal — fonctionne
+  // même quand la grille est reconstruite par renderGrid().
+  const container = document.getElementById('gridContainer');
+  let lastTap = 0;
+  let lastTarget = null;
+
+  // Double-toucher (mobile/tablette) — 300ms entre deux touchers
+  container.addEventListener('touchend', (e) => {
+    const img = e.target.closest('.ticket-img-wrap img');
+    if (!img) return;
+    const now = Date.now();
+    if (now - lastTap < 300 && lastTarget === img) {
+      e.preventDefault();
+      const ticket = img.closest('.ticket');
+      const name = ticket?.querySelector('.t-name')?.textContent || '';
+      const ref = ticket?.querySelector('.t-ref')?.textContent?.replace('Réf. ', '') || '';
+      openImagePreview(img.src, name, ref);
+    }
+    lastTap = now;
+    lastTarget = img;
+  }, { passive: false });
+
+  // Double-clic (desktop)
+  container.addEventListener('dblclick', (e) => {
+    const img = e.target.closest('.ticket-img-wrap img');
+    if (!img) return;
+    const ticket = img.closest('.ticket');
+    const name = ticket?.querySelector('.t-name')?.textContent || '';
+    const ref = ticket?.querySelector('.t-ref')?.textContent?.replace('Réf. ', '') || '';
+    openImagePreview(img.src, name, ref);
+  });
+
+  // Fermeture avec Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeImagePreview();
+  });
+}
+
 function init() {
   // Empêche un rafraîchissement accidentel de la page quand un client
   // est en train de parcourir le catalogue (panier non vide ou session
@@ -5008,6 +5072,7 @@ function init() {
   });
 
   setupSearch();
+  setupImagePreview();
   setupAdminLock();
   setupAdminTabs();
   setupAddCategory();
