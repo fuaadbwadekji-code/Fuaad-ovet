@@ -2089,7 +2089,7 @@ async function renderAdminOrderList() {
         </div>
         <button class="copy-order-btn" data-copyitems='${escapeHtml(JSON.stringify(o.items || []))}'>📋 Copier (réf. × qté)</button>
         <div class="assign-client-wrap" data-order-id="${o.id}">
-          <button class="assign-client-btn" data-assign-order-id="${o.id}">📤 Envoyer au client</button>
+          <button class="assign-client-btn" data-assign-order-id="${o.id}" data-assign-order-num="${escapeHtml(o.order_number)}">📤 Envoyer au client</button>
           <div class="assign-client-results address-suggestions-box"></div>
         </div>
         <div class="oc-action-row">
@@ -2147,26 +2147,9 @@ async function renderAdminOrderList() {
       });
     });
 
-    // Bouton "Envoyer au client" — assigne la commande à un client de
-    // la liste et l'archive en même temps, en une seule action.
+    // Bouton "Envoyer au client" — ouvre la modale de sélection
     list.querySelectorAll('[data-assign-order-id]').forEach(btn => {
-      const wrap = btn.closest('.assign-client-wrap');
-      const resultsBox = wrap.querySelector('.assign-client-results');
-      let assignSearchTimer = null;
-
-      btn.addEventListener('click', () => {
-        const isOpen = resultsBox.classList.contains('show');
-        if (isOpen) { resultsBox.classList.remove('show'); return; }
-        // Affiche tous les clients par défaut, filtrés par saisie
-        renderAssignResults(resultsBox, '', btn.dataset.assignOrderId, wrap);
-        resultsBox.classList.add('show');
-      });
-    });
-
-    document.addEventListener('click', (e) => {
-      list.querySelectorAll('.assign-client-results').forEach(r => {
-        if (!r.closest('.assign-client-wrap').contains(e.target)) r.classList.remove('show');
-      });
+      btn.addEventListener('click', () => openAssignClientModal(btn.dataset.assignOrderId, btn.dataset.assignOrderNum));
     });
 
     list.querySelectorAll('[data-archiveorder]').forEach(btn => {
@@ -3383,6 +3366,12 @@ async function showClientProfile(clientName) {
 
   document.getElementById('clientProfileName').textContent = clientName;
   setupMergeUI(clientName);
+
+  // Bouton modifier
+  document.getElementById('editClientBtn').onclick = () => {
+    const clientData = allKnownClients.find(c => c.name.toLowerCase() === clientName.toLowerCase()) || {};
+    openEditClientModal(clientName, clientData);
+  };
   document.getElementById('clientProfileSub').textContent =
     `${client?.shop ? client.shop + ' · ' : ''}${orderCount} commande${orderCount !== 1 ? 's' : ''}`;
   document.getElementById('clientProfileTotal').textContent = fmtPrice(totalSpent);
@@ -3503,57 +3492,140 @@ function setupMergeUI(currentClientName) {
   };
 }
 
-function renderAssignResults(resultsBox, query, orderId, wrap) {
+/* ── Modale : assigner une commande à un client ───────────────────── */
+let currentAssignOrderId = null;
+
+function openAssignClientModal(orderId, orderNum) {
+  currentAssignOrderId = orderId;
+  document.getElementById('assignClientOrderLabel').textContent = `Commande n°${orderNum}`;
+  document.getElementById('assignClientSearchInput').value = '';
+  document.getElementById('assignClientSelected').style.display = 'none';
+  document.getElementById('assignClientConfirmBtn').disabled = true;
+  document.getElementById('assignClientResults').innerHTML = '';
+  renderAssignClientList('');
+  document.getElementById('assignClientOverlay').classList.add('show');
+  document.getElementById('assignClientModal').classList.add('show');
+  setTimeout(() => document.getElementById('assignClientSearchInput').focus(), 200);
+}
+
+function closeAssignClientModal() {
+  document.getElementById('assignClientOverlay').classList.remove('show');
+  document.getElementById('assignClientModal').classList.remove('show');
+  currentAssignOrderId = null;
+}
+
+function renderAssignClientList(query) {
+  const resultsBox = document.getElementById('assignClientResults');
   const filtered = query
     ? allKnownClients.filter(c =>
         c.name.toLowerCase().includes(query.toLowerCase()) ||
-        (c.shop || '').toLowerCase().includes(query.toLowerCase())
-      )
+        (c.shop || '').toLowerCase().includes(query.toLowerCase()))
     : allKnownClients;
 
-  resultsBox.innerHTML = `
-    <div style="padding:6px 10px;border-bottom:1px solid rgba(0,0,0,0.06);">
-      <input type="text" placeholder="Rechercher…" class="assign-search-input"
-        style="width:100%;border:none;outline:none;font-size:13px;background:transparent;">
-    </div>
-    ${filtered.slice(0, 8).map(c => `
-      <div class="address-suggestion-item" data-assign-name="${escapeHtml(c.name)}" data-assign-shop="${escapeHtml(c.shop||'')}">
-        <strong>${escapeHtml(c.name)}</strong>
-        ${c.shop ? `<span style="color:var(--brass);font-size:11px;"> — ${escapeHtml(c.shop)}</span>` : ''}
-      </div>`).join('')}
-    ${filtered.length === 0 ? `<div class="address-suggestion-item" style="opacity:0.6;">Aucun client trouvé</div>` : ''}
-  `;
+  resultsBox.innerHTML = filtered.slice(0, 10).map(c => `
+    <div class="address-suggestion-item" data-assign-name="${escapeHtml(c.name)}" data-assign-shop="${escapeHtml(c.shop||'')}">
+      <strong>${escapeHtml(c.name)}</strong>
+      ${c.shop ? `<span style="color:var(--brass);font-size:11px;"> — ${escapeHtml(c.shop)}</span>` : ''}
+    </div>`).join('') || `<div class="address-suggestion-item" style="opacity:0.6;">Aucun client trouvé</div>`;
 
-  // Filtre en temps réel
-  const searchInput = resultsBox.querySelector('.assign-search-input');
-  searchInput.addEventListener('input', () => {
-    renderAssignResults(resultsBox, searchInput.value, orderId, wrap);
-    resultsBox.classList.add('show');
-  });
-  searchInput.addEventListener('click', e => e.stopPropagation());
-
-  // Sélection d'un client → assigne + archive
+  resultsBox.classList.add('show');
   resultsBox.querySelectorAll('[data-assign-name]').forEach(el => {
-    el.addEventListener('click', async () => {
-      const clientName = el.dataset.assignName;
-      const clientShop = el.dataset.assignShop;
-      try {
-        const { error } = await supabaseClient.from('orders').update({
-          client_name: clientName,
-          shop_name: clientShop || undefined,
-          archived: true
-        }).eq('id', orderId);
-        if (error) throw error;
-        showToast(`✓ Envoyé à ${clientName} et archivé`);
-        resultsBox.classList.remove('show');
-        renderAdminOrderList();
-        renderArchivedOrderList();
-      } catch (e) {
-        showToast('⚠️ Erreur: ' + e.message);
-      }
+    el.addEventListener('click', () => {
+      document.getElementById('assignClientSearchInput').value = el.dataset.assignName;
+      document.getElementById('assignClientSelected').textContent =
+        el.dataset.assignShop ? `${el.dataset.assignName} — ${el.dataset.assignShop}` : el.dataset.assignName;
+      document.getElementById('assignClientSelected').style.display = 'block';
+      document.getElementById('assignClientSelected').dataset.name = el.dataset.assignName;
+      document.getElementById('assignClientSelected').dataset.shop = el.dataset.assignShop;
+      document.getElementById('assignClientConfirmBtn').disabled = false;
+      resultsBox.classList.remove('show');
     });
   });
 }
+
+function setupAssignClientModal() {
+  document.getElementById('assignClientSearchInput').addEventListener('input', e => {
+    renderAssignClientList(e.target.value);
+  });
+  document.getElementById('assignClientConfirmBtn').addEventListener('click', async () => {
+    const sel = document.getElementById('assignClientSelected');
+    const clientName = sel.dataset.name;
+    const clientShop = sel.dataset.shop || '';
+    if (!clientName || !currentAssignOrderId) return;
+    const btn = document.getElementById('assignClientConfirmBtn');
+    btn.disabled = true;
+    try {
+      const { error } = await supabaseClient.from('orders').update({
+        client_name: clientName,
+        shop_name: clientShop || null,
+        archived: true
+      }).eq('id', currentAssignOrderId);
+      if (error) throw error;
+      showToast(`✓ Envoyé à ${clientName} et archivé`);
+      closeAssignClientModal();
+      renderAdminOrderList();
+    } catch (e) {
+      showToast('⚠️ Erreur: ' + e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  document.getElementById('assignClientCancelBtn').addEventListener('click', closeAssignClientModal);
+  document.getElementById('assignClientOverlay').addEventListener('click', closeAssignClientModal);
+}
+
+/* ── Modale : modifier le nom/magasin d'un client ─────────────────── */
+let currentEditClientName = null;
+
+function openEditClientModal(clientName, clientData) {
+  currentEditClientName = clientName;
+  document.getElementById('editClientNameInput').value = clientData.name || clientName;
+  document.getElementById('editClientShopInput').value = clientData.shop || '';
+  document.getElementById('editClientPhoneInput').value = clientData.phone || '';
+  document.getElementById('editClientOverlay').classList.add('show');
+  document.getElementById('editClientModal').classList.add('show');
+}
+
+function closeEditClientModal() {
+  document.getElementById('editClientOverlay').classList.remove('show');
+  document.getElementById('editClientModal').classList.remove('show');
+}
+
+function setupEditClientModal() {
+  document.getElementById('editClientSaveBtn').addEventListener('click', async () => {
+    const newName = document.getElementById('editClientNameInput').value.trim();
+    const newShop = document.getElementById('editClientShopInput').value.trim();
+    const newPhone = document.getElementById('editClientPhoneInput').value.trim();
+    if (!newName) { showToast('⚠️ Le nom est obligatoire'); return; }
+    const btn = document.getElementById('editClientSaveBtn');
+    btn.disabled = true;
+    try {
+      // Met à jour toutes les commandes avec l'ancien nom
+      if (newName !== currentEditClientName) {
+        await supabaseClient.from('orders').update({ client_name: newName })
+          .ilike('client_name', currentEditClientName);
+      }
+      // Met à jour dans la table clients si existe
+      const existing = allKnownClients.find(c => c.name.toLowerCase() === currentEditClientName.toLowerCase());
+      if (existing && existing.id) {
+        await supabaseClient.from('clients').update({
+          name: newName, shop_name: newShop || null, phone: newPhone || null
+        }).eq('id', existing.id);
+      }
+      await loadAllClients();
+      showToast(`✓ Client mis à jour`);
+      closeEditClientModal();
+      showClientProfile(newName);
+    } catch (e) {
+      showToast('⚠️ Erreur: ' + e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  document.getElementById('editClientCancelBtn').addEventListener('click', closeEditClientModal);
+  document.getElementById('editClientOverlay').addEventListener('click', closeEditClientModal);
+}
+
 
 function setupClientsTab() {
   const input = document.getElementById('clientSearchInput');
@@ -4928,6 +5000,8 @@ function init() {
   setupCarteTab();
   setupReorganiserTab();
   setupClientsTab();
+  setupAssignClientModal();
+  setupEditClientModal();
   setupAddressAutocomplete();
   setupAwardModal();
   setupLogoUpload();

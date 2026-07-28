@@ -1821,6 +1821,7 @@ button{font-family:inherit;cursor:pointer;}
         <div id="clientProfile" style="display:none;">
           <div style="display:flex;gap:8px;margin-bottom:12px;">
             <button class="btn-secondary" id="backToClientsBtn" style="flex:1;">← Retour</button>
+            <button class="btn-secondary" id="editClientBtn" style="flex:1;">✏️ Modifier</button>
             <button class="btn-secondary" id="mergeClientBtn" style="flex:1;">🔀 Fusionner</button>
           </div>
           <!-- Zone de fusion -->
@@ -2169,6 +2170,42 @@ button{font-family:inherit;cursor:pointer;}
 </div>
 
 <div class="overlay" id="awardOverlay"></div>
+
+<!-- Modale : assigner une commande à un client + archiver -->
+<div class="overlay" id="assignClientOverlay"></div>
+<div class="client-prompt-modal" id="assignClientModal">
+  <div class="client-prompt-emoji">📤</div>
+  <h2>Envoyer au client</h2>
+  <p id="assignClientOrderLabel" style="font-size:12px;color:var(--brass);margin-top:-8px;margin-bottom:12px;">—</p>
+  <div class="form-group" style="position:relative;text-align:left;margin-bottom:8px;">
+    <input type="text" id="assignClientSearchInput" placeholder="Nom du client ou magasin…" autocomplete="off">
+    <div id="assignClientResults" class="address-suggestions-box"></div>
+  </div>
+  <div id="assignClientSelected" style="display:none;background:rgba(216,154,44,0.12);border:1px solid var(--mustard);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;font-weight:700;color:var(--ink);text-align:left;"></div>
+  <button class="btn-primary" id="assignClientConfirmBtn" disabled>✓ Envoyer et archiver</button>
+  <button class="btn-secondary" id="assignClientCancelBtn" style="margin-top:8px;">Annuler</button>
+</div>
+
+<!-- Modale : modifier le nom d'un client -->
+<div class="overlay" id="editClientOverlay"></div>
+<div class="client-prompt-modal" id="editClientModal">
+  <div class="client-prompt-emoji">✏️</div>
+  <h2>Modifier le client</h2>
+  <div class="form-group" style="text-align:left;">
+    <label>Nom</label>
+    <input type="text" id="editClientNameInput" placeholder="Nom du client">
+  </div>
+  <div class="form-group" style="text-align:left;">
+    <label>Magasin</label>
+    <input type="text" id="editClientShopInput" placeholder="Nom du magasin">
+  </div>
+  <div class="form-group" style="text-align:left;">
+    <label>Téléphone</label>
+    <input type="text" id="editClientPhoneInput" placeholder="+33 6 …">
+  </div>
+  <button class="btn-primary" id="editClientSaveBtn">✓ Enregistrer</button>
+  <button class="btn-secondary" id="editClientCancelBtn" style="margin-top:8px;">Annuler</button>
+</div>
 <div class="award-modal" id="monthlyAwardModal">
   <div class="award-trophy">🏆</div>
   <div class="award-title" id="awardMonthLabel">—</div>
@@ -2302,6 +2339,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="config.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=20260629l"></script>
+<script src="app.js?v=20260629m"></script>
 </body>
 </html>
