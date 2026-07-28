@@ -1871,7 +1871,7 @@ function setupAdminTabs() {
     btn.addEventListener('click', async () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      ['orders', 'products', 'categories', 'notifications', 'commissions', 'ventes', 'vip', 'carte', 'reorganiser', 'settings'].forEach(t => {
+      ['orders', 'products', 'categories', 'notifications', 'commissions', 'ventes', 'vip', 'carte', 'reorganiser', 'clients', 'settings'].forEach(t => {
         const panel = document.getElementById('tab' + capitalize(t));
         if (t === btn.dataset.tab) {
           panel.style.display = 'block';
@@ -1909,6 +1909,10 @@ function setupAdminTabs() {
       if (btn.dataset.tab === 'reorganiser') {
         renderReorganiserCategoryOptions();
         renderReorganiserGrid();
+      }
+      if (btn.dataset.tab === 'clients') {
+        showClientsList();
+        loadAllClients().then(() => renderClientsList());
       }
     });
   });
@@ -3207,6 +3211,170 @@ function setupReorganiserDragAndDrop(grid) {
       }
       touchDraggedCard = null;
     });
+  });
+}
+
+/* ── Onglet Clients ──────────────────────────────────────────────────
+   Combine deux sources :
+   1. Table "clients" : clients ajoutés manuellement (sans commande)
+   2. Table "orders" : clients détectés automatiquement à partir des
+      commandes passées
+   Les deux sont fusionnés par nom (insensible à la casse) pour afficher
+   un profil unique par client. */
+let clientSearchTimer = null;
+let allKnownClients = []; // cache local pour la liste et la recherche
+
+async function loadAllClients() {
+  // 1. Clients manuels
+  const { data: manualClients } = await supabaseClient
+    .from('clients').select('*').order('name');
+  // 2. Noms uniques depuis les commandes
+  const { data: orderClients } = await supabaseClient
+    .from('orders').select('client_name, shop_name, created_at')
+    .order('created_at', { ascending: false });
+
+  const map = new Map();
+  // Clients manuels en priorité
+  (manualClients || []).forEach(c => {
+    map.set(c.name.trim().toLowerCase(), {
+      name: c.name, shop: c.shop_name || '', phone: c.phone || '',
+      notes: c.notes || '', source: 'manual', id: c.id
+    });
+  });
+  // Complète avec clients des commandes
+  (orderClients || []).forEach(o => {
+    const key = (o.client_name || '').trim().toLowerCase();
+    if (!key) return;
+    if (!map.has(key)) {
+      map.set(key, { name: o.client_name, shop: o.shop_name || '', source: 'order' });
+    }
+  });
+  allKnownClients = Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  return allKnownClients;
+}
+
+function renderClientsList(filter = '') {
+  const list = document.getElementById('clientsList');
+  const filtered = filter
+    ? allKnownClients.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()) || (c.shop || '').toLowerCase().includes(filter.toLowerCase()))
+    : allKnownClients;
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty-state"><span class="glyph">👤</span><h3>Aucun client</h3><p>Ajoutez votre premier client ou passez une commande.</p></div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(c => `
+    <div class="client-list-row" data-client-name="${escapeHtml(c.name)}">
+      <div>
+        <div class="client-list-name">${escapeHtml(c.name)}</div>
+        ${c.shop ? `<div class="client-list-sub">${escapeHtml(c.shop)}</div>` : ''}
+      </div>
+      <span class="client-list-arrow">›</span>
+    </div>
+  `).join('');
+  list.querySelectorAll('[data-client-name]').forEach(row => {
+    row.addEventListener('click', () => showClientProfile(row.dataset.clientName));
+  });
+}
+
+async function showClientProfile(clientName) {
+  document.getElementById('clientsList').style.display = 'none';
+  document.getElementById('addClientForm').style.display = 'none';
+  document.getElementById('clientSearchInput').parentElement.style.display = 'none';
+  const profile = document.getElementById('clientProfile');
+  profile.style.display = 'block';
+  document.getElementById('clientProfileOrders').innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
+
+  const { data, error } = await supabaseClient
+    .from('orders').select('*')
+    .ilike('client_name', clientName)
+    .order('created_at', { ascending: false });
+
+  const client = allKnownClients.find(c => c.name.toLowerCase() === clientName.toLowerCase());
+  const totalSpent = (data || []).reduce((s, o) => s + (o.total_with_tva || 0), 0);
+  const orderCount = (data || []).length;
+
+  document.getElementById('clientProfileName').textContent = clientName;
+  document.getElementById('clientProfileSub').textContent =
+    `${client?.shop ? client.shop + ' · ' : ''}${orderCount} commande${orderCount !== 1 ? 's' : ''}`;
+  document.getElementById('clientProfileTotal').textContent = fmtPrice(totalSpent);
+
+  if (!data || data.length === 0) {
+    document.getElementById('clientProfileOrders').innerHTML =
+      `<div class="empty-state"><span class="glyph">📋</span><h3>Aucune commande</h3><p>Ce client n'a pas encore passé de commande.</p></div>`;
+    return;
+  }
+  document.getElementById('clientProfileOrders').innerHTML = data.map(o => {
+    const dateStr = new Date(o.created_at).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' });
+    const items = (o.items || []).map(i => `${i.ref} ×${i.qty}`).join(', ') || '—';
+    const st = o.status === 'nouvelle' ? '🆕' : o.status === 'en_cours' ? '⏳' : '✅';
+    return `
+    <div class="client-order-card">
+      <div class="client-order-top">
+        <span class="client-order-num">${st} Commande n°${escapeHtml(o.order_number)}</span>
+        <span class="client-order-date">${dateStr}</span>
+      </div>
+      <div class="client-order-items">${escapeHtml(items)}</div>
+      <div class="client-order-total">${fmtPrice(o.total_with_tva)}</div>
+    </div>`;
+  }).join('');
+}
+
+function showClientsList() {
+  document.getElementById('clientProfile').style.display = 'none';
+  document.getElementById('addClientForm').style.display = 'none';
+  document.getElementById('clientsList').style.display = 'block';
+  document.getElementById('clientSearchInput').parentElement.style.display = 'flex';
+}
+
+function setupClientsTab() {
+  const input = document.getElementById('clientSearchInput');
+
+  input.addEventListener('input', () => {
+    clearTimeout(clientSearchTimer);
+    clientSearchTimer = setTimeout(() => renderClientsList(input.value), 300);
+  });
+
+  document.getElementById('backToClientsBtn').addEventListener('click', showClientsList);
+
+  document.getElementById('showAddClientBtn').addEventListener('click', () => {
+    document.getElementById('clientsList').style.display = 'none';
+    document.getElementById('addClientForm').style.display = 'block';
+    document.getElementById('newClientName').focus();
+  });
+
+  document.getElementById('cancelAddClientBtn').addEventListener('click', () => {
+    document.getElementById('addClientForm').style.display = 'none';
+    document.getElementById('clientsList').style.display = 'block';
+  });
+
+  document.getElementById('saveNewClientBtn').addEventListener('click', async () => {
+    const name = document.getElementById('newClientName').value.trim();
+    if (!name) { showToast('⚠️ Le nom est obligatoire'); return; }
+    const btn = document.getElementById('saveNewClientBtn');
+    btn.disabled = true;
+    try {
+      const { error } = await supabaseClient.from('clients').insert({
+        id: uid('client'),
+        name,
+        shop_name: document.getElementById('newClientShop').value.trim() || null,
+        phone: document.getElementById('newClientPhone').value.trim() || null,
+        notes: document.getElementById('newClientNotes').value.trim() || null,
+      });
+      if (error) throw error;
+      showToast('✓ Client ajouté');
+      document.getElementById('newClientName').value = '';
+      document.getElementById('newClientShop').value = '';
+      document.getElementById('newClientPhone').value = '';
+      document.getElementById('newClientNotes').value = '';
+      await loadAllClients();
+      renderClientsList();
+      showClientsList();
+    } catch (e) {
+      showToast('⚠️ Erreur: ' + e.message);
+    } finally {
+      btn.disabled = false;
+    }
   });
 }
 
@@ -4519,6 +4687,7 @@ function init() {
   setupVentesTab();
   setupCarteTab();
   setupReorganiserTab();
+  setupClientsTab();
   setupAddressAutocomplete();
   setupAwardModal();
   setupLogoUpload();
