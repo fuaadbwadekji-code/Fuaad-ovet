@@ -3285,17 +3285,21 @@ async function loadAllClients() {
     .order('created_at', { ascending: false });
 
   const map = new Map();
-  // Clients manuels en priorité
-  (manualClients || []).forEach(c => {
+  // Noms masqués (supprimés par l'utilisateur) — on les exclut partout
+  const hiddenNames = new Set(
+    (manualClients || []).filter(c => c.hidden).map(c => c.name.trim().toLowerCase())
+  );
+  // Clients manuels non masqués en priorité
+  (manualClients || []).filter(c => !c.hidden).forEach(c => {
     map.set(c.name.trim().toLowerCase(), {
       name: c.name, shop: c.shop_name || '', phone: c.phone || '',
       notes: c.notes || '', source: 'manual', id: c.id
     });
   });
-  // Complète avec clients des commandes
+  // Complète avec clients des commandes (sauf masqués)
   (orderClients || []).forEach(o => {
     const key = (o.client_name || '').trim().toLowerCase();
-    if (!key) return;
+    if (!key || hiddenNames.has(key)) return;
     if (!map.has(key)) {
       map.set(key, { name: o.client_name, shop: o.shop_name || '', source: 'order' });
     }
@@ -3335,11 +3339,16 @@ function renderClientsList(filter = '') {
       e.stopPropagation();
       const name = btn.dataset.deleteClientName;
       if (!confirm(`Supprimer "${name}" de la liste ?`)) return;
-      // Supprime de la table clients si ajouté manuellement
       if (btn.dataset.deleteClientId) {
+        // Client manuel → suppression directe
         await supabaseClient.from('clients').delete().eq('id', btn.dataset.deleteClientId);
+      } else {
+        // Client issu des commandes → on l'insère comme "masqué" pour
+        // qu'il ne réapparaisse pas au prochain chargement
+        await supabaseClient.from('clients').insert({
+          id: uid('client'), name, hidden: true
+        }).select();
       }
-      // Supprime du cache local pour qu'il disparaisse immédiatement
       allKnownClients = allKnownClients.filter(c => c.name.toLowerCase() !== name.toLowerCase());
       renderClientsList(document.getElementById('clientSearchInput').value);
       showToast('✓ Client supprimé');
@@ -3364,10 +3373,14 @@ async function showClientProfile(clientName) {
   const totalSpent = (data || []).reduce((s, o) => s + (o.total_with_tva || 0), 0);
   const orderCount = (data || []).length;
 
+  // Commission totale depuis le registre permanent
+  const clientCommission = commissionLedger
+    .filter(e => String(e.clientName || '').toLowerCase() === clientName.toLowerCase())
+    .reduce((s, e) => s + e.amount, 0);
+
   document.getElementById('clientProfileName').textContent = clientName;
   setupMergeUI(clientName);
 
-  // Bouton modifier
   document.getElementById('editClientBtn').onclick = () => {
     const clientData = allKnownClients.find(c => c.name.toLowerCase() === clientName.toLowerCase()) || {};
     openEditClientModal(clientName, clientData);
@@ -3375,6 +3388,16 @@ async function showClientProfile(clientName) {
   document.getElementById('clientProfileSub').textContent =
     `${client?.shop ? client.shop + ' · ' : ''}${orderCount} commande${orderCount !== 1 ? 's' : ''}`;
   document.getElementById('clientProfileTotal').textContent = fmtPrice(totalSpent);
+
+  // Badge commission
+  let commBadge = document.getElementById('clientCommissionBadge');
+  if (!commBadge) {
+    commBadge = document.createElement('div');
+    commBadge.id = 'clientCommissionBadge';
+    commBadge.style.cssText = 'margin-bottom:12px;background:rgba(216,154,44,0.12);border:1px solid var(--mustard);border-radius:10px;padding:10px 14px;font-size:13px;display:flex;justify-content:space-between;';
+    document.getElementById('clientProfileOrders').before(commBadge);
+  }
+  commBadge.innerHTML = `<span style="color:var(--brass);font-weight:600;">💰 Commission totale</span><span style="font-weight:800;color:var(--mustard-deep);">${fmtPrice(clientCommission)}</span>`;
 
   if (!data || data.length === 0) {
     document.getElementById('clientProfileOrders').innerHTML =
