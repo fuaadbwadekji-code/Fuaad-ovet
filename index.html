@@ -2128,20 +2128,16 @@ button{font-family:inherit;cursor:pointer;}
 
 <div class="overlay" id="clientPromptOverlay"></div>
 <div class="client-prompt-modal" id="clientPromptModal">
-  <div class="client-prompt-emoji">👋</div>
-  <h2>Salut Fuaad</h2>
-  <p>Pour qui la commande d'aujourd'hui ?</p>
-  <div class="form-group">
-    <label>Nom du client</label>
-    <input type="text" id="adminClientNameInput" placeholder="Ex. Fuaad Bwadekji">
-    <div class="field-error" id="adminClientNameError" style="display:none;">⚠️ Merci d'indiquer le nom du client</div>
+  <div class="client-prompt-emoji">👤</div>
+  <h2>Pour qui aujourd'hui ?</h2>
+  <p>Cherchez un client existant ou commencez directement.</p>
+  <div class="form-group" style="position:relative;text-align:left;margin-bottom:8px;">
+    <input type="text" id="modalClientSearch" placeholder="Nom du client ou magasin…" autocomplete="off">
+    <div id="modalClientResults" class="address-suggestions-box"></div>
   </div>
-  <div class="form-group">
-    <label>Nom du magasin</label>
-    <input type="text" id="adminClientShopInput" placeholder="Ex. Eva Souvenirs">
-    <div class="field-error" id="adminClientShopError" style="display:none;">⚠️ Merci d'indiquer le nom du magasin</div>
-  </div>
-  <button class="btn-primary" id="adminClientPromptConfirmBtn">✓ C'est parti</button>
+  <div id="modalSelectedClient" style="display:none;background:rgba(216,154,44,0.12);border:1px solid var(--mustard);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;font-weight:700;color:var(--ink);text-align:left;"></div>
+  <button class="btn-primary" id="modalConfirmClientBtn" style="margin-bottom:8px;" disabled>✓ Commencer la commande</button>
+  <button class="btn-secondary" id="modalSkipBtn">Passer (saisie manuelle au checkout)</button>
 </div>
 
 <div class="overlay" id="celebrationOverlay"></div>
@@ -2285,6 +2281,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="config.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=20260629g"></script>
+<script src="app.js?v=20260629h"></script>
 </body>
 </html>

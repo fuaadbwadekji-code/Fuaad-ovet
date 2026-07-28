@@ -1700,8 +1700,14 @@ function wasAdminPreviouslyUnlocked() {
    saisi plus tôt dans la session, pour ne pas avoir à retaper si Fuaad
    ferme et rouvre la fenêtre sans changer de client. */
 function showClientPromptModal() {
-  document.getElementById('adminClientNameInput').value = prefilledClientName || '';
-  document.getElementById('adminClientShopInput').value = prefilledClientShop || '';
+  const searchInput = document.getElementById('modalClientSearch');
+  const selectedEl = document.getElementById('modalSelectedClient');
+  const confirmBtn = document.getElementById('modalConfirmClientBtn');
+  if (searchInput) {
+    searchInput.value = '';
+    selectedEl.style.display = 'none';
+    confirmBtn.disabled = true;
+  }
   document.getElementById('clientPromptOverlay').classList.add('show');
   document.getElementById('clientPromptModal').classList.add('show');
 }
@@ -1712,48 +1718,63 @@ function hideClientPromptModal() {
 }
 
 function setupClientPromptModal() {
-  document.getElementById('adminClientPromptConfirmBtn').addEventListener('click', () => {
-    const nameInput = document.getElementById('adminClientNameInput');
-    const shopInput = document.getElementById('adminClientShopInput');
-    const nameError = document.getElementById('adminClientNameError');
-    const shopError = document.getElementById('adminClientShopError');
-    const name = nameInput.value.trim();
-    const shop = shopInput.value.trim();
+  const searchInput = document.getElementById('modalClientSearch');
+  const resultsBox = document.getElementById('modalClientResults');
+  const selectedEl = document.getElementById('modalSelectedClient');
+  const confirmBtn = document.getElementById('modalConfirmClientBtn');
+  let searchTimer = null;
+  let selectedName = '', selectedShop = '';
 
-    if (!name) {
-      nameInput.classList.add('input-error');
-      nameError.style.display = 'block';
-      nameInput.focus();
-      return;
-    }
-    nameInput.classList.remove('input-error');
-    nameError.style.display = 'none';
+  function selectClient(name, shop) {
+    selectedName = name;
+    selectedShop = shop || '';
+    searchInput.value = name;
+    selectedEl.textContent = shop ? name + ' — ' + shop : name;
+    selectedEl.style.display = 'block';
+    resultsBox.classList.remove('show');
+    confirmBtn.disabled = false;
+  }
 
-    if (!shop) {
-      shopInput.classList.add('input-error');
-      shopError.style.display = 'block';
-      shopInput.focus();
-      return;
-    }
-    shopInput.classList.remove('input-error');
-    shopError.style.display = 'none';
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    selectedEl.style.display = 'none';
+    confirmBtn.disabled = true;
+    const q = searchInput.value.trim();
+    if (q.length < 2) { resultsBox.classList.remove('show'); return; }
+    searchTimer = setTimeout(() => {
+      const local = allKnownClients.filter(c =>
+        c.name.toLowerCase().includes(q.toLowerCase()) ||
+        (c.shop || '').toLowerCase().includes(q.toLowerCase())
+      ).slice(0, 6);
+      const items = local.length > 0 ? local : [{ name: q, shop: '', isNew: true }];
+      resultsBox.innerHTML = items.map(c => `
+        <div class="address-suggestion-item" data-name="${escapeHtml(c.name)}" data-shop="${escapeHtml(c.shop || '')}">
+          ${c.isNew ? '<span style="color:var(--brass);">+ Nouveau : </span>' : ''}
+          <strong>${escapeHtml(c.name)}</strong>
+          ${c.shop ? '<span style="color:var(--brass);font-size:11px;"> — ' + escapeHtml(c.shop) + '</span>' : ''}
+        </div>`).join('');
+      resultsBox.classList.add('show');
+      resultsBox.querySelectorAll('[data-name]').forEach(el => {
+        el.addEventListener('click', () => selectClient(el.dataset.name, el.dataset.shop));
+      });
+    }, 300);
+  });
 
-    prefilledClientName = name;
-    prefilledClientShop = shop;
+  document.addEventListener('click', e => {
+    if (e.target !== searchInput) resultsBox.classList.remove('show');
+  });
+
+  confirmBtn.addEventListener('click', () => {
+    prefilledClientName = selectedName;
+    prefilledClientShop = selectedShop;
     hideClientPromptModal();
-    showToast(`✓ Commande pour ${name}`);
+    showToast('✓ Commande pour ' + selectedName);
   });
-  document.getElementById('adminClientNameInput').addEventListener('input', (e) => {
-    if (e.target.value.trim()) {
-      e.target.classList.remove('input-error');
-      document.getElementById('adminClientNameError').style.display = 'none';
-    }
-  });
-  document.getElementById('adminClientShopInput').addEventListener('input', (e) => {
-    if (e.target.value.trim()) {
-      e.target.classList.remove('input-error');
-      document.getElementById('adminClientShopError').style.display = 'none';
-    }
+
+  document.getElementById('modalSkipBtn').addEventListener('click', () => {
+    prefilledClientName = null;
+    prefilledClientShop = null;
+    hideClientPromptModal();
   });
 }
 
@@ -1835,6 +1856,7 @@ function unlockAdminPanel() {
   const dateEl = document.getElementById('adminSignatureDate');
   if (dateEl) dateEl.textContent = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   checkMonthlyAward();
+  loadAllClients().then(() => showClientPromptModal());
 }
 
 function setupAdminLock() {
