@@ -1236,6 +1236,16 @@ button{font-family:inherit;cursor:pointer;}
 }
 .copy-order-btn:active{transform:scale(0.97);}
 
+.assign-client-wrap{position:relative;margin-bottom:8px;}
+.assign-client-btn{
+  width:100%;background:rgba(27,42,69,0.08);border:1.5px solid rgba(27,42,69,0.2);
+  color:var(--navy);padding:10px;border-radius:12px;font-size:13px;font-weight:700;
+}
+.assign-client-wrap .assign-client-results{
+  position:absolute;left:0;right:0;top:100%;z-index:50;margin-top:4px;
+  display:none;max-height:200px;overflow-y:auto;
+}
+.assign-client-wrap .assign-client-results.show{display:block;}
 .oc-commission-row{
   display:flex;align-items:center;justify-content:space-between;gap:8px;
   margin-top:8px;padding-top:8px;border-top:1px dashed rgba(140,112,72,0.2);
@@ -1807,7 +1817,16 @@ button{font-family:inherit;cursor:pointer;}
 
         <!-- Profil client -->
         <div id="clientProfile" style="display:none;">
-          <button class="btn-secondary" id="backToClientsBtn" style="margin-bottom:12px;">← Retour</button>
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <button class="btn-secondary" id="backToClientsBtn" style="flex:1;">← Retour</button>
+            <button class="btn-secondary" id="mergeClientBtn" style="flex:1;">🔀 Fusionner</button>
+          </div>
+          <!-- Zone de fusion -->
+          <div id="mergeZone" style="display:none;background:rgba(216,154,44,0.08);border:1px solid var(--mustard);border-radius:12px;padding:12px;margin-bottom:12px;">
+            <p class="notifications-intro" style="margin:0 0 8px;">Choisissez le doublon à fusionner dans ce profil — toutes ses commandes seront rattachées ici.</p>
+            <input type="text" id="mergeSearchInput" placeholder="Nom du doublon…" autocomplete="off" style="margin-bottom:8px;">
+            <div id="mergeResults" class="address-suggestions-box" style="position:relative;display:block;max-height:160px;"></div>
+          </div>
           <div class="client-profile-header">
             <div>
               <div class="client-profile-name" id="clientProfileName">—</div>
@@ -2281,6 +2300,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="config.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=20260629h"></script>
+<script src="app.js?v=20260629k"></script>
 </body>
 </html>

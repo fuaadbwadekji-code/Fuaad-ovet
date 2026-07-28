@@ -1661,6 +1661,8 @@ async function submitOrder(clientName, shopName) {
     // même nom si Fuaad oublie de relancer la fenêtre d'accueil.
     prefilledClientName = null;
     prefilledClientShop = null;
+    sessionStorage.removeItem('prefilled_client_name');
+    sessionStorage.removeItem('prefilled_client_shop');
     closeDrawer('checkoutDrawer');
     setTimeout(() => openDrawer('orderSuccessDrawer'), 200);
   } catch (e) {
@@ -1767,6 +1769,8 @@ function setupClientPromptModal() {
   confirmBtn.addEventListener('click', () => {
     prefilledClientName = selectedName;
     prefilledClientShop = selectedShop;
+    sessionStorage.setItem('prefilled_client_name', selectedName);
+    sessionStorage.setItem('prefilled_client_shop', selectedShop || '');
     hideClientPromptModal();
     showToast('✓ Commande pour ' + selectedName);
   });
@@ -1774,6 +1778,8 @@ function setupClientPromptModal() {
   document.getElementById('modalSkipBtn').addEventListener('click', () => {
     prefilledClientName = null;
     prefilledClientShop = null;
+    sessionStorage.removeItem('prefilled_client_name');
+    sessionStorage.removeItem('prefilled_client_shop');
     hideClientPromptModal();
   });
 }
@@ -1856,7 +1862,20 @@ function unlockAdminPanel() {
   const dateEl = document.getElementById('adminSignatureDate');
   if (dateEl) dateEl.textContent = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   checkMonthlyAward();
-  loadAllClients().then(() => showClientPromptModal());
+  loadAllClients().then(() => {
+    // Si un client a déjà été sélectionné dans cette session (le
+    // commerçant a rafraîchi la page par erreur), on le restaure
+    // silencieusement sans rouvrir la fenêtre de sélection.
+    const savedName = sessionStorage.getItem('prefilled_client_name');
+    const savedShop = sessionStorage.getItem('prefilled_client_shop');
+    if (savedName) {
+      prefilledClientName = savedName;
+      prefilledClientShop = savedShop || '';
+      showToast(`✓ Client restauré : ${savedName}`);
+    } else {
+      showClientPromptModal();
+    }
+  });
 }
 
 function setupAdminLock() {
@@ -2069,6 +2088,10 @@ async function renderAdminOrderList() {
           <textarea class="oc-notes-input" data-order-id="${o.id}" placeholder="Ex. Appeler le client avant livraison…">${escapeHtml(o.notes || '')}</textarea>
         </div>
         <button class="copy-order-btn" data-copyitems='${escapeHtml(JSON.stringify(o.items || []))}'>📋 Copier (réf. × qté)</button>
+        <div class="assign-client-wrap" data-order-id="${o.id}">
+          <button class="assign-client-btn" data-assign-order-id="${o.id}">📤 Envoyer au client</button>
+          <div class="assign-client-results address-suggestions-box"></div>
+        </div>
         <div class="oc-action-row">
           <button class="oc-archive-btn" data-archiveorder="${o.id}">🗂 Archiver</button>
           <button class="oc-delete-btn" data-delorder-active="${o.id}">🗑 Supprimer</button>
@@ -2123,6 +2146,29 @@ async function renderAdminOrderList() {
         setTimeout(() => sel.parentElement.parentElement.classList.remove('status-just-changed'), 600);
       });
     });
+
+    // Bouton "Envoyer au client" — assigne la commande à un client de
+    // la liste et l'archive en même temps, en une seule action.
+    list.querySelectorAll('[data-assign-order-id]').forEach(btn => {
+      const wrap = btn.closest('.assign-client-wrap');
+      const resultsBox = wrap.querySelector('.assign-client-results');
+      let assignSearchTimer = null;
+
+      btn.addEventListener('click', () => {
+        const isOpen = resultsBox.classList.contains('show');
+        if (isOpen) { resultsBox.classList.remove('show'); return; }
+        // Affiche tous les clients par défaut, filtrés par saisie
+        renderAssignResults(resultsBox, '', btn.dataset.assignOrderId, wrap);
+        resultsBox.classList.add('show');
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      list.querySelectorAll('.assign-client-results').forEach(r => {
+        if (!r.closest('.assign-client-wrap').contains(e.target)) r.classList.remove('show');
+      });
+    });
+
     list.querySelectorAll('[data-archiveorder]').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (!confirm('Archiver cette commande ? Elle disparaîtra de cette liste mais restera consultable dans l\'onglet "Archivées".')) return;
@@ -3287,15 +3333,30 @@ function renderClientsList(filter = '') {
   }
   list.innerHTML = filtered.map(c => `
     <div class="client-list-row" data-client-name="${escapeHtml(c.name)}">
-      <div>
+      <div style="flex:1;">
         <div class="client-list-name">${escapeHtml(c.name)}</div>
         ${c.shop ? `<div class="client-list-sub">${escapeHtml(c.shop)}</div>` : ''}
       </div>
-      <span class="client-list-arrow">›</span>
+      ${c.source === 'manual' ? `<button class="stock-alert-dismiss" data-delete-client-id="${escapeHtml(c.id)}" data-delete-client-name="${escapeHtml(c.name)}" title="Supprimer ce client">✕</button>` : ''}
+      <span class="client-list-arrow" style="margin-left:6px;">›</span>
     </div>
   `).join('');
   list.querySelectorAll('[data-client-name]').forEach(row => {
-    row.addEventListener('click', () => showClientProfile(row.dataset.clientName));
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('[data-delete-client-id]')) return;
+      showClientProfile(row.dataset.clientName);
+    });
+  });
+  list.querySelectorAll('[data-delete-client-id]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const name = btn.dataset.deleteClientName;
+      if (!confirm(`Supprimer "${name}" de la liste ?`)) return;
+      await supabaseClient.from('clients').delete().eq('id', btn.dataset.deleteClientId);
+      await loadAllClients();
+      renderClientsList(document.getElementById('clientSearchInput').value);
+      showToast('✓ Client supprimé');
+    });
   });
 }
 
@@ -3317,6 +3378,7 @@ async function showClientProfile(clientName) {
   const orderCount = (data || []).length;
 
   document.getElementById('clientProfileName').textContent = clientName;
+  setupMergeUI(clientName);
   document.getElementById('clientProfileSub').textContent =
     `${client?.shop ? client.shop + ' · ' : ''}${orderCount} commande${orderCount !== 1 ? 's' : ''}`;
   document.getElementById('clientProfileTotal').textContent = fmtPrice(totalSpent);
@@ -3347,6 +3409,127 @@ function showClientsList() {
   document.getElementById('addClientForm').style.display = 'none';
   document.getElementById('clientsList').style.display = 'block';
   document.getElementById('clientSearchInput').parentElement.style.display = 'flex';
+}
+
+/* Fusionne deux profils clients : réattribue toutes les commandes du
+   "doublon" au nom du client principal, puis supprime le doublon de
+   la table clients s'il y était. C'est la solution au problème des
+   noms légèrement différents ("Eva Souvenir" vs "Eva Souvenirs"). */
+async function mergeClientInto(targetName, duplicateName) {
+  if (!duplicateName || duplicateName.toLowerCase() === targetName.toLowerCase()) return;
+  try {
+    // Réattribue toutes les commandes du doublon au nom cible
+    const { error } = await supabaseClient
+      .from('orders')
+      .update({ client_name: targetName })
+      .ilike('client_name', duplicateName);
+    if (error) throw error;
+
+    // Supprime le doublon de la table clients s'il existe
+    await supabaseClient.from('clients').delete().ilike('name', duplicateName);
+
+    await loadAllClients();
+    showToast(`✓ "${duplicateName}" fusionné dans "${targetName}"`);
+    showClientProfile(targetName);
+    document.getElementById('mergeZone').style.display = 'none';
+    document.getElementById('mergeSearchInput').value = '';
+  } catch (e) {
+    showToast('⚠️ Erreur: ' + e.message);
+  }
+}
+
+function setupMergeUI(currentClientName) {
+  const mergeBtn = document.getElementById('mergeClientBtn');
+  const mergeZone = document.getElementById('mergeZone');
+  const mergeInput = document.getElementById('mergeSearchInput');
+  const mergeResults = document.getElementById('mergeResults');
+
+  mergeBtn.onclick = () => {
+    mergeZone.style.display = mergeZone.style.display === 'none' ? 'block' : 'none';
+    if (mergeZone.style.display === 'block') mergeInput.focus();
+  };
+
+  let mergeTimer = null;
+  mergeInput.oninput = () => {
+    clearTimeout(mergeTimer);
+    const q = mergeInput.value.trim();
+    if (q.length < 2) { mergeResults.innerHTML = ''; return; }
+    mergeTimer = setTimeout(() => {
+      const matches = allKnownClients.filter(c =>
+        c.name.toLowerCase() !== currentClientName.toLowerCase() &&
+        (c.name.toLowerCase().includes(q.toLowerCase()) || (c.shop||'').toLowerCase().includes(q.toLowerCase()))
+      ).slice(0, 6);
+      if (matches.length === 0) {
+        mergeResults.innerHTML = `<div class="address-suggestion-item" style="opacity:0.6;">Aucun doublon trouvé</div>`;
+        return;
+      }
+      mergeResults.innerHTML = matches.map(c => `
+        <div class="address-suggestion-item" data-merge-name="${escapeHtml(c.name)}">
+          <strong>${escapeHtml(c.name)}</strong>
+          ${c.shop ? `<span style="color:var(--brass);font-size:11px;"> — ${escapeHtml(c.shop)}</span>` : ''}
+        </div>`).join('');
+      mergeResults.querySelectorAll('[data-merge-name]').forEach(el => {
+        el.addEventListener('click', async () => {
+          const dup = el.dataset.mergeName;
+          if (confirm(`Fusionner "${dup}" dans "${currentClientName}" ?\n\nToutes les commandes de "${dup}" seront rattachées à "${currentClientName}".`)) {
+            await mergeClientInto(currentClientName, dup);
+          }
+        });
+      });
+    }, 300);
+  };
+}
+
+function renderAssignResults(resultsBox, query, orderId, wrap) {
+  const filtered = query
+    ? allKnownClients.filter(c =>
+        c.name.toLowerCase().includes(query.toLowerCase()) ||
+        (c.shop || '').toLowerCase().includes(query.toLowerCase())
+      )
+    : allKnownClients;
+
+  resultsBox.innerHTML = `
+    <div style="padding:6px 10px;border-bottom:1px solid rgba(0,0,0,0.06);">
+      <input type="text" placeholder="Rechercher…" class="assign-search-input"
+        style="width:100%;border:none;outline:none;font-size:13px;background:transparent;">
+    </div>
+    ${filtered.slice(0, 8).map(c => `
+      <div class="address-suggestion-item" data-assign-name="${escapeHtml(c.name)}" data-assign-shop="${escapeHtml(c.shop||'')}">
+        <strong>${escapeHtml(c.name)}</strong>
+        ${c.shop ? `<span style="color:var(--brass);font-size:11px;"> — ${escapeHtml(c.shop)}</span>` : ''}
+      </div>`).join('')}
+    ${filtered.length === 0 ? `<div class="address-suggestion-item" style="opacity:0.6;">Aucun client trouvé</div>` : ''}
+  `;
+
+  // Filtre en temps réel
+  const searchInput = resultsBox.querySelector('.assign-search-input');
+  searchInput.addEventListener('input', () => {
+    renderAssignResults(resultsBox, searchInput.value, orderId, wrap);
+    resultsBox.classList.add('show');
+  });
+  searchInput.addEventListener('click', e => e.stopPropagation());
+
+  // Sélection d'un client → assigne + archive
+  resultsBox.querySelectorAll('[data-assign-name]').forEach(el => {
+    el.addEventListener('click', async () => {
+      const clientName = el.dataset.assignName;
+      const clientShop = el.dataset.assignShop;
+      try {
+        const { error } = await supabaseClient.from('orders').update({
+          client_name: clientName,
+          shop_name: clientShop || undefined,
+          archived: true
+        }).eq('id', orderId);
+        if (error) throw error;
+        showToast(`✓ Envoyé à ${clientName} et archivé`);
+        resultsBox.classList.remove('show');
+        renderAdminOrderList();
+        renderArchivedOrderList();
+      } catch (e) {
+        showToast('⚠️ Erreur: ' + e.message);
+      }
+    });
+  });
 }
 
 function setupClientsTab() {
@@ -4698,6 +4881,18 @@ function setupGeneralUI() {
 
 /* ---------- Init ---------- */
 function init() {
+  // Empêche un rafraîchissement accidentel de la page quand un client
+  // est en train de parcourir le catalogue (panier non vide ou session
+  // client active). Côté admin, aucune restriction car Fuaad a besoin
+  // de pouvoir recharger librement.
+  window.addEventListener('beforeunload', (e) => {
+    if (adminUnlocked) return; // pas de blocage côté admin
+    if (Object.keys(cart).length > 0 || prefilledClientName) {
+      e.preventDefault();
+      e.returnValue = ''; // requis par certains navigateurs
+    }
+  });
+
   setupSearch();
   setupAdminLock();
   setupAdminTabs();
