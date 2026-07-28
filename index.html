@@ -1242,8 +1242,10 @@ button{font-family:inherit;cursor:pointer;}
   color:var(--navy);padding:10px;border-radius:12px;font-size:13px;font-weight:700;
 }
 .assign-client-wrap .assign-client-results{
-  position:absolute;left:0;right:0;top:100%;z-index:50;margin-top:4px;
-  display:none;max-height:200px;overflow-y:auto;
+  position:absolute;left:0;right:0;top:100%;z-index:200;margin-top:4px;
+  display:none;max-height:220px;overflow-y:auto;
+  background:#fff;border:1px solid var(--glass-border-soft);
+  border-radius:12px;box-shadow:0 8px 24px rgba(20,20,30,0.18);
 }
 .assign-client-wrap .assign-client-results.show{display:block;}
 .oc-commission-row{
@@ -1782,7 +1784,7 @@ button{font-family:inherit;cursor:pointer;}
 
         <!-- Barre de recherche + bouton ajouter -->
         <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <input type="text" id="clientSearchInput" placeholder="Rechercher…" style="flex:1;" autocomplete="off">
+          <input type="text" id="clientSearchInput" placeholder="Rechercher…" style="flex:1;border-radius:12px;" autocomplete="off">
           <button class="btn-primary" id="showAddClientBtn" style="padding:10px 14px;width:auto;">+ Nouveau</button>
         </div>
         <div id="clientSearchResults" class="address-suggestions-box"></div>
@@ -2300,6 +2302,6 @@ button{font-family:inherit;cursor:pointer;}
 <script src="config.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=20260629k"></script>
+<script src="app.js?v=20260629l"></script>
 </body>
 </html>

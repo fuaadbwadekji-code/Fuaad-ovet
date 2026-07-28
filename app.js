@@ -3337,23 +3337,27 @@ function renderClientsList(filter = '') {
         <div class="client-list-name">${escapeHtml(c.name)}</div>
         ${c.shop ? `<div class="client-list-sub">${escapeHtml(c.shop)}</div>` : ''}
       </div>
-      ${c.source === 'manual' ? `<button class="stock-alert-dismiss" data-delete-client-id="${escapeHtml(c.id)}" data-delete-client-name="${escapeHtml(c.name)}" title="Supprimer ce client">✕</button>` : ''}
+      <button class="stock-alert-dismiss" data-delete-client-name="${escapeHtml(c.name)}" data-delete-client-id="${escapeHtml(c.id || '')}" title="Supprimer">✕</button>
       <span class="client-list-arrow" style="margin-left:6px;">›</span>
     </div>
   `).join('');
   list.querySelectorAll('[data-client-name]').forEach(row => {
     row.addEventListener('click', (e) => {
-      if (e.target.closest('[data-delete-client-id]')) return;
+      if (e.target.closest('[data-delete-client-name]')) return;
       showClientProfile(row.dataset.clientName);
     });
   });
-  list.querySelectorAll('[data-delete-client-id]').forEach(btn => {
+  list.querySelectorAll('[data-delete-client-name]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const name = btn.dataset.deleteClientName;
       if (!confirm(`Supprimer "${name}" de la liste ?`)) return;
-      await supabaseClient.from('clients').delete().eq('id', btn.dataset.deleteClientId);
-      await loadAllClients();
+      // Supprime de la table clients si ajouté manuellement
+      if (btn.dataset.deleteClientId) {
+        await supabaseClient.from('clients').delete().eq('id', btn.dataset.deleteClientId);
+      }
+      // Supprime du cache local pour qu'il disparaisse immédiatement
+      allKnownClients = allKnownClients.filter(c => c.name.toLowerCase() !== name.toLowerCase());
       renderClientsList(document.getElementById('clientSearchInput').value);
       showToast('✓ Client supprimé');
     });
@@ -3388,20 +3392,40 @@ async function showClientProfile(clientName) {
       `<div class="empty-state"><span class="glyph">📋</span><h3>Aucune commande</h3><p>Ce client n'a pas encore passé de commande.</p></div>`;
     return;
   }
-  document.getElementById('clientProfileOrders').innerHTML = data.map(o => {
+  const ordersEl = document.getElementById('clientProfileOrders');
+  ordersEl.innerHTML = data.map(o => {
     const dateStr = new Date(o.created_at).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' });
     const items = (o.items || []).map(i => `${i.ref} ×${i.qty}`).join(', ') || '—';
     const st = o.status === 'nouvelle' ? '🆕' : o.status === 'en_cours' ? '⏳' : '✅';
     return `
-    <div class="client-order-card">
-      <div class="client-order-top">
-        <span class="client-order-num">${st} Commande n°${escapeHtml(o.order_number)}</span>
-        <span class="client-order-date">${dateStr}</span>
+    <div class="client-order-card" style="cursor:pointer;">
+      <div class="client-order-summary" style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div class="client-order-num">${st} Commande n°${escapeHtml(o.order_number)}</div>
+          <div class="client-order-date">${dateStr}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="client-order-total">${fmtPrice(o.total_with_tva)}</span>
+          <span class="client-order-chevron" style="color:var(--brass);font-size:16px;transition:transform .2s;">›</span>
+        </div>
       </div>
-      <div class="client-order-items">${escapeHtml(items)}</div>
-      <div class="client-order-total">${fmtPrice(o.total_with_tva)}</div>
+      <div class="client-order-detail" style="display:none;margin-top:8px;border-top:1px solid rgba(0,0,0,0.06);padding-top:8px;">
+        <div class="client-order-items">${escapeHtml(items)}</div>
+        <div style="margin-top:4px;font-size:12px;color:var(--brass);">
+          ${o.shop_name ? escapeHtml(o.shop_name) + ' · ' : ''}Total HT: ${fmtPrice(o.total)} · TVA: ${fmtPrice(o.tva)}
+        </div>
+      </div>
     </div>`;
   }).join('');
+  ordersEl.querySelectorAll('.client-order-card').forEach(card => {
+    card.querySelector('.client-order-summary').addEventListener('click', () => {
+      const detail = card.querySelector('.client-order-detail');
+      const chevron = card.querySelector('.client-order-chevron');
+      const isOpen = detail.style.display !== 'none';
+      detail.style.display = isOpen ? 'none' : 'block';
+      chevron.style.transform = isOpen ? '' : 'rotate(90deg)';
+    });
+  });
 }
 
 function showClientsList() {
@@ -3425,10 +3449,9 @@ async function mergeClientInto(targetName, duplicateName) {
       .ilike('client_name', duplicateName);
     if (error) throw error;
 
-    // Supprime le doublon de la table clients s'il existe
     await supabaseClient.from('clients').delete().ilike('name', duplicateName);
-
-    await loadAllClients();
+    // Supprime immédiatement du cache local — pas besoin de recharger
+    allKnownClients = allKnownClients.filter(c => c.name.toLowerCase() !== duplicateName.toLowerCase());
     showToast(`✓ "${duplicateName}" fusionné dans "${targetName}"`);
     showClientProfile(targetName);
     document.getElementById('mergeZone').style.display = 'none';
